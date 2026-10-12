@@ -17,4 +17,4 @@
 - [x] FEAT-20261012-1051 — Researcher agents: parallel web-search research with cited claims (LangGraph fan-out) (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:53]
 - [x] FEAT-20261012-1052 — Saving cited pages: link, title, quoted text and time for every citation (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:54]
 - [x] FEAT-20261012-1053 — Run endpoints: start (background), status, list, duplicate and concurrency guards (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:58]
-- [ ] FEAT-20261012-1054 — Web app: Analyze button, prediction pages with claims, sources, cost and progress (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md)
+- [x] FEAT-20261012-1054 — Web app: Analyze button, prediction pages with claims, sources, cost and progress (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 11:04]
