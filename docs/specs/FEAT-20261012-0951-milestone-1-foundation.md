@@ -102,3 +102,15 @@ Docker images: `postgres` and official `python` / `node` base images.
 ## 8. Out of scope
 
 Agents, model calls, web search, the approval flow, order placement, the results page content, HTTPS in front of Compose, password reset by email, multiple users.
+
+## 9. Deviations and notes recorded during the build (2026-10-12)
+
+- **Module layout:** the backend is a plain uv app with a top-level `app/` package (not an installable package), as the layout in section 4 says.
+- **`httpx2` instead of `httpx`:** Starlette's test client now warns that `httpx` is deprecated and asks for `httpx2` (the maintained successor, same API). It replaces `httpx` in the dependency list in section 5 and is also what the Kalshi client uses.
+- **Checkpoint setup lock:** LangGraph's table setup uses `CREATE INDEX CONCURRENTLY`, so starting several processes at once deadlocked. Startup now takes a database-wide advisory lock by polling `pg_try_advisory_lock` (never blocking inside a statement), see `backend/app/checkpoint.py`.
+- **Web app generator defaults changed:** `create-next-app --yes` turned on Cache Components and partial prefetching. They are switched off in `frontend/next.config.ts`: every page depends on the signed-in cookie and live data, so there is nothing to cache.
+- **Dependency added by the shadcn generator:** its template imports class-name helpers from an npm package called `cn` (plus `@base-ui/react`, `class-variance-authority`, `lucide-react`, `tw-animate-css`). These came from the approved `shadcn init`, not from a separate choice.
+- **Proxy rewrites are fixed at build time:** `BACKEND_INTERNAL_URL` is passed to the web image as a build argument as well as a runtime setting.
+- **Paper-trading banner is static text** in this milestone, because no order feature exists yet. When orders are built, the banner must read the real mode from a setting.
+- **Markets page fields** (`title`, `subtitle`, `close_time`, `last_price_dollars`) follow Kalshi's docs (as summarized by search, about three months old) and were exercised with a mock Kalshi only; they are read defensively and shown as a dash when missing.
+- **Only the first 50 open markets are listed;** paging comes later.

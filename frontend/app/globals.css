@@ -1,0 +1,111 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-market: var(--market);
+  --color-ours-soft: var(--ours-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Design tokens: every page reads from these. Values match docs/design/mockups.html. */
+  --background: #f5f7f9;
+  --foreground: #13212e;
+  --card: #ffffff;
+  --card-foreground: #13212e;
+  --popover: #ffffff;
+  --popover-foreground: #13212e;
+  --primary: #2446d6;
+  --primary-foreground: #ffffff;
+  --secondary: #e6ebfc;
+  --secondary-foreground: #13212e;
+  --muted: #f5f7f9;
+  --muted-foreground: #566676;
+  --accent: #e6ebfc;
+  --accent-foreground: #13212e;
+  --destructive: #b3261e;
+  --border: #e2e8ee;
+  --input: #e2e8ee;
+  --ring: #2446d6;
+  --chart-1: #2446d6;
+  --chart-2: #6f7c89;
+  --chart-3: #0b7a4f;
+  --chart-4: #9a4a08;
+  --chart-5: #b3261e;
+  --radius: 0.625rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #13212e;
+  --sidebar-primary: #2446d6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e6ebfc;
+  --sidebar-accent-foreground: #13212e;
+  --sidebar-border: #e2e8ee;
+  --sidebar-ring: #2446d6;
+
+  /* Product tokens */
+  --market: #6f7c89;        /* Kalshi's price */
+  --ours-soft: #e6ebfc;     /* shaded gap between market and our estimate */
+  --good: #0b7a4f;
+  --good-soft: #e2f4ec;
+  --warn: #9a4a08;
+  --warn-soft: #fcefdc;
+  --content-width: 1120px;  /* one width for every page */
+  --gutter: 1.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}

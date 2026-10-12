@@ -30,5 +30,18 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_INTERNAL_URL: http://backend:8000
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3000:3000"
+
 volumes:
   db_data:
