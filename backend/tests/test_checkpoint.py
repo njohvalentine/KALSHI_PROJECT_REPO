@@ -14,6 +14,11 @@ CHECKPOINT_TABLES = {"checkpoints", "checkpoint_blobs", "checkpoint_writes", "ch
 
 @needs_db
 def test_startup_creates_checkpoint_tables_and_is_repeatable(fresh_db):
+    from alembic import command
+
+    from tests.conftest import alembic_config
+
+    command.upgrade(alembic_config(), "head")
     settings = load_settings({
         "DATABASE_URL": fresh_db.plain_url,
         "KALSHI_API_BASE": "https://kalshi.test/trade-api/v2",
@@ -56,3 +61,15 @@ def test_many_processes_starting_at_once_do_not_block_each_other(fresh_db):
 
     asyncio.run(start_many())
     assert CHECKPOINT_TABLES <= set(inspect(fresh_db).get_table_names())
+
+
+@needs_db
+def test_starting_on_an_unmigrated_database_says_to_run_the_migrations(fresh_db):
+    settings = load_settings({
+        "DATABASE_URL": fresh_db.plain_url,
+        "KALSHI_API_BASE": "https://kalshi.test/trade-api/v2",
+        "SESSION_SECRET": "s" * 40,
+    })
+    with pytest.raises(RuntimeError, match="alembic upgrade head"):
+        with TestClient(create_app(settings)):
+            pass

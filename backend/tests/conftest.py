@@ -57,7 +57,7 @@ def make_client(fresh_db):
     with DbSession(fresh_db) as db:
         create_user(db, EMAIL, PASSWORD)
 
-    def build(**overrides):
+    def build(research_model=None, **overrides):
         env = {
             "DATABASE_URL": fresh_db.plain_url,
             "KALSHI_API_BASE": "https://kalshi.test/trade-api/v2",
@@ -66,7 +66,7 @@ def make_client(fresh_db):
             "LOGIN_MAX_ATTEMPTS": "3",
             **overrides,
         }
-        return TestClient(create_app(load_settings(env)))
+        return TestClient(create_app(load_settings(env), research_model=research_model))
 
     build.engine = fresh_db
     return build

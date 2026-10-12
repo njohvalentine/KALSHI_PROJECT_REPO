@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -10,12 +11,16 @@ from app.checkpoint import open_checkpointer
 from app.config import Settings, load_settings
 from app.kalshi import KalshiClient
 from app.markets import router as markets_router
+from app.research.graph import build_graph
+from app.research.model import OpenAIResearchModel
+from app.research.runner import mark_stale_runs_failed
+from app.runs import router as runs_router
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("app")
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, research_model=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Fails here, before serving anything, if required settings are bad.
@@ -26,7 +31,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.checkpoint_pool, app.state.checkpointer = await open_checkpointer(
             app.state.settings.database_url
         )
+        # Research is on when a model is available: the real one needs OPENAI_API_KEY (settings log
+        # the off state); tests pass a fake one.
+        model = research_model or (OpenAIResearchModel(app.state.settings) if app.state.settings.research_enabled else None)
+        app.state.research_graph = (
+            build_graph(model, app.state.settings, app.state.checkpointer) if model else None
+        )
+        app.state.active_runs = 0
+        app.state.tasks = set()
+        await asyncio.to_thread(mark_stale_runs_failed, app.state.engine)
         yield
+        # Shutdown: give running runs a moment to finish, then cancel them (they record themselves as failed).
+        pending = list(app.state.tasks)
+        if pending:
+            await asyncio.wait(pending, timeout=10)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
         await app.state.checkpoint_pool.close()
         app.state.kalshi.close()
         app.state.engine.dispose()
@@ -35,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="Valentine backend", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.include_router(auth_router)
     app.include_router(markets_router)
+    app.include_router(runs_router)
 
     @app.get("/health")
     def health(response: Response):

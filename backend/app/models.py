@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -90,6 +91,14 @@ class Run(Base):
         CheckConstraint("status IN ('queued', 'running', 'done', 'failed')", name="runs_status_values"),
         Index("ix_runs_market_created", "market_ticker", "created_at"),
         Index("ix_runs_status", "status"),
+        # At most one active run per market, enforced by the database so two simultaneous clicks
+        # cannot both start (and pay for) a run.
+        Index(
+            "uq_runs_one_active_per_market",
+            "market_ticker",
+            unique=True,
+            postgresql_where=text("status IN ('queued', 'running')"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
