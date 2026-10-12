@@ -14,6 +14,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -49,30 +50,36 @@ class Session(Base):
 
 
 class Forecast(Base):
-    """One row per forecast, so a market can have a history of updates (re-checks)."""
+    """One forecaster's probability for one outcome of a game. Forecasters never see the market price."""
 
     __tablename__ = "forecasts"
     __table_args__ = (
         CheckConstraint("probability >= 0 AND probability <= 1", name="forecasts_probability_range"),
-        CheckConstraint("kalshi_price >= 0 AND kalshi_price <= 1", name="forecasts_price_range"),
-        CheckConstraint("outcome IN ('yes', 'no')", name="forecasts_outcome_values"),
-        Index("ix_forecasts_market_created", "market_ticker", "created_at"),
+        Index("ix_forecasts_run_market", "run_id", "market_ticker"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    run_id: Mapped[str] = mapped_column(String(64), index=True)
-    market_ticker: Mapped[str] = mapped_column(String(128))
+    run_id: Mapped[str] = mapped_column(String(64))
+    market_ticker: Mapped[str] = mapped_column(String(128))  # one outcome (market) of the game
+    forecaster_index: Mapped[int] = mapped_column(Integer)  # 0-based
+    variant: Mapped[str] = mapped_column(String(64))  # the framing this forecaster was given
     probability: Mapped[Decimal] = mapped_column(Numeric(5, 4))
-    # Kalshi's price for yes at the moment of the forecast, as a fraction (0.48 = 48 cents).
-    kalshi_price: Mapped[Decimal] = mapped_column(Numeric(5, 4))
+    reasoning: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    outcome: Mapped[str | None] = mapped_column(String(3))  # filled in when the market resolves
 
 
 class SourcePage(Base):
     """A page cited by a run, saved with its retrieval time (the frozen record for backtests)."""
 
     __tablename__ = "source_pages"
+    __table_args__ = (
+        CheckConstraint(
+            "fetch_status IN ('not_fetched', 'ok', 'blocked', 'empty_js', 'unsupported', 'too_large', 'failed')",
+            name="source_pages_fetch_status_values",
+        ),
+        CheckConstraint("fetch_method IS NULL OR fetch_method IN ('plain', 'jina')", name="source_pages_fetch_method_values"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     run_id: Mapped[str] = mapped_column(String(64), index=True)
@@ -80,7 +87,38 @@ class SourcePage(Base):
     title: Mapped[str | None] = mapped_column(Text)
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     content_hash: Mapped[str] = mapped_column(String(64))
-    content: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(Text)  # the claims this link was cited for, NOT the page text
+    # Our own fetch of the page (Milestone 3). Every outcome is recorded, none is skipped silently.
+    fetch_status: Mapped[str] = mapped_column(String(16), default="not_fetched", server_default="not_fetched")
+    fetch_method: Mapped[str | None] = mapped_column(String(8))  # plain or jina
+    final_url: Mapped[str | None] = mapped_column(Text)
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fetch_detail: Mapped[str | None] = mapped_column(Text)  # short reason shown to the user
+    page_text: Mapped[str | None] = mapped_column(Text)
+    page_text_hash: Mapped[str | None] = mapped_column(String(64))
+
+
+class ClaimCheck(Base):
+    """Whether one page supports one claim. A claim cited to several pages has one row per page."""
+
+    __tablename__ = "claim_checks"
+    __table_args__ = (
+        CheckConstraint(
+            "verdict IN ('supported', 'not_supported', 'could_not_check')", name="claim_checks_verdict_values"
+        ),
+        UniqueConstraint("run_id", "finding_index", "claim_index", "source_url", name="uq_claim_checks_claim_page"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64), index=True)
+    finding_index: Mapped[int] = mapped_column(Integer)  # position in runs.result["findings"]
+    claim_index: Mapped[int] = mapped_column(Integer)  # position in that finding's claims
+    source_url: Mapped[str] = mapped_column(Text)
+    verdict: Mapped[str] = mapped_column(String(16))
+    reason: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Run(Base):
@@ -89,6 +127,10 @@ class Run(Base):
     __tablename__ = "runs"
     __table_args__ = (
         CheckConstraint("status IN ('queued', 'running', 'done', 'failed')", name="runs_status_values"),
+        CheckConstraint(
+            "stage IS NULL OR stage IN ('research', 'fetch', 'check', 'forecast', 'compare', 'done')",
+            name="runs_stage_values",
+        ),
         Index("ix_runs_event_created", "event_ticker", "created_at"),
         Index("ix_runs_status", "status"),
         # At most one active run per game, enforced by the database so two simultaneous clicks
@@ -112,6 +154,10 @@ class Run(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     plan: Mapped[dict | None] = mapped_column(JSONB)
     result: Mapped[dict | None] = mapped_column(JSONB)
+    # Where a running run is: research, fetch, check, forecast, compare or done. Null before it starts.
+    stage: Mapped[str | None] = mapped_column(String(10))
+    # Per outcome: median, spread, counts of supported claims and the market comparison.
+    prediction: Mapped[dict | None] = mapped_column(JSONB)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     search_calls: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
