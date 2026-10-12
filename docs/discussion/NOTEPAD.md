@@ -328,6 +328,22 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Risks and limits:** each "Analyze" or "Analyze again" press spends money and the button does not warn yet; no probability or source checking yet (Milestone 3); cited does not mean verified; the planner prompt is written for soccer, baseball and tennis, so other markets get generic angles.
 - **Next:** user puts `OPENAI_API_KEY` in the local `.env` and runs one market live; check the first-live-run list; tune caps from the real cost. Then Milestone 3 (forecasters, aggregation, citation checker, market comparison). Still open from before: client's US state (D21), contract types beyond match winners, the Kalshi key check run, `MILESTONES.md` not yet updated for login and Docker.
 
+### D23. Milestone 3 draft plan: the full prediction (2026-10-12, PROPOSED, awaiting the user's approval; nothing logged in TODO.md or built)
+- **Goal:** turn a finished research run into one probability with a visible comparison to Kalshi's price, using only claims whose sources were checked.
+- **Pipeline order changed from the architecture table:** research -> fetch and check citations -> forecasters -> aggregate -> compare with the market -> (later) approval. **Why:** unsupported claims should not feed the forecasters; earlier the citation checker came after the aggregator.
+- **Proposed tasks (for approval):** (A) settings and data shapes for forecasting; (B) safe page fetching and saving page text; (C) citation checker; (D) forecasters; (E) aggregator; (F) market comparer; (G) wire into the graph, store results and costs; (H) web app: prediction page and the gap column on the markets list.
+- **Recommendations and the evidence behind them (all from search summaries, mostly 2026 preprints; verify before relying):**
+  - **Forecasters:** 3 independent calls on `gpt-5.4`, same evidence, three different reasoning framings; every individual estimate is stored. Research suggests gains come from agents seeing different evidence (InfoDelphi), so evidence-splitting variants are an experiment for Milestone 4, not assumed.
+  - **Forecasters do NOT see the market price.** A benchmark report (AIA Forecaster, citing Karger et al.) found the best LLM forecaster did worse than the market price it was shown (0.109 vs 0.096 Brier), and showing the price can hide weakness. One narrow 2026 study found "price as a prior, then update" helps; that is a Milestone 4 experiment.
+  - **Aggregation: median** (simple, robust, used in the "wisdom of the silicon crowd" study). Differences between median and log-odds means were small and within error in ForecastBench (0.197 vs 0.194). No source found on extremizing with only 3 forecasters, so none is applied; spread (min to max) is recorded.
+  - **Citation checking has three layers:** structural (a link exists; done), resolvability (the page can be fetched), semantic (the page supports the claim, judged by a model with the page text). The semantic judge has known failure modes (self-preference, length sensitivity), so it is validated against a hand-labelled sample, and results are labelled "supported", "not supported" or "could not check", not just dropped.
+  - **Fetching pages ourselves is also the real page snapshot** we could not get from OpenAI's citations (D22), which backtests need. New risks: server-side request forgery (URLs come from a model, so block private and local addresses, limit size, time and redirects), sites that block bots, paywalls, scripts-only pages. An HTML-to-text step may need a new package (to research and ask first).
+  - **Market comparer:** compare with the price one could actually trade at (the ask for yes, one minus the bid for no), not the last trade; show the gap and an estimated edge after Kalshi's fee (third-party formula, unverified); flag a gap as "meaningful" only if it exceeds a threshold AND the forecasters agree AND the evidence is not thin. Threshold is a placeholder to tune in Milestone 4.
+  - **Evidence rule:** forecasters receive only "supported" claims; if too few remain the run is marked "thin evidence" and says so.
+- **Cost (estimate, unmeasured):** adds page fetches, one cheap judge call per claim (`gpt-5.4-mini`) and 3 forecaster calls without search; likely a few tens of cents more per run.
+- **Questions put to the user:** order change; fetching pages ourselves; price hidden from forecasters; median; 3 forecasters or 5.
+- **Out of scope:** backtests and scoring (Milestone 4), periodic re-checks (D15), approval and orders.
+
 ---
 
 ## 4. Environment
