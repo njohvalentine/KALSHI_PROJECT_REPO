@@ -18,7 +18,9 @@ type Market = {
 
 function percent(dollars?: string): string {
   const value = Number.parseFloat(dollars ?? "");
-  return Number.isFinite(value) ? `${Math.round(value * 100)}%` : "–";
+  // A traded contract cannot have a last price of zero (the lowest price is 1 cent), so zero or a
+  // missing price means nobody has traded it yet. Showing "0%" would claim the market priced it at 0.
+  return Number.isFinite(value) && value > 0 ? `${Math.round(value * 100)}%` : "No trades yet";
 }
 
 function closes(iso?: string): string {

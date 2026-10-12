@@ -32,6 +32,14 @@ def test_list_markets_passes_params_and_returns_json_unchanged():
     assert dict(seen["url"].params) == {"status": "open", "limit": "5", "cursor": "c1"}  # None params dropped
 
 
+def test_mve_filter_is_passed_through_and_dropped_when_absent():
+    seen = []
+    c, _ = make(lambda r: (seen.append(dict(r.url.params)), httpx2.Response(200, json={}))[1])
+    c.list_markets(mve_filter="exclude")
+    c.list_markets()
+    assert seen[0]["mve_filter"] == "exclude" and "mve_filter" not in seen[1]
+
+
 def test_paths_for_each_call():
     paths = []
 
@@ -143,3 +151,21 @@ def test_each_successful_call_logs_its_path_and_duration(caplog):
     c, _ = make(lambda r: httpx2.Response(200, json={}))
     c.get_market("KX-1")
     assert any("Kalshi GET /markets/KX-1 answered 200 in" in m and m.endswith(" ms") for m in caplog.messages)
+
+
+@needs_db
+def test_markets_endpoint_excludes_combination_markets_by_default(make_client):
+    H = {"X-Requested-With": "t"}
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.params.get("mve_filter"))
+        return httpx2.Response(200, json={"markets": [], "cursor": ""})
+
+    with make_client() as client:
+        client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
+        client.app.state.kalshi = KalshiClient(BASE, client=httpx2.Client(transport=httpx2.MockTransport(handler)))
+        assert client.get("/api/markets").status_code == 200
+        assert client.get("/api/markets?mve_filter=only").status_code == 200
+        assert client.get("/api/markets?mve_filter=whatever").status_code == 422
+    assert seen == ["exclude", "only"]

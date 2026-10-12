@@ -1,6 +1,6 @@
 """Market data endpoints for the web app. Login required."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
@@ -20,9 +20,12 @@ def list_markets(
     status: str | None = Query(default="open", max_length=20),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None, max_length=500),
+    # "exclude" by default: Kalshi otherwise returns multi-leg combination markets, which have no
+    # single question and no trades.
+    mve_filter: Literal["exclude", "only"] = Query(default="exclude"),
 ):
     try:
-        return kalshi.list_markets(status=status, limit=limit, cursor=cursor)
+        return kalshi.list_markets(status=status, limit=limit, cursor=cursor, mve_filter=mve_filter)
     except KalshiError as exc:
         raise HTTPException(status_code=502, detail=f"Kalshi request failed: {exc}") from exc
 

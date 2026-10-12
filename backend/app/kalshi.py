@@ -90,6 +90,7 @@ class KalshiClient:
         event_ticker: str | None = None,
         series_ticker: str | None = None,
         tickers: str | None = None,
+        mve_filter: str | None = None,
         min_close_ts: int | None = None,
         max_close_ts: int | None = None,
         min_settled_ts: int | None = None,
@@ -97,7 +98,7 @@ class KalshiClient:
     ) -> dict[str, Any]:
         return self._get("/markets", dict(
             status=status, limit=limit, cursor=cursor, event_ticker=event_ticker,
-            series_ticker=series_ticker, tickers=tickers, min_close_ts=min_close_ts,
+            series_ticker=series_ticker, tickers=tickers, mve_filter=mve_filter, min_close_ts=min_close_ts,
             max_close_ts=max_close_ts, min_settled_ts=min_settled_ts, max_settled_ts=max_settled_ts,
         ))
 
