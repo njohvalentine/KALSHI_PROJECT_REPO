@@ -23,5 +23,5 @@
 - [x] FEAT-20261012-1426 — Kalshi client: events calls (list and single) and longer connect timeout for slow networks (spec: docs/specs/FEAT-20261012-1426-sports-games-list.md) [2026-10-12 14:27]
 - [x] FEAT-20261012-1427 — Games list service: configured league list, parallel fetch with a cap, short cache, one entry per game, endpoint GET /api/games (spec: docs/specs/FEAT-20261012-1426-sports-games-list.md) [2026-10-12 14:32]
 - [x] FEAT-20261012-1428 — Research per game: rename run columns to event, game description for the agents, start a run by event ticker (spec: docs/specs/FEAT-20261012-1426-sports-games-list.md) [2026-10-12 14:35]
-- [ ] FEAT-20261012-1429 — Web app: Games page with one row per game, start time, outcome buy and sell prices, sport filter and search, Analyze per game (spec: docs/specs/FEAT-20261012-1426-sports-games-list.md)
+- [x] FEAT-20261012-1429 — Web app: Games page with one row per game, start time, outcome buy and sell prices, sport filter and search, Analyze per game (spec: docs/specs/FEAT-20261012-1426-sports-games-list.md) [2026-10-12 14:41]
 - [ ] FEAT-20261012-1430 — Documents: update GRAPHS, ARCHITECTURE, MILESTONES and the notes for the games list (spec: docs/specs/FEAT-20261012-1426-sports-games-list.md)

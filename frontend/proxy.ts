@@ -6,7 +6,7 @@ export function proxy(request: NextRequest) {
   const hasCookie = request.cookies.has("session");
   const onLogin = request.nextUrl.pathname === "/login";
   if (!hasCookie && !onLogin) return NextResponse.redirect(new URL("/login", request.url));
-  if (hasCookie && onLogin) return NextResponse.redirect(new URL("/markets", request.url));
+  if (hasCookie && onLogin) return NextResponse.redirect(new URL("/games", request.url));
   return NextResponse.next();
 }
 

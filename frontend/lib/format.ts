@@ -25,3 +25,11 @@ export function host(url: string): string {
     return url;
   }
 }
+
+/** "43–44¢" from Kalshi's dollar strings: the price one can sell at and the price one can buy at. */
+export function bidAsk(bid: string | null, ask: string | null): string {
+  const b = Number.parseFloat(bid ?? "");
+  const a = Number.parseFloat(ask ?? "");
+  if (!Number.isFinite(b) || !Number.isFinite(a)) return "–";
+  return `${Math.round(b * 100)}–${Math.round(a * 100)}¢`;
+}

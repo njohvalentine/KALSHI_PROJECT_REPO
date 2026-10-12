@@ -19,7 +19,7 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
         </Link>{" "}
         / {run.event_ticker}
       </p>
-      <PageHeader title={run.event_title} description="Research gathered for this market, with the sources it relies on." />
+      <PageHeader title={run.event_title} description="Research gathered for this game, with the sources it relies on." />
       <RunView initial={run} />
     </>
   );

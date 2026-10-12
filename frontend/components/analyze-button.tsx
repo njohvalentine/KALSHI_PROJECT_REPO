@@ -50,7 +50,7 @@ export function AnalyzeButton({ eventTicker, latest }: { eventTicker: string; la
           </Link>
         ) : null}
         <Button size="sm" onClick={start} disabled={pending}>
-          {pending ? "Starting…" : latest ? "Analyze again" : "Analyze"}
+          {pending ? "Starting…" : latest ? "Research again" : "Research"}
         </Button>
       </div>
       {error ? <span role="alert" className="max-w-[28ch] text-right text-xs text-destructive">{error}</span> : null}

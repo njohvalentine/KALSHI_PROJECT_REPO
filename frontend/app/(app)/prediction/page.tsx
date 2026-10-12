@@ -14,7 +14,7 @@ export default async function PredictionPage() {
     <>
       <PageHeader
         title="Prediction"
-        description="Research runs, newest first. Start one from the Markets page. Probabilities come in a later milestone."
+        description="Research runs, newest first. Start one from the Games page. Probabilities come in a later milestone."
       />
       {!res.ok ? (
         <Alert variant="destructive">
@@ -24,17 +24,17 @@ export default async function PredictionPage() {
       ) : runs.length === 0 ? (
         <p className="text-muted-foreground">
           No research yet. Open{" "}
-          <Link href="/markets" className="text-primary underline underline-offset-4">
-            Markets
+          <Link href="/games" className="text-primary underline underline-offset-4">
+            Games
           </Link>{" "}
-          and press Analyze on a market.
+          and press Research on a game.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="px-4 py-3">Market</TableHead>
+                <TableHead className="px-4 py-3">Game</TableHead>
                 <TableHead className="px-4 py-3">Status</TableHead>
                 <TableHead className="px-4 py-3">Started</TableHead>
                 <TableHead className="px-4 py-3 text-right">Cited lines</TableHead>

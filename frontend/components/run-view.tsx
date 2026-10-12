@@ -58,7 +58,7 @@ export function RunView({ initial }: { initial: Run }) {
       <div>
         {isActive(run.status) ? (
           <Alert className="mb-6">
-            <AlertTitle>{run.status === "queued" ? "Waiting to start" : "Researching this market"}</AlertTitle>
+            <AlertTitle>{run.status === "queued" ? "Waiting to start" : "Researching this game"}</AlertTitle>
             <AlertDescription>
               This page updates by itself. You can leave it; the run keeps going and the result stays here.
               {pollError ? " The latest update could not be loaded; trying again." : ""}

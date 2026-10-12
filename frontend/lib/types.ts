@@ -27,3 +27,34 @@ export type Run = RunSummary & {
 };
 
 export const isActive = (status: RunSummary["status"]) => status === "queued" || status === "running";
+
+export type Outcome = {
+  market_ticker: string;
+  label: string;
+  bid: string | null;
+  ask: string | null;
+  last: string | null;
+  volume: string | null;
+  status: string | null;
+};
+
+export type Game = {
+  event_ticker: string;
+  title: string;
+  sub_title: string | null;
+  sport: string;
+  league: string;
+  starts_at: string | null;
+  closes_at: string | null;
+  started: boolean;
+  outcomes: Outcome[];
+};
+
+export type GamesResponse = {
+  games: Game[];
+  total: number;
+  hidden_started: number;
+  sports: string[];
+  errors: { series: string; league: string; error: string }[];
+  fetched_at: string;
+};

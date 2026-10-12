@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       <header className="border-b bg-card">
         <PageContainer className="flex min-h-16 flex-wrap items-center gap-x-8 gap-y-2 py-2">
-          <Link href="/markets" className="text-lg font-bold tracking-tight">
+          <Link href="/games" className="text-lg font-bold tracking-tight">
             Forecast desk
           </Link>
           <Nav />

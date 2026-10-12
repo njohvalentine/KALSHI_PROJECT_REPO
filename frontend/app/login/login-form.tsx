@@ -24,7 +24,7 @@ export function LoginForm() {
         body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
       });
       if (res.ok) {
-        router.replace("/markets");
+        router.replace("/games");
         return;
       }
       if (res.status === 401) setError("Invalid email or password.");
