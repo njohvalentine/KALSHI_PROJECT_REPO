@@ -29,13 +29,14 @@ log = logging.getLogger("app.research.check")
 
 MIN_PAGE_CHARS = 200
 MIN_QUOTE_CHARS = 10
+MAX_QUOTES = 3
 Verdict = Literal["supported", "not_supported", "could_not_check"]
 
 
 class ClaimVerdict(BaseModel):
     claim_number: int
     verdict: Verdict
-    quote: str = ""
+    quotes: list[str]  # required field (may be empty): one to three exact passages that together show the claim
     reason: str = ""
 
 
@@ -61,7 +62,7 @@ class OpenAIClaimJudge:
                 instructions=CHECKER_INSTRUCTIONS.format(today=_today()),
                 input=checker_input(game_title, page_url, page_title, page_text, cut, claims),
                 text_format=Verdicts,
-                reasoning={"effort": self._s.research_reasoning_effort},
+                reasoning={"effort": self._s.checker_reasoning_effort},
                 max_output_tokens=self._s.checker_max_output_tokens,
                 store=False,
             )
@@ -87,25 +88,29 @@ def quote_is_on_page(quote: str, page_text: str) -> bool:
 
 
 def _numbers(text: str) -> set[str]:
-    return set(re.findall(r"\d+(?:[.,]\d+)?", text.translate(_QUOTES)))
+    """Numbers in a text. In a dd/mm/yyyy date only the year counts: pages write the same date as
+    '12 ottobre 2026' or 'Oct. 12', so day and month numbers cannot be compared as text."""
+    text = re.sub(r"\b\d{1,2}/\d{1,2}/(\d{4})\b", r"\1", text.translate(_QUOTES))
+    return set(re.findall(r"\d+(?:[.,]\d+)?", text))
 
 
 def decide(verdict: ClaimVerdict | None, page_text: str, claim_text: str = "") -> tuple[str, str]:
     """Turns the judge's answer for one claim into the saved (verdict, reason). Anything unbacked is could_not_check.
 
-    `page_text` must be exactly the text the judge was shown. A `supported` quote must also contain every
-    number in the claim: a real but unrelated quote from the page proves nothing."""
+    `page_text` must be exactly the text the judge was shown. The quotes of a `supported` verdict must
+    together contain every number in the claim: real but unrelated quotes prove nothing."""
     if verdict is None:
         return "could_not_check", "The judge gave no answer for this claim."
     if verdict.verdict == "could_not_check":
         return "could_not_check", verdict.reason or "The judge could not find the claim on the page."
-    if not verdict.quote.strip():
-        return "could_not_check", f"The judge said {verdict.verdict} without a quote from the page."
-    if not quote_is_on_page(verdict.quote, page_text):
-        return "could_not_check", f"The judge said {verdict.verdict}, but its quote was not found in the page."
-    if verdict.verdict == "supported" and not _numbers(claim_text) <= _numbers(verdict.quote):
-        return "could_not_check", "The judge said supported, but its quote does not contain all the numbers in the claim."
-    return verdict.verdict, f'{verdict.reason} Quote: "{verdict.quote.strip()}"'.strip()
+    quotes = [q.strip() for q in verdict.quotes if q.strip()]
+    if not quotes or len(quotes) > MAX_QUOTES:
+        return "could_not_check", f"The judge said {verdict.verdict} without one to {MAX_QUOTES} quotes from the page."
+    if not all(quote_is_on_page(q, page_text) for q in quotes):
+        return "could_not_check", f"The judge said {verdict.verdict}, but a quote was not found in the page."
+    if verdict.verdict == "supported" and not _numbers(claim_text) <= _numbers(" ".join(quotes)):
+        return "could_not_check", "The judge said supported, but its quotes do not contain all the numbers in the claim."
+    return verdict.verdict, f'{verdict.reason} Quotes: ' + " / ".join(f'"{q}"' for q in quotes)
 
 
 def unreadable_reason(status: str, detail: str | None, text: str | None) -> str | None:

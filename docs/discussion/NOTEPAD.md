@@ -454,7 +454,7 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Result with the real judge (`gpt-5.4-mini`):** 0 of 25 wrongly marked `supported` (including a page that tried to give the judge instructions); only 2 of 9 true claims kept as `supported`. Causes: the "all numbers of the claim in the quote" rule drops publication dates (3 cases); quotes the judge stitched from separate passages are not found on flattened pages (2); the judge misread a flattened table and called two correct claims `not_supported` (2); plus run-to-run variation. Cost about 1.4 cents per page.
 - **What matters:** only `supported` goes forward, so false `supported` must stay at zero and recall is what we tune; `not_supported` against `could_not_check` is a display difference.
 - **Caveat:** the labels were written by the assistant and need a person's spot-check (one of my labels was wrong and the judge right).
-- **Next:** ISS-20261012-1729 (multi-quote, table hint, re-measure). The alternative is to check the claim's numbers against the page instead of the quote.
+- **Fix done (ISS-20261012-1729):** multi-quote verdicts, table hint in the prompt, dd/mm/yyyy dates compared by year, `CHECKER_REASONING_EFFORT=medium`, output cap 4000. Measured 3 runs: 0 wrongly supported each time; true claims kept 5, 8 and 7 of 9 (was 2); cost about 8 cents for 25 pages. Still failing: flattened tables (tennis-db) are misread by the judge. Idea, not built: keep table rows on one line when extracting text.
 - **Where:** `docs/specs/FEAT-20261012-1620-milestone-3-prediction.md` (task 4 result, label table), `backend/tests/data/claim_labels.json`.
 
 ## 4. Environment

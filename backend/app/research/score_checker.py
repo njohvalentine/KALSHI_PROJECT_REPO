@@ -33,11 +33,14 @@ async def judge_case(case: dict, judge: ClaimJudge, page_chars: int) -> dict:
         return {"got": "could_not_check", "judge": "(no call)", "reason": why, "usage": None}
     text = case["page_text"]
     shown = PAGE_TAG.sub("[tag removed]", text[:page_chars])
-    verdicts, usage = await judge.judge(case["game"], case["url"], None, shown, len(text) > page_chars, [case["claim"]])
+    try:
+        verdicts, usage = await judge.judge(case["game"], case["url"], None, shown, len(text) > page_chars, [case["claim"]])
+    except Exception as exc:  # as in a real run, a failed call is "could not check" (and is shown here)
+        return {"got": "could_not_check", "judge": "(call failed)", "reason": f"{type(exc).__name__}: {exc}"[:300], "usage": None}
     answer = verdicts[0] if len(verdicts) == 1 and verdicts[0].claim_number == 1 else None
     got, reason = decide(answer, shown, case["claim"])
     return {"got": got, "judge": answer.verdict if answer else "(no answer)", "reason": reason, "usage": usage,
-            "quote": answer.quote if answer else ""}
+            "quotes": answer.quotes if answer else []}
 
 
 def score(cases: list[dict], results: list[dict]) -> dict:
@@ -71,8 +74,8 @@ async def run(path: Path = SAMPLE) -> None:
               f'{" borderline" if c["borderline"] else ""}{" synthetic" if c["synthetic"] else ""}')
         if r["got"] != c["label"] or r["judge"] != r["got"]:
             print(f'     {r["reason"][:230]}')
-            if "not found" in r["reason"]:
-                print(f'     judge quote: {r.get("quote", "")[:300]!r}')
+            if "not found" in r["reason"] or "numbers" in r["reason"]:
+                print(f'     judge quotes: {str(r.get("quotes", ""))[:400]}')
     summary = score(cases, results)
     print(json.dumps(summary, indent=1))
     print(f"Judge calls: {len(usages)}, input tokens {sum(u.input_tokens for u in usages)}, "

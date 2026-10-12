@@ -40,9 +40,9 @@ def case(**kw):
 
 
 def test_judge_case_applies_the_same_checks_as_a_run():
-    good = ClaimVerdict(claim_number=1, verdict="supported", quote="Team A won 2-1 on Saturday", reason="stated")
+    good = ClaimVerdict(claim_number=1, verdict="supported", quotes=["Team A won 2-1 on Saturday"], reason="stated")
     assert asyncio.run(judge_case(case(), OneVerdictJudge(good), 30000))["got"] == "supported"
-    invented = ClaimVerdict(claim_number=1, verdict="supported", quote="Team A won 5-0 at Wembley Stadium", reason="x")
+    invented = ClaimVerdict(claim_number=1, verdict="supported", quotes=["Team A won 5-0 at Wembley Stadium"], reason="x")
     out = asyncio.run(judge_case(case(), OneVerdictJudge(invented), 30000))
     assert out["got"] == "could_not_check" and out["judge"] == "supported"
     unreadable = asyncio.run(judge_case(case(page_status="failed", page_text=None), OneVerdictJudge(good), 30000))

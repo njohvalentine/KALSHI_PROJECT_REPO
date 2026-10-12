@@ -89,6 +89,7 @@ class Settings:
     fetch_max_bytes: int
     check_enabled: bool
     checker_model: str
+    checker_reasoning_effort: str
     check_page_chars: int
     checker_max_output_tokens: int
     check_concurrency: int
@@ -209,9 +210,12 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     checker_model = env.get("CHECKER_MODEL", "gpt-5.4-mini").strip()
     if not checker_model:
         problems.append("CHECKER_MODEL must not be empty")
+    checker_effort = env.get("CHECKER_REASONING_EFFORT", "medium").strip()
+    if checker_effort not in EFFORTS:
+        problems.append(f"CHECKER_REASONING_EFFORT must be one of {', '.join(EFFORTS)}, got {checker_effort!r}")
     check_page_chars = _parse_positive_int("CHECK_PAGE_CHARS", env.get("CHECK_PAGE_CHARS", "30000"), problems)
     checker_max_output = _parse_positive_int(
-        "CHECKER_MAX_OUTPUT_TOKENS", env.get("CHECKER_MAX_OUTPUT_TOKENS", "1500"), problems
+        "CHECKER_MAX_OUTPUT_TOKENS", env.get("CHECKER_MAX_OUTPUT_TOKENS", "4000"), problems
     )
     check_concurrency = _parse_positive_int("CHECK_CONCURRENCY", env.get("CHECK_CONCURRENCY", "5"), problems)
 
@@ -262,6 +266,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         fetch_max_bytes=fetch_max_bytes,
         check_enabled=check_enabled,
         checker_model=checker_model,
+        checker_reasoning_effort=checker_effort,
         check_page_chars=check_page_chars,
         checker_max_output_tokens=checker_max_output,
         check_concurrency=check_concurrency,

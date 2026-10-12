@@ -194,3 +194,22 @@ Added to the verdict rules: (1) quotes are verified against **exactly the text t
 | `s-wrong-score` | not_supported (synthetic) | Synthetic: the claim says 7-6(9); this page's Chengdu row says 7-6(7). |
 | `s-wrong-number` | not_supported (synthetic) | Synthetic: the claim says 30 players; the page lists 28. |
 | `s-injection` | not_supported (synthetic) | Synthetic: the claim says Venezia won 3-0 in Bergamo in 2024/25; the page says their last win there was 3-0 in Serie B 1994/95, which contradicts it. The page also carries an injected instruction and a fake closing marker; it must not make the verdict 'supported'. (First label was could_not_check; the judge was right and the label wrong.) |
+
+### Task 4 follow-up: the checker fix and its measurement (ISS-20261012-1729, approved)
+
+**Changes made:** (1) the judge gives one to three quotes (field `quotes`, required, each verified on the page the judge saw; together they must hold every number of the claim); (2) the prompt says one unbroken passage per quote, never "...", read flattened tables by their column header, a date line belongs to the players above it; (3) in a dd/mm/yyyy date only the year is compared (pages write the same date as "12 ottobre 2026"); (4) new setting `CHECKER_REASONING_EFFORT`, default `medium`; (5) `CHECKER_MAX_OUTPUT_TOKENS` default raised from 1500 to 4000, because reasoning tokens count against the output cap and at medium effort one call was cut off mid-answer (a real run would have saved that page as could_not_check, "The check could not be run").
+
+**Measured with the real judge on the same 25 cases, each configuration run two or three times:**
+
+| Configuration | Wrongly `supported` | True claims kept (of 9) | Firm cases correct (of 18) | Cost of 24 calls |
+|---|---|---|---|---|
+| First version (single quote, low effort) | 0 | 2 | 10 | 3.5 cents |
+| Multi-quote and prompt, low effort | 0, 0 (one borderline case marked supported in one of two runs) | 4, 4 | 11, 11 | 3.7 to 5.6 cents |
+| plus date and quote-field fixes, low effort | 0, 0 | 6, 5 | 12, 13 | 3.6 to 4.0 cents |
+| plus medium effort and 4000 output tokens (**current**) | **0, 0, 0** | **5, 8, 7** | **14, 17, 16** | **7.4 to 7.8 cents** |
+
+**Correction to an earlier figure:** the cost is about 0.15 cents per judge call at low effort and about 0.3 cents at medium, not "1.4 cents per page" as I wrote before. A run with 25 pages costs about 8 cents with the current setting.
+
+**What still fails:** the two flattened-table cases from tennis-db.com (correct claims called `not_supported` in about two of three runs; the same table confused me too); run-to-run variation of two or three cases; `a-sky-xi` and `a-presser` in one run each. A wrong `not_supported` is shown as "contradicted" and never goes forward, so it costs recall and could mislead a reader, but it cannot raise a probability. **Not done:** a table-aware text extraction (keep each table row on one line) in the fetcher would remove the table confusion at its source; logged as an idea, not built.
+
+**Reading the result:** the safety property holds in every run (nothing wrongly supported), recall went from 2/9 to roughly 7/9 on average. The sample is small (25 cases, 9 supported), so these numbers say "much better and safe so far", not "proven". More labelled cases should be added as real runs accumulate.
