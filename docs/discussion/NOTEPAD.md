@@ -437,6 +437,17 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 
 ---
 
+### D30. Milestone 3 started: page fetching built, Jina Reader measured and NOT adopted (2026-10-12)
+
+- **What was built:** the data shape (migration `4861f4eda80a`) and the safe page fetcher (`backend/app/research/fetch.py`): public addresses only, connection pinned to the checked address, every redirect re-checked, size and time limits, text only, every outcome recorded. Not yet wired into a run (task FEAT-20261012-1628).
+- **Measured, plain fetch, 46 pages from the four real runs:** 37 ok, 8 HTTP 403 (bot blocking: atptour, betmgm, oddschecker, reutersconnect, rotascore, worldfootball, it.wikipedia), 1 no DNS (an image host), 0 JavaScript-only.
+- **Measured, Jina Reader (official `oss` image, local) on the 23 non-ok or short pages:** only 1 of the 9 failed pages was really recovered (it.wikipedia, 75k characters). Four bot-wall pages (atptour, oddschecker x2, worldfootball) came back as **HTTP 200 with a "Performing security verification" text of about 260 characters**, which an automatic pipeline would take for page content. One timed out (betmgm), one was "Your request was blocked" (rotascore), reutersconnect returned a stub. The short "ok" pages (Lega Serie A, Venezia, Atalanta) gave 2 to 7 times more text, but it begins with menus and navigation, so the gain in real match facts is unproven. Time: 10 to 49 s per page (plain fetch: 2 to 7 s), on a 2-CPU, 3 GB container through the VPN. Image size 3.3 GB.
+- **Decision:** do not add Jina now. Reasons: it fixes about one blocked page in nine, takes 5 to 10 times longer, adds a 3.3 GB browser container plus the egress proxy it would need to be safe (its docs have no option to block private addresses), and turns bot walls into fake successes. This follows the stop rule agreed before the test ("if Jina recovers few pages or is slow, keep the plain fetcher").
+- **Rejected:** Jina as a fallback (above); a headless browser we run ourselves (same weight and safety cost, no evidence it passes the bot walls); a paid page-reading service (sends every URL to a third party).
+- **What it means for the pipeline:** claims cited only to pages we cannot read are labelled "could not check", stay visible, and do not go to the forecasters. About one cited page in five is lost this way, and it is disproportionately odds and tennis sites. The claim checker (next) must also treat a menu-only page as "could not check", not as "not supported".
+- **Revisit when:** the claim-check results show too many lost claims on pages that matter, or PDFs turn up often (none in the 46 sampled). Then reconsider a reader service, with the egress proxy.
+- **Where:** `docs/specs/FEAT-20261012-1620-milestone-3-prediction.md`; raw comparison kept only in this note (the data was read from the local database, nothing was written to it).
+
 ## 4. Environment
 Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules apply: project-local installs only, ask before adding any dependency, spec and approval before code.
 

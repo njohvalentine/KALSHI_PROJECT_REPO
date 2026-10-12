@@ -91,3 +91,7 @@ Two things the numbers do not show and the Jina comparison must: (1) several "ok
 **Plan, in order:**
 1. Measurement only (no code in the app): run the image locally, send the non-ok links and ten of the short "ok" links, compare text length and content with the plain fetch, and record the time. Result goes in this file. If Jina recovers few pages or is slow, stop here and keep the plain fetcher.
 2. Only if worth it: the container, the proxy (option 1), the app fallback (`empty_js`, `unsupported` PDF and optionally 403 go to Jina, `fetch_method = jina`), tests including private-address URLs sent through the proxy, and the compose wiring.
+
+## Jina measurement and outcome (2026-10-12)
+
+Measured as planned: the official image, run locally with 2 CPUs and 3 GB, called on the 23 pages that were not ok or were short in the plain fetch. Results and the decision are in `docs/discussion/NOTEPAD.md` D30. In short: one of nine failed pages recovered, four bot walls returned as HTTP 200 with fake "content", 10 to 49 s per page, and a 3.3 GB image that needs an egress proxy to be safe. **Not adopted.** FEAT-20261012-1622 is closed as measured, not built; the "Plan, in order" step 2 above is dropped. The checker (task 3) must handle menu-only pages and bot-wall text as "could not check".
