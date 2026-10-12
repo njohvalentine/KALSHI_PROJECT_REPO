@@ -1,3 +1,5 @@
+import pytest
+
 from app.research.claims import build_claims
 from app.research.schemas import Citation, TextSegment
 from tests.fakes import make_segment
@@ -54,3 +56,24 @@ def test_non_ascii_text_is_handled():
     seg = make_segment([("Équipe A: Müller blessé — retour incertain", "https://a.test/é")])
     (claim,), bad = build_claims([seg])
     assert claim.text == "Équipe A: Müller blessé — retour incertain" and bad == 0 and claim.kind == "sourced"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("Said on **10/10/2026** that the break helped", "Said on 10/10/2026 that the break helped"),
+    ("The **28-man squad list on 11/10/2026** names **Montipo** and **Haps**", "The 28-man squad list on 11/10/2026 names Montipo and Haps"),
+    ("Won *four* of the last five", "Won four of the last five"),
+    ("Kickoff `18:30` local", "Kickoff 18:30 local"),
+    ("Unbalanced **bold marker here", "Unbalanced bold marker here"),
+    ("Score was 2 * 1 on aggregate", "Score was 2 * 1 on aggregate"),  # a lone asterisk is kept
+    ("Uses __underscores__ for bold", "Uses underscores for bold"),
+    ("snake_case_name stays", "snake_case_name stays"),
+])
+def test_markdown_emphasis_is_removed_from_claim_text(raw, expected):
+    (claim,), _ = build_claims([TextSegment(text="- " + raw)])
+    assert claim.text == expected and "**" not in claim.text
+
+
+def test_bold_around_a_citation_is_cleaned_too():
+    seg = make_segment([("**Venezia** lost 0-2 to Lazio", "https://a.test/x")])
+    (claim,), _ = build_claims([seg])
+    assert claim.text == "Venezia lost 0-2 to Lazio" and claim.sources[0]["url"] == "https://a.test/x"

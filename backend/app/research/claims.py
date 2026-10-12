@@ -23,7 +23,15 @@ class Claim:
         return {"text": self.text, "kind": self.kind, "sources": self.sources}
 
 
+def _plain(text: str) -> str:
+    """Removes markdown emphasis the model adds (bold, italics, code), keeping the words."""
+    text = re.sub(r"(\*\*|__)(.+?)\1", r"\2", text)  # bold
+    text = re.sub(r"(?<![*\w])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![*\w])", r"\1", text)  # *italic*
+    return text.replace("`", "").replace("**", "")  # code ticks and any unbalanced bold marker
+
+
 def _clean(text: str) -> str:
+    text = _plain(text)
     text = re.sub(r"\(\s*\)", "", text)  # parentheses left empty after cutting the link markup
     text = re.sub(r"\s+([.,;:])", r"\1", text)
     return re.sub(r"\s{2,}", " ", text).strip()
