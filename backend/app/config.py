@@ -82,6 +82,11 @@ class Settings:
     sports_series: tuple[SeriesEntry, ...]
     games_cache_seconds: int
     sports_fetch_concurrency: int
+    fetch_enabled: bool
+    fetch_max_pages_per_run: int
+    fetch_concurrency: int
+    fetch_timeout_seconds: float
+    fetch_max_bytes: int
 
     @property
     def research_enabled(self) -> bool:
@@ -185,6 +190,16 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         "SPORTS_FETCH_CONCURRENCY", env.get("SPORTS_FETCH_CONCURRENCY", "6"), problems
     )
 
+    fetch_enabled = _parse_bool("FETCH_ENABLED", env.get("FETCH_ENABLED", "true"), problems)
+    fetch_max_pages = _parse_positive_int(
+        "FETCH_MAX_PAGES_PER_RUN", env.get("FETCH_MAX_PAGES_PER_RUN", "25"), problems
+    )
+    page_fetch_concurrency = _parse_positive_int("FETCH_CONCURRENCY", env.get("FETCH_CONCURRENCY", "5"), problems)
+    fetch_timeout = _parse_positive_float(
+        "FETCH_TIMEOUT_SECONDS", env.get("FETCH_TIMEOUT_SECONDS", "10"), problems
+    )
+    fetch_max_bytes = _parse_positive_int("FETCH_MAX_BYTES", env.get("FETCH_MAX_BYTES", "2000000"), problems)
+
     if problems:
         raise SettingsError("Invalid settings:\n- " + "\n- ".join(problems))
 
@@ -225,4 +240,9 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         sports_series=sports_series,
         games_cache_seconds=cache_seconds,
         sports_fetch_concurrency=fetch_concurrency,
+        fetch_enabled=fetch_enabled,
+        fetch_max_pages_per_run=fetch_max_pages,
+        fetch_concurrency=page_fetch_concurrency,
+        fetch_timeout_seconds=fetch_timeout,
+        fetch_max_bytes=fetch_max_bytes,
     )
