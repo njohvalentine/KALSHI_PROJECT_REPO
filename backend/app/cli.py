@@ -5,10 +5,10 @@ import getpass
 import os
 import sys
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session as DbSession
 
-from app.models import User
+from app.models import Session, User
 from app.security import MIN_PASSWORD_LENGTH, hash_password
 
 
@@ -47,6 +47,8 @@ def set_password(db: DbSession, email: str, password: str) -> None:
     user.password_hash = hash_password(password)
     user.failed_attempts = 0
     user.locked_until = None
+    # Anyone already signed in (possibly with a stolen session) must sign in again.
+    db.execute(delete(Session).where(Session.user_id == user.id))
     db.commit()
 
 

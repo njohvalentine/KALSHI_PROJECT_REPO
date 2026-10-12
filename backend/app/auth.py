@@ -68,7 +68,9 @@ def login(
     settings: Settings = Depends(get_settings),
 ):
     email = body.email.strip().lower()
-    user = db.scalar(select(User).where(User.email == email))
+    # FOR UPDATE: parallel logins for one account queue up, so each sees the committed failure
+    # count and lock state. Without it, simultaneous guesses overwrite each other's counts.
+    user = db.scalar(select(User).where(User.email == email).with_for_update())
 
     # Always do one password check, so timing is the same for unknown emails and locked accounts.
     password_ok = verify_password(body.password, user.password_hash if user else DUMMY_HASH)

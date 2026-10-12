@@ -142,3 +142,40 @@ def test_cli_rules(make_client):
     with make_client() as client:
         assert login(client, password=PASSWORD).status_code == 401
         assert login(client, password="a brand new password").status_code == 200
+
+
+def test_password_change_signs_out_existing_sessions(make_client):
+    from sqlalchemy.orm import Session as DbSession
+
+    with make_client() as client:
+        assert login(client).status_code == 200
+        assert client.get("/auth/me").status_code == 200
+        with DbSession(make_client.engine) as db:
+            set_password(db, EMAIL, "a brand new password")
+        assert client.get("/auth/me").status_code == 401
+        with make_client.engine.connect() as conn:
+            assert conn.execute(text("SELECT count(*) FROM sessions")).scalar_one() == 0
+
+
+def test_parallel_wrong_logins_cannot_beat_the_lockout(make_client, caplog):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    caplog.set_level(logging.WARNING, logger="app.auth")
+    workers = 12
+    barrier = Barrier(workers)
+    clients = [make_client() for _ in range(workers)]  # separate apps and connections
+
+    def attack(client):
+        with client:
+            barrier.wait()
+            return login(client, password="bad bad bad bad").status_code
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        codes = list(pool.map(attack, clients))
+    assert set(codes) == {401}
+    with make_client.engine.connect() as conn:
+        failed, locked = conn.execute(text("SELECT failed_attempts, locked_until FROM users")).one()
+    assert locked is not None and locked > datetime.now(UTC) + timedelta(minutes=10)
+    assert failed == 0
+    assert caplog.text.count("Account locked") == 1  # lost updates would lock more than once or never
