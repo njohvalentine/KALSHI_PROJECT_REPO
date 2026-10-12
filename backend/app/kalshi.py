@@ -53,6 +53,7 @@ class KalshiClient:
         last_reason = "no attempt made"
         for attempt in range(1, self._max_attempts + 1):
             wait = self._backoff * 2 ** (attempt - 1)
+            started = time.monotonic()
             try:
                 response = self._client.get(url, params=_clean(params or {}))
             except httpx2.TransportError as exc:
@@ -68,6 +69,8 @@ class KalshiClient:
                 elif response.status_code >= 400:
                     raise KalshiError(f"Kalshi returned HTTP {response.status_code} for {path}")
                 else:
+                    # Shows where page load time goes: read it with `docker compose logs backend`.
+                    log.info("Kalshi GET %s answered %d in %.0f ms", path, response.status_code, (time.monotonic() - started) * 1000)
                     return response.json()
             if attempt < self._max_attempts:
                 log.warning(

@@ -136,3 +136,10 @@ def test_default_client_fails_fast_when_kalshi_is_unreachable():
         assert c._max_attempts == 3
     finally:
         c.close()
+
+
+def test_each_successful_call_logs_its_path_and_duration(caplog):
+    caplog.set_level(logging.INFO, logger="app.kalshi")
+    c, _ = make(lambda r: httpx2.Response(200, json={}))
+    c.get_market("KX-1")
+    assert any("Kalshi GET /markets/KX-1 answered 200 in" in m and m.endswith(" ms") for m in caplog.messages)

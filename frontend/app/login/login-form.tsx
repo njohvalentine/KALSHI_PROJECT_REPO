@@ -25,7 +25,6 @@ export function LoginForm() {
       });
       if (res.ok) {
         router.replace("/markets");
-        router.refresh();
         return;
       }
       if (res.status === 401) setError("Invalid email or password.");

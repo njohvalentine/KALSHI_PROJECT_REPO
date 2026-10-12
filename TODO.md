@@ -18,3 +18,4 @@
 - [x] FEAT-20261012-1052 — Saving cited pages: link, title, quoted text and time for every citation (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:54]
 - [x] FEAT-20261012-1053 — Run endpoints: start (background), status, list, duplicate and concurrency guards (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:58]
 - [x] FEAT-20261012-1054 — Web app: Analyze button, prediction pages with claims, sources, cost and progress (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 11:04]
+- [x] BUG-20261012-1129 — Signing in feels slow: after login the markets page shows nothing until Kalshi answers, and login asks for the page twice, so Kalshi is called twice (reported by the user; spec: docs/specs/BUG-20261012-1129-slow-login-redirect.md) [2026-10-12 11:31]
