@@ -118,3 +118,21 @@ def test_an_answer_without_findings_is_an_error_but_still_counted_for_cost():
     state = run(Chatty(angle_names=["A"]))
     assert state["errors"] == [{"angle": "A", "error": "The answer contained no findings"}]
     assert len(state["usages"]) == 2  # planner and the paid-for researcher call
+
+
+def test_planner_instructions_keep_one_topic_per_angle_and_odds_separate():
+    text = PLANNER_INSTRUCTIONS.format(max_angles=4, today="2026-10-12")
+    assert "ONE topic" in text and "Betting odds are always their own angle" in text
+    assert "official club, league and tour pages" in text
+
+
+def test_researcher_instructions_are_the_contract_for_plain_sourced_facts():
+    from app.research.prompts import RESEARCHER_INSTRUCTIONS
+
+    text = RESEARCHER_INSTRUCTIONS.format(today="2026-10-12")
+    for rule in (
+        "at most 6 findings", "Plain text only", "Do not calculate or infer", "more than 3 days old",
+        "different start time", "Do not write lines about what a page did not show",
+        "No relevant information found", "Never write a probability",
+    ):
+        assert rule in text, rule

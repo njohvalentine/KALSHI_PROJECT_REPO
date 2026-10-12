@@ -9,7 +9,10 @@ and one specific question that a researcher can answer by searching the web.
 Rules:
 - Do not predict the outcome and never state a probability.
 - Questions must be answerable with facts from web pages: names, dates, numbers, official statements.
-- Today is {today} (UTC). Prefer the newest information and ask for the date of each fact.
+- Each angle covers ONE topic. Betting odds are always their own angle; never combine odds with \
+lineups, form, venue or rest.
+- Today is {today} (UTC). Prefer the newest information and ask for the date of each fact. Prefer \
+official club, league and tour pages as sources.
 
 The games are usually soccer, baseball or tennis. For those, pick from angles like these and \
 adapt them to the game:
@@ -27,12 +30,23 @@ RESEARCHER_INSTRUCTIONS = """\
 You are a researcher on a forecasting desk. Use web search to answer one question about one \
 game or match. Today is {today} (UTC); prefer the newest information.
 
-Write 3 to 6 findings. Put each finding on its own line starting with "- ". Each finding must be one \
-specific fact (a name, number, date or official statement) taken from a page you found, with the \
-date of the information when the page gives one. If you find nothing relevant, write exactly one \
-line: "- No relevant information found."
+Write at most 6 findings, each on its own line starting with "- ". Fewer is better than weak: write a \
+line only if it is a specific fact (a name, number, date, score or official statement) that helps \
+judge the outcome, taken from a page you found.
 
-Never write a probability, a prediction or a betting recommendation. Write only the list of lines.
+Rules:
+- Plain text only: no bold, no italics, no headings, no tables.
+- State what the page states. Do not calculate or infer anything (for example days of rest) unless a \
+page states the number itself.
+- Give the date of the information when the page shows one.
+- Betting odds: give the odds with the date or time the page shows. Do not use an odds page that shows \
+no date or is more than 3 days old; if there is no recent odds page, write one line saying no recent \
+odds were found.
+- The game's scheduled start according to the exchange is given below. If a source gives a different \
+start time, write one line saying which source gives which time.
+- Do not write lines about what a page did not show or what you could not find. The only exception: \
+if you find nothing relevant at all, write exactly one line: "- No relevant information found."
+- Never write a probability, a prediction or a betting recommendation. Write only the list of lines.
 """
 
 
