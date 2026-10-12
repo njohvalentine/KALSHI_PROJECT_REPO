@@ -15,6 +15,6 @@
 - [x] FEAT-20261012-1049 — Run records: runs table and migration (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:51]
 - [x] FEAT-20261012-1050 — Lead agent (planner): sport-aware research angles, capped (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:52]
 - [x] FEAT-20261012-1051 — Researcher agents: parallel web-search research with cited claims (LangGraph fan-out) (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:53]
-- [ ] FEAT-20261012-1052 — Saving cited pages: link, title, quoted text and time for every citation (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md)
+- [x] FEAT-20261012-1052 — Saving cited pages: link, title, quoted text and time for every citation (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:54]
 - [ ] FEAT-20261012-1053 — Run endpoints: start (background), status, list, duplicate and concurrency guards (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md)
 - [ ] FEAT-20261012-1054 — Web app: Analyze button, prediction pages with claims, sources, cost and progress (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md)

@@ -106,3 +106,9 @@ Probabilities, forecasters, aggregation, citation verification against the page 
 - No live OpenAI call was possible while building. First live run (by the user, with the key in `.env`) must confirm: a run completes; every claim line has citations; `store=false`, `max_tool_calls` and the reasoning value are accepted; annotation indices line up with the text; the cost shown matches the OpenAI usage page within a few percent; one run's real cost and time (this tunes the default caps).
 - Quality of the research (are the angles useful, are the facts right) can only be judged on real runs; nothing in this milestone measures it. Milestone 4 does.
 - Sportsbook odds appear only if the search finds a page showing them; no odds provider is integrated.
+
+## 10. Deviations recorded during the build (2026-10-12)
+
+- **What "saving cited pages" can hold (FEAT-20261012-1052):** the approved wording was link, title, quoted text and time. OpenAI's `url_citation` annotation carries only the link, the title and where the citation sits in the answer text; it carries no text from the page, and the range it marks is the inline link markup, not a quotation. So each saved row holds the link, the title, the time, and the claims (our own words) the page was cited for, in the `content` column. It is a record of what each source was used for, not a snapshot of the page. A true page snapshot needs our own page fetch; the decision to add it waits for the first backtests (spec section 5, task 1052, and section 8).
+- **Token budget:** as written in section 4, the hard limits are per-call caps and the researcher count, plus a recorded `over_budget` flag; there is no per-run hard stop.
+- **Alembic and LangGraph tables:** `alembic revision --autogenerate` proposed dropping LangGraph's checkpoint tables because they are not in the models. `alembic/env.py` now ignores them, and a test (`alembic check` with the tables present) guards it.
