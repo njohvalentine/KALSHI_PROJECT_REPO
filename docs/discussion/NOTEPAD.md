@@ -344,6 +344,16 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Questions put to the user:** order change; fetching pages ourselves; price hidden from forecasters; median; 3 forecasters or 5.
 - **Out of scope:** backtests and scoring (Milestone 4), periodic re-checks (D15), approval and orders.
 
+### D24. After Milestone 2: events, fixes and documents (2026-10-12)
+- **The OpenAI key and `.env` (user report):** the key was missing from `.env`; `.env` last changed at 09:53, when I created it with a script during Milestone 1 (before any key existed). The user said a redirect/script created or replaced the file and broke their setup. Cause not provable either way; **rule adopted: never create or write `.env` (or any secrets file); edit only `.env.example` and tell the user which line to add.** Saved in memory. The user later added the key; the backend log then showed "Research is ON". Key values are never read or printed; only the presence of the line is checked.
+- **Login felt slow (user report) = BUG-20261012-1129, fixed:** login API answered in 0.09 s, but `/markets` showed nothing until Kalshi answered, and the login form asked for the page twice (replace plus refresh), calling Kalshi twice. Fix: the page title and a loading state show at once, the table streams in; one page request; lookups in parallel; sign-out likewise; the backend logs each Kalshi call's duration (`docker compose logs backend | grep "Kalshi GET"`). Measured with a mock Kalshi (1.5 s): title after 0.3 s instead of a blank 1.9 s; exactly one page request and one Kalshi call. The remaining wait is Kalshi's own time, unknown on the user's machine; a short backend cache of the market list is held back until that number is known.
+- **Where market data is fetched (user question):** in the markets page itself, on the server, inside a loading boundary; never at login. Alternative (fetch in the browser after render) offered and not chosen.
+- **The user may hold the client's Kalshi private key (message cut off):** told not to paste it; how to save it as a file (outside the repo, `chmod 600`) and run `check-kalshi-key` locally with the Key ID; the client's key was sent over WhatsApp, so a fresh key is advised before real trading. **Result of the check: not yet reported.**
+- **Demo login for local testing** was given to the user (`demo@example.com`, local Docker database only); to be replaced by a real account made with `python -m app.cli create-user` before real use.
+- **Milestone 3 draft** presented (D23); awaiting approval. The user asked for a document explaining the graphs: written as `docs/agent/GRAPHS.md` (Built versus Planned labels, parallel versus sequential for every step, settings, where to change things).
+- **Documents brought up to date:** `docs/ARCHITECTURE.md` and `docs/MILESTONES.md` rewritten for the client to match reality (sports focus; what is built and what is not; Docker and sign-in; "Cited" does not mean "checked"; cited-text limitation; the Milestone 3 order change; go-live rule deferred; periodic re-checks proposed). Memory files updated (project state, working preferences).
+- **Commit history:** every task and bug is its own commit on `master` (no remote connected when last checked); `TODO.md` is up to date; no Claude attribution in commit messages, per CLAUDE.md; `CLAUDE.md` is git-ignored at the user's request.
+
 ---
 
 ## 4. Environment
@@ -352,23 +362,27 @@ Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules ap
 ---
 
 ## 5. Not decided yet (so no one assumes)
-- **Sign-in details** (D19): HTTPS for real use; login page not yet in mockups.
-- **Data sources:** decided in D7 (OpenAI web search first). Open: confirm client's key can use web search; snapshot table design (spec); domain data sources depend on market genre.
-- **Approval screen connection:** proposed in D18, needs the user's agreement.
-- **Dropped by the user (D16):** OpenAI budget and models, betting limits (until Milestone 7), go-live bar.
+- **Milestone 3** task list and the five questions in D23 (check sources before forecasting; fetch pages ourselves; hide the price from forecasters; median; 3 or 5 forecasters).
+- **Whether to add periodic re-checks** (D15): proposed, client not yet asked.
+- **Backend cache of the Kalshi market list:** decide after seeing real Kalshi timings.
+- **Approval flow details** (D18): proposed; built in a later milestone. Sign-in details beyond the single account: HTTPS for real use.
+- **Dropped by the user for now (D16):** OpenAI budget and models, betting limits (until the order milestone), the go-live rule.
+- **Page snapshot:** real page text comes from our own fetch in Milestone 3 (D22, D23).
 
 ---
 
 ## 6. Questions for the client
 1. Which market types? Answered: soccer, baseball and tennis (D21).
-2. Which US state are they in? (Not answered yet.)
-3. What should "help" cover: finding bets, researching, sizing, or all?
-4. Can the OpenAI key use the web search tool? (D7 depends on it.)
-5. Kalshi key: which site was it created on (demo.kalshi.co or kalshi.com), and do we also have the private key file? (D17)
-Answered: LangSmith cloud tracing, OK (D16). Runtime, Docker Compose (D16).
+2. Which US state are they in? (Not answered; matters for sports contracts.)
+3. Only match winners, or also totals and player props?
+4. Is the Kalshi key demo or production, and is the private key available? (The user holds a private key; the check has not been reported yet, D17.)
+5. Do they want periodic re-checks for new information (D15)?
+6. What should "help" cover: finding and researching bets, or also sizing? (Not answered.)
+Answered: LangSmith cloud tracing, OK; Docker Compose; OpenAI credit added (D16, D21).
 
 ## 7. Next steps
-- Settle the open topics in section 5, then draft the spec in `docs/specs/` for approval (CLAUDE.md Module 7). Spec should include the question count for the go-live bar and the worker caps.
-- Before any package is added: confirm Python 3.13 support for LangGraph and LangSmith from official docs, then ask for approval.
-- Verify against primary sources before relying on them: Kalshi fee schedule, valuation, share of sports revenue.
-- Read Anthropic's full multi-agent post for citation-agent details.
+- **User:** run one real market in the browser with the OpenAI key now set; report finish or failure, cost, time, whether findings and links look real; send `docker compose logs backend | grep "Kalshi GET"` timings; run `check-kalshi-key` and report the result.
+- **Then:** approve or amend the Milestone 3 plan (D23); I log the tasks, write the spec and build with a commit per task.
+- **Anytime, small:** a cost note on the Analyze button; automated web app tests (none yet); a short run guide for the operator; a link from `ARCHITECTURE.md` to `docs/agent/GRAPHS.md` (added).
+- **Before any real order:** read Kalshi's Developer Agreement (could not be loaded, D16), rotate the shared key, agree betting limits and the go-live rule.
+- **Open verification list:** live OpenAI call settings, live Kalshi call and field names, real cost per run (spec `FEAT-20261012-1048` section 9).
