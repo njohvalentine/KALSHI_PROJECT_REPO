@@ -66,7 +66,10 @@ class FetchResult:
 
 
 def is_public(address: str) -> bool:
-    ip = ipaddress.ip_address(address)
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False  # an address we cannot read is never treated as public
     if ip.version == 6 and ip.ipv4_mapped:
         ip = ip.ipv4_mapped
     return ip.is_global and not ip.is_multicast and not any(ip in net for net in WRAPPED_RANGES if ip.version == 6)
@@ -74,7 +77,10 @@ def is_public(address: str) -> bool:
 
 def check_url(url: str) -> tuple[str, str, int, str]:
     """Rule 1. Returns (scheme, host, port, path and query) or raises Refused."""
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+    except ValueError as exc:  # e.g. an unclosed [ in the host
+        raise Refused("blocked", f"the link cannot be read: {exc}") from None
     if parts.scheme not in ("http", "https"):
         raise Refused("blocked", f"scheme {parts.scheme or '(none)'} is not allowed")
     if parts.username is not None or parts.password is not None:
@@ -88,14 +94,18 @@ def check_url(url: str) -> tuple[str, str, int, str]:
     host = parts.hostname
     if not host:
         raise Refused("blocked", "the link has no host name")
+    try:
+        host = host.encode("idna").decode()  # the ASCII (punycode) form is what we resolve, send and verify
+    except UnicodeError:
+        raise Refused("blocked", "the host name cannot be converted to ASCII") from None
     return parts.scheme, host, port, (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
 
 
 def public_addresses(host: str, port: int, resolver: Resolver) -> list[str]:
     """Rule 2. Every address the name resolves to must be public; returns them in the resolver's order."""
     try:
-        infos = resolver(host.encode("idna").decode(), port, type=socket.SOCK_STREAM)
-    except (OSError, UnicodeError) as exc:
+        infos = resolver(host, port, type=socket.SOCK_STREAM)
+    except OSError as exc:
         raise Refused("failed", f"could not look up {host}: {exc}") from None
     addresses = [info[4][0].split("%")[0] for info in infos]
     if not addresses:
@@ -150,14 +160,18 @@ def extract_text(html: str) -> tuple[str, str]:
     return re.sub(r"\s+", " ", parser.title).strip(), text
 
 
+def _check_deadline(deadline: float) -> None:
+    if time.monotonic() > deadline:
+        raise Refused("failed", f"the page took longer than {TOTAL_SECONDS:.0f} seconds in total")
+
+
 def _read_limited(response: httpx2.Response, max_bytes: int, deadline: float) -> bytes:
     body = bytearray()
     for chunk in response.iter_bytes():  # decoded bytes: the limit also stops decompression bombs
         body.extend(chunk)
         if len(body) > max_bytes:
             raise Refused("too_large", f"the page is larger than {max_bytes} bytes")
-        if time.monotonic() > deadline:
-            raise Refused("failed", f"the page took longer than {TOTAL_SECONDS:.0f} seconds")
+        _check_deadline(deadline)
     return bytes(body)
 
 
@@ -169,12 +183,16 @@ def fetch_page(
     current = url
     try:
         for hop in range(MAX_REDIRECTS + 1):
+            _check_deadline(deadline)
             scheme, host, port, target = check_url(current)
             addresses = public_addresses(host, port, resolver)
             default_port = 443 if scheme == "https" else 80
             headers = {
                 "Host": host if port == default_port else f"{host}:{port}",
                 "User-Agent": USER_AGENT,
+                # No compression: a decoder expands a whole network chunk at once, so a small compressed
+                # body could briefly take a lot of memory before our size check runs.
+                "Accept-Encoding": "identity",
                 "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9",
             }
             # Try the checked addresses in order (a laptop or server may have no IPv6 route, for example).
@@ -183,8 +201,9 @@ def fetch_page(
             client = response = None
             connect_error: httpx2.HTTPError | None = None
             for address in addresses:
+                _check_deadline(deadline)
                 literal = f"[{address}]" if ":" in address else address
-                client = httpx2.Client(transport=transport, timeout=httpx2.Timeout(timeout), trust_env=False)
+                client = httpx2.Client(transport=transport, timeout=httpx2.Timeout(min(timeout, max(deadline - time.monotonic(), 0.1))), trust_env=False)
                 try:
                     request = client.build_request(
                         "GET", f"{scheme}://{literal}:{port}{target}", headers=headers, extensions={"sni_hostname": host}
@@ -247,9 +266,13 @@ def fetch_run_sources(engine, run_id: str, settings: Settings, **fetch_options) 
         rows = rows[: settings.fetch_max_pages_per_run]
 
     def one(row) -> tuple[int, FetchResult]:
-        return row.id, fetch_page(
-            row.url, timeout=settings.fetch_timeout_seconds, max_bytes=settings.fetch_max_bytes, **fetch_options
-        )
+        try:
+            return row.id, fetch_page(
+                row.url, timeout=settings.fetch_timeout_seconds, max_bytes=settings.fetch_max_bytes, **fetch_options
+            )
+        except Exception as exc:  # one bad page must not stop the others; the failure is saved and logged
+            log.exception("Fetching %s failed unexpectedly", row.url)
+            return row.id, FetchResult("failed", f"unexpected error: {type(exc).__name__}"[:300])
 
     with ThreadPoolExecutor(max_workers=settings.fetch_concurrency) as pool:
         results = list(pool.map(one, rows))

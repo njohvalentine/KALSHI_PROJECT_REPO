@@ -89,6 +89,38 @@ def test_names_that_resolve_to_private_addresses_are_blocked(url):
     assert result.status == "blocked" and seen == []
 
 
+@pytest.mark.parametrize("url", ["http://[::1/", "http://[zz]/", "https://exa mple.test:99999999/", "http://" + "a" * 70 + ".test/" + "\u0000"])
+def test_malformed_links_are_blocked_not_raised(url):
+    result, seen = run(url, lambda r: html_response())
+    assert result.status in ("blocked", "failed") and seen == []
+
+
+def test_unreadable_address_is_not_public():
+    assert not is_public("not-an-address")
+
+
+def test_internationalised_names_are_sent_as_punycode():
+    seen_hosts = []
+
+    def resolve(host, port, type=None):
+        seen_hosts.append(host)
+        return [(socket.AF_INET, type, 6, "", ("93.184.216.34", port))]
+    result, seen = run("https://b\u00fccher.test/", lambda r: html_response(), resolver=resolve)
+    assert result.status == "ok" and seen_hosts == ["xn--bcher-kva.test"] and seen[0].headers["host"] == "xn--bcher-kva.test"
+
+
+def test_requests_ask_for_no_compression():
+    _, seen = run("https://example.test/", lambda r: html_response())
+    assert seen[0].headers["accept-encoding"] == "identity"
+
+
+def test_total_deadline_stops_a_slow_chain_of_redirects(monkeypatch):
+    clock = iter([0.0, 0.0, 0.0, 0.0, 99.0, 99.0, 99.0, 99.0, 99.0, 99.0])  # time jumps past 25 s after the first hop
+    monkeypatch.setattr(fetch.time, "monotonic", lambda: next(clock, 99.0))
+    result, seen = run("https://example.test/", lambda r: httpx2.Response(302, headers={"location": "/next"}))
+    assert result.status == "failed" and "in total" in result.detail and len(seen) == 1
+
+
 def test_connects_to_the_checked_address_with_the_original_host_name():
     result, seen = run("https://example.test/report?id=7", lambda r: html_response())
     assert result.status == "ok" and "Newcastle beat Arsenal" in result.text
@@ -220,6 +252,25 @@ def test_text_is_capped():
 def test_unknown_charset_falls_back_to_utf8():
     result, _ = run("https://example.test/", lambda r: html_response(PAGE, **{"content-type": "text/html; charset=nonsense"}))
     assert result.status == "ok"
+
+
+@needs_db
+def test_an_unexpected_error_on_one_page_does_not_stop_the_others(fresh_db, monkeypatch):
+    command.upgrade(alembic_config(), "head")
+    with DbSession(fresh_db) as db:
+        db.add_all(SourcePage(run_id="r", url=u, retrieved_at=fetch.datetime.now(fetch.UTC), content_hash="h", content="c")
+                   for u in ("https://example.test/a", "https://example.test/boom"))
+        db.commit()
+    real = fetch.fetch_page
+
+    def flaky(url, **kw):
+        if url.endswith("boom"):
+            raise RuntimeError("bug")
+        return real(url, **kw)
+    monkeypatch.setattr(fetch, "fetch_page", flaky)
+    settings = load_settings({"DATABASE_URL": "postgresql://x/y", "KALSHI_API_BASE": "https://k.test", "SESSION_SECRET": "s" * 32})
+    counts = fetch_run_sources(fresh_db, "r", settings, resolver=PUBLIC, transport=httpx2.MockTransport(lambda r: html_response()))
+    assert counts == {"ok": 1, "failed": 1}
 
 
 @needs_db
