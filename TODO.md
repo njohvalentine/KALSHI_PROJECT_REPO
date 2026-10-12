@@ -12,7 +12,7 @@
 - [x] BUG-20261012-1019 — Sign-in endpoint can be used to exhaust the server: the account row lock is held while a password is hashed, and any number of hashes can run at once, so a flood of login requests can starve database connections and the rest of the app (found in a second security review of FEAT-20261012-0953; spec: docs/specs/BUG-20261012-1019-login-exhaustion.md) [2026-10-12 10:20]
 - [x] BUG-20261012-1029 — Markets page hangs for about a minute when Kalshi cannot be reached: each connection attempt waits 15 seconds and there are four attempts (found while checking the error state of FEAT-20261012-0956; spec: docs/specs/BUG-20261012-1029-kalshi-slow-failure.md) [2026-10-12 10:30]
 - [x] FEAT-20261012-1048 — OpenAI connection and research settings: key, model names, caps, price table, cost calculation (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:50]
-- [ ] FEAT-20261012-1049 — Run records: runs table and migration (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md)
+- [x] FEAT-20261012-1049 — Run records: runs table and migration (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md) [2026-10-12 10:51]
 - [ ] FEAT-20261012-1050 — Lead agent (planner): sport-aware research angles, capped (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md)
 - [ ] FEAT-20261012-1051 — Researcher agents: parallel web-search research with cited claims (LangGraph fan-out) (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md)
 - [ ] FEAT-20261012-1052 — Saving cited pages: link, title, quoted text and time for every citation (spec: docs/specs/FEAT-20261012-1048-milestone-2-research.md)
