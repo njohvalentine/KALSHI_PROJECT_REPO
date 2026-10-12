@@ -8,6 +8,7 @@ import sys
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import Session as DbSession
 
+from app.kalshi_key_check import KeyCheckError, run_check, summarize
 from app.models import Session, User
 from app.security import MIN_PASSWORD_LENGTH, hash_password
 
@@ -68,7 +69,24 @@ def main(argv: list[str] | None = None) -> int:
         p = sub.add_parser(name, help=help_text)
         p.add_argument("email")
         p.add_argument("--password-stdin", action="store_true", help="Read the password from stdin (for scripts)")
+    sub.add_parser(
+        "check-kalshi-key",
+        help="Tell whether the Kalshi key works on demo or production (read-only, no orders)",
+    )
     args = parser.parse_args(argv)
+
+    if args.command == "check-kalshi-key":
+        try:
+            results, warnings = run_check(os.environ)
+        except KeyCheckError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        for warning in warnings:
+            print(f"Warning: {warning}", file=sys.stderr)
+        for r in results:
+            print(f"{r.name}: {r.status}" + (f" ({r.detail})" if r.detail else ""))
+        print(summarize(results))
+        return 0
 
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url.startswith("postgresql://"):
