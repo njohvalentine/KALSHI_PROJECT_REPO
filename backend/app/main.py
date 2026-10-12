@@ -8,6 +8,8 @@ from sqlalchemy import create_engine, text
 
 from app.auth import router as auth_router
 from app.checkpoint import open_checkpointer
+from app.games import GamesService
+from app.games import router as games_router
 from app.config import Settings, load_settings
 from app.kalshi import KalshiClient
 from app.markets import router as markets_router
@@ -27,6 +29,7 @@ def create_app(settings: Settings | None = None, research_model=None) -> FastAPI
         app.state.settings = settings or load_settings(os.environ)
         app.state.engine = create_engine(app.state.settings.sqlalchemy_url, pool_pre_ping=True)
         app.state.kalshi = KalshiClient(app.state.settings.kalshi_api_base)
+        app.state.games = GamesService(lambda: app.state.kalshi, app.state.settings)
         # Fails here if the database is unreachable, instead of starting half-working.
         app.state.checkpoint_pool, app.state.checkpointer = await open_checkpointer(
             app.state.settings.database_url
@@ -56,6 +59,7 @@ def create_app(settings: Settings | None = None, research_model=None) -> FastAPI
     app = FastAPI(title="Valentine backend", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.include_router(auth_router)
     app.include_router(markets_router)
+    app.include_router(games_router)
     app.include_router(runs_router)
 
     @app.get("/health")

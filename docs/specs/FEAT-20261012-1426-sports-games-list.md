@@ -35,7 +35,7 @@ Not verified: the exact list of series that exist for every league the client wa
 - The service fetches the open events of every configured series in parallel (at most `SPORTS_FETCH_CONCURRENCY` at a time; a shared thread pool and a lock so simultaneous page loads share one fetch), builds **one entry per game**, and keeps the result in memory for `GAMES_CACHE_SECONDS`.
 - A game: `event_ticker`, `title`, `sub_title`, `sport`, `league`, `starts_at` (earliest `occurrence_datetime`), `closes_at` (earliest `close_time`), `started` (computed when served), and `outcomes`: `market_ticker`, `label` (`yes_sub_title`), `bid`, `ask`, `last`, `volume`.
 - If a series call fails, the others still show and the response lists `errors` per series (visible on the page); a result with errors is cached for 10 s so a retry happens soon. No silent fallback to old data.
-- Sorting: by `starts_at`, soonest first, unknown last. `GET /api/games?sport=&q=&limit=` (login required): `sport` and `q` (substring of the title, case-insensitive) filter the cached list; `limit` 1 to 500, default 200. The response also carries `sports`, `fetched_at` and `errors`.
+- **Games that already started are hidden by default** (a first live call showed games started 30+ hours earlier, still open on Kalshi until they settle, sorting above the upcoming ones); the response counts them (`hidden_started`) and `include_started=true` shows them, marked. Sorting: by `starts_at`, soonest first, unknown last. `GET /api/games?sport=&q=&limit=&include_started=` (login required): `sport` and `q` (substring of the title or league, case-insensitive) filter the cached list; `limit` 1 to 500, default 200. The response also carries `sports`, `fetched_at` and `errors`.
 - Done when: tests with realistic fixtures for grouping, sorting, started flag, filters, partial failure, cache hit and expiry, parallel limit, a single shared fetch for simultaneous calls, and the settings parsing; and a live check by me of every default series ticker (done once, by hand, with the user's VPN).
 
 ### Task 3 (FEAT-...): Research per game
@@ -46,7 +46,7 @@ Not verified: the exact list of series that exist for every league the client wa
 - Done when: the existing run tests pass in their event form, and new tests cover the game description (outcomes present, no price), 404 and the migration.
 
 ### Task 4 (FEAT-...): Web app
-- The Markets page becomes the games list: sport filter (All, Soccer, Baseball, Tennis, from the response) and a title search, both as plain links and a form (no client-side state); one row per game: title and league, start time in the viewer's time zone with a "Started" mark, each outcome with its buy and sell price ("Newcastle 43–44¢"), a "Research" button per game (Analyze, In progress, View research, Analyze again, as now).
+- The Markets page becomes the games list: sport filter (All, Soccer, Baseball, Tennis, from the response) and a title search, both as plain links and a form (no client-side state); one row per game: title and league, start time in the viewer's time zone (a "Show started games" link shows the hidden ones, marked "Started"), each outcome with its buy and sell price ("Newcastle 43–44¢"), a "Research" button per game (Analyze, In progress, View research, Analyze again, as now).
 - A price shows as "–" when bid or ask is missing; the last-trade price is not used.
 - Errors per league are listed under the table; the loading state stays.
 - Run list and run page use the event title and ticker; text says "game".
@@ -67,4 +67,4 @@ Per-outcome research, forecasts per outcome (Milestone 3), the events paging app
 
 - The league list is a setting; a league not on it does not appear until added. The client should confirm the leagues.
 - Over a VPN a full refresh of about a dozen series takes about 10 seconds; the first page load after a restart or after the cache expires waits for it (the loading state shows). From the client's network it is likely much faster (unmeasured).
-- Games already started stay listed until Kalshi closes them, marked "Started".
+- Games already started are hidden unless asked for (a toggle on the page); Kalshi keeps them open until they settle.

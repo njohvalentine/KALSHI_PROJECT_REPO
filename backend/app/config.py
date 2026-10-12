@@ -6,6 +6,7 @@ safe defaults.
 """
 
 import logging
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -16,6 +17,46 @@ REQUIRED = ("DATABASE_URL", "KALSHI_API_BASE", "SESSION_SECRET")
 
 class SettingsError(Exception):
     """One or more settings are missing or invalid."""
+
+
+@dataclass(frozen=True)
+class SeriesEntry:
+    sport: str
+    ticker: str
+    league: str
+
+
+# Single-game and match-winner series on Kalshi, each checked live on 2026-10-12 to have open games.
+# Format of the setting: Sport:SERIES_TICKER:League label (the label is optional).
+DEFAULT_SPORTS_SERIES = ",".join([
+    "Soccer:KXEPLGAME:Premier League", "Soccer:KXUCLGAME:Champions League", "Soccer:KXUELGAME:Europa League",
+    "Soccer:KXMLSGAME:MLS", "Soccer:KXLALIGAGAME:La Liga", "Soccer:KXSERIEAGAME:Serie A",
+    "Soccer:KXBUNDESLIGAGAME:Bundesliga", "Soccer:KXLIGUE1GAME:Ligue 1",
+    "Baseball:KXMLBGAME:MLB", "Baseball:KXNPBGAME:NPB (Japan)", "Baseball:KXKBOGAME:KBO (Korea)",
+    "Tennis:KXATPMATCH:ATP", "Tennis:KXWTAMATCH:WTA",
+    "Tennis:KXATPCHALLENGERMATCH:ATP Challenger", "Tennis:KXWTACHALLENGERMATCH:WTA Challenger",
+])
+
+
+def parse_sports_series(raw: str, problems: list[str]) -> tuple[SeriesEntry, ...]:
+    entries: list[SeriesEntry] = []
+    seen: set[str] = set()
+    for item in (part.strip() for part in raw.split(",")):
+        if not item:
+            continue
+        parts = item.split(":", 2)
+        sport, ticker = parts[0].strip(), (parts[1].strip() if len(parts) > 1 else "")
+        league = parts[2].strip() if len(parts) > 2 and parts[2].strip() else ticker
+        if not sport or not re.fullmatch(r"[A-Z0-9]+", ticker):
+            problems.append(f"SPORTS_SERIES entry {item!r} must look like Sport:SERIES_TICKER:League label")
+        elif ticker in seen:
+            problems.append(f"SPORTS_SERIES lists {ticker} twice")
+        else:
+            seen.add(ticker)
+            entries.append(SeriesEntry(sport, ticker, league))
+    if not entries and not any("SPORTS_SERIES" in p for p in problems):
+        problems.append("SPORTS_SERIES must list at least one series")
+    return tuple(entries)
 
 
 @dataclass(frozen=True)
@@ -38,6 +79,9 @@ class Settings:
     researcher_max_output_tokens: int
     max_concurrent_runs: int
     run_cost_warn_usd: float
+    sports_series: tuple[SeriesEntry, ...]
+    games_cache_seconds: int
+    sports_fetch_concurrency: int
 
     @property
     def research_enabled(self) -> bool:
@@ -134,6 +178,13 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     max_runs = _parse_positive_int("MAX_CONCURRENT_RUNS", env.get("MAX_CONCURRENT_RUNS", "2"), problems)
     warn_usd = _parse_positive_float("RUN_COST_WARN_USD", env.get("RUN_COST_WARN_USD", "3.00"), problems)
 
+    raw_series = env.get("SPORTS_SERIES", "").strip() or None  # empty counts as not set (Docker passes empty values)
+    sports_series = parse_sports_series(raw_series if raw_series is not None else DEFAULT_SPORTS_SERIES, problems)
+    cache_seconds = _parse_positive_int("GAMES_CACHE_SECONDS", env.get("GAMES_CACHE_SECONDS", "60"), problems)
+    fetch_concurrency = _parse_positive_int(
+        "SPORTS_FETCH_CONCURRENCY", env.get("SPORTS_FETCH_CONCURRENCY", "6"), problems
+    )
+
     if problems:
         raise SettingsError("Invalid settings:\n- " + "\n- ".join(problems))
 
@@ -146,6 +197,11 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         log.info("Research is ON: planner model %s, researcher model %s.", planner_model, researcher_model)
     else:
         log.warning("Research is OFF: OPENAI_API_KEY is not set. Starting a run will be refused.")
+
+    log.info(
+        "Games list: %d series configured (%s).", len(sports_series),
+        "from SPORTS_SERIES" if raw_series is not None else "default list; set SPORTS_SERIES to change it",
+    )
 
     return Settings(
         database_url=database_url,
@@ -166,4 +222,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         researcher_max_output_tokens=max_output,
         max_concurrent_runs=max_runs,
         run_cost_warn_usd=warn_usd,
+        sports_series=sports_series,
+        games_cache_seconds=cache_seconds,
+        sports_fetch_concurrency=fetch_concurrency,
     )
