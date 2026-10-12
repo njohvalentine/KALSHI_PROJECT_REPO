@@ -6,6 +6,17 @@ Last updated: 2026-10-09.
 
 ---
 
+## Current status (read this first; end of session on 2026-10-12)
+
+- **Code:** `master` holds Milestones 1 and 2. **Branch `feature/sports-games-list` (last commit `3743cbf`, not merged, no remote) is where the live work is** and is what the running Docker stack was built from. 169 backend tests pass; the web app has no automated tests (lint, build and browser checks only).
+- **What works, checked live (VPN on, real OpenAI key, public Kalshi calls only):** sign-in; Games page (15 configured series, about 334 games, one row per game, kickoff time from Kalshi milestones, buy and sell prices, sport filter, search, started games hidden); research per game (planner, parallel researchers, cited claims, cost). Four real runs: $0.26 to $0.33 each, 28 to 48 s, current dated odds, no markdown (D27, D28).
+- **Kalshi facts that bit us (D25, D29):** `occurrence_datetime` is settlement time, real kickoff is in `GET /milestones` (needs `limit`); `last_price_dollars` is often 0 where bid and ask exist; combination markets need `mve_filter=exclude`; no category filter on markets or events, only on series.
+- **Not verified:** research quality beyond four games; behaviour on the client's own network (the 10 s first load is the user's VPN); anything about placing orders (never to be called without approval); Kalshi's Developer Agreement (unread).
+- **The user's setup rules:** never write `.env` (they own secrets); Kalshi reachable from here only with their VPN on; demo account `demo@example.com` exists locally; the Kalshi key is a production key, valid, shared over WhatsApp (client must rotate; handover checklist in D24).
+- **Next step the user wants:** a Milestone 3 plan **per game** (one probability per outcome) for approval (D23, D26); then merge decision for the branch.
+
+---
+
 ## 1. The goal (what and why)
 
 **What:** a multi-agent AI system for the client that researches a Kalshi market, plans, and returns a **probability prediction with citations**. A human approves any bet.
@@ -432,27 +443,25 @@ Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules ap
 ---
 
 ## 5. Not decided yet (so no one assumes)
-- **Milestone 3** task list and the five questions in D23 (check sources before forecasting; fetch pages ourselves; hide the price from forecasters; median; 3 or 5 forecasters).
-- **Whether to add periodic re-checks** (D15): proposed, client not yet asked.
-- **Backend cache of the Kalshi market list:** decide after seeing real Kalshi timings.
-- **Approval flow details** (D18): proposed; built in a later milestone. Sign-in details beyond the single account: HTTPS for real use.
+- **Milestone 3** (D23), now **per game**: the task list for approval; the five questions (check sources before forecasting; fetch pages ourselves with safety limits; hide the price from forecasters; median; 3 or 5 forecasters); one probability per outcome of a game; how "meaningful gap" is defined.
+- **Merging `feature/sports-games-list`** into `master`: the user's call.
+- **Which leagues and bet types the client trades** (default list of 15 series; only game and match winners shown; milestones list spreads, totals, halves and props for the same game if wanted later, D29).
+- **Periodic re-checks** (D15): proposed, client not asked.
+- **Approval flow details** (D18): built in a later milestone. HTTPS for real use.
 - **Dropped by the user for now (D16):** OpenAI budget and models, betting limits (until the order milestone), the go-live rule.
-- **Page snapshot:** real page text comes from our own fetch in Milestone 3 (D22, D23).
 
 ---
 
 ## 6. Questions for the client
-1. Which market types? Answered: soccer, baseball and tennis (D21).
-2. Which US state are they in? (Not answered; matters for sports contracts.)
-3. Which leagues and tours exactly (the Games page shows 15 by default, D26), and only game and match winners, or also totals, spreads and player props?
-4. Is the Kalshi key demo or production, and is the private key available? (The user holds a private key; the check has not been reported yet, D17.)
-5. Do they want periodic re-checks for new information (D15)?
-6. What should "help" cover: finding and researching bets, or also sizing? (Not answered.)
-Answered: LangSmith cloud tracing, OK; Docker Compose; OpenAI credit added (D16, D21).
+1. Which US state are they in? (Not answered; matters for sports contracts.)
+2. Which leagues and tours exactly, and only game and match winners, or also totals, spreads and player props? (The Games page shows 15 series by default, D26.)
+3. Do they want periodic re-checks for new information (D15)?
+4. What should "help" cover: finding and researching bets, or also sizing? (Not answered.)
+5. Will they create a new Kalshi key (limited permissions if offered) and revoke the one shared over WhatsApp? (D24 checklist.)
+Answered: soccer, baseball and tennis (D21); LangSmith cloud tracing OK; Docker Compose; OpenAI credit added; the Kalshi key is production and valid (D24).
 
 ## 7. Next steps
-- **User:** with the VPN on, open Games (`/games`), press Research on one game with the OpenAI key now set (work is on branch `feature/sports-games-list`); report finish or failure, cost, time, whether findings and links look real; send `docker compose logs backend | grep "Kalshi GET"` timings. (`check-kalshi-key` is done: production key accepted.)
-- **Then:** approve or amend the Milestone 3 plan (D23); I log the tasks, write the spec and build with a commit per task.
-- **Anytime, small:** a cost note on the Analyze button; automated web app tests (none yet); a short run guide for the operator; a link from `ARCHITECTURE.md` to `docs/agent/GRAPHS.md` (added).
-- **Before any real order:** read Kalshi's Developer Agreement (could not be loaded, D16), rotate the shared key, agree betting limits and the go-live rule. **Handover checklist** is in D24.
-- **Open verification list:** live OpenAI call settings, live Kalshi call and field names, real cost per run (spec `FEAT-20261012-1048` section 9).
+- **Me, when the user says go:** the Milestone 3 plan per game for approval (D23 revised), then spec and build with a commit per task on a branch the user names.
+- **User:** decide when to merge `feature/sports-games-list`; ask the client the questions above; optionally press Research on more games and report quality.
+- **Small, anytime:** remove the unused single-market endpoints (`/api/markets`); a cost note on the Research button; automated web app tests; a run guide for the operator; show totals and spreads if the client wants them.
+- **Before any real order:** read Kalshi's Developer Agreement (could not be loaded, D16), rotate the shared key, agree betting limits and the go-live rule; handover checklist in D24; test that the host reaches Kalshi without a VPN.

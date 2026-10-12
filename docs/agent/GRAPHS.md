@@ -230,7 +230,7 @@ LangGraph writes the graph state to Postgres after each step, under the run id (
 
 ---
 
-## 5. Milestone 3: the full prediction (Planned, not approved, not built)
+## 5. Milestone 3: the full prediction (Planned, not approved, not built; to be planned per game: one probability for each outcome of the game)
 
 Proposal from `NOTEPAD.md` D23. It extends the same graph; the Built steps above stay as they are.
 
@@ -303,6 +303,9 @@ Defaults are placeholders until real runs show real costs and times.
 | endpoints and run guards | `backend/app/runs.py` |
 | the games list and its league list | `backend/app/games.py`, `DEFAULT_SPORTS_SERIES` in `backend/app/config.py` |
 
-## 9. What is not yet proven
+## 9. What is proven and what is not (updated 2026-10-12)
 
-Everything above marked Built was tested with a fake model and with a mock OpenAI server; the games list and the game description given to the agents were also checked against live Kalshi data (public calls, with a mock OpenAI so nothing was spent). Not yet confirmed on the live service: that the request settings (`store=false`, `max_tool_calls`, the reasoning value) are accepted, that citation positions line up with real answers, the real cost and time of a run, and whether the research itself is any good. The first live run and Milestone 4 answer those.
+**Proven on live services** (four real runs with the real OpenAI key and live Kalshi data, each $0.26 to $0.33 and under a minute): the request settings are accepted (`store=false`, forced search, the search cap, reasoning effort, structured planner output), citation positions line up with the text, the games list and the kickoff times (checked against league and MLB pages), and the instruction changes (plain text, dated odds, no padding or arithmetic). See `docs/discussion/NOTEPAD.md` D27 to D29.
+
+**Not proven:** research quality across many games and leagues (the sample is four games); that "cited" lines are actually supported by their pages (Milestone 3 does that check); behaviour on the client's own network; anything about orders.
+
