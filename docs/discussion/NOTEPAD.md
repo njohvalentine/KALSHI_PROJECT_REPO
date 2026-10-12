@@ -399,6 +399,23 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Other timings seen:** `GET /events/{ticker}` took 2.8 s on the VPN; a games-list refresh took 4.8 s for 15 series, 333 games, no failures.
 - **Next options for the user:** fix the asterisk bug and tighten the researcher instructions (plain text, only informative facts, one topic per angle, state the date of odds, no derived arithmetic); try a few more games (soccer, baseball, tennis) to see how consistent the quality is; then plan Milestone 3 per game (D23, D26).
 
+### D28. Researcher instruction change checked with real runs (2026-10-12, ISS-20261012-1450 and BUG-20261012-1449)
+- **Compared:** the first soccer run (old instructions) against three runs with the new instructions: the same soccer game, an MLB playoff game (Dodgers vs Brewers) and an ATP match (Hurkacz vs Davidovich Fokina). All done, no errors.
+
+| | Soccer before | Soccer after | Baseball after | Tennis after |
+|---|---|---|---|---|
+| time | 37 s | 28 s | 48 s | 35 s |
+| cost | $0.32 | $0.26 | $0.33 | $0.30 |
+| searches | 11 | 9 | 12 | 9 |
+| claims (cited) | 22 (22) | 21 (21) | 22 (17) | 19 (19) |
+| lines with `**` | 16 | 0 | 0 | 0 |
+| padding-style lines | 1 | 0 | 1 | 0 |
+| betting odds | two weeks old | dated 23 to 50 minutes old, several books | dated 6 minutes old, three books | dated, 16 books compared |
+
+- **Result:** markdown gone; odds are now current and dated; padding almost gone; no rest-day arithmetic; the researchers now say plainly when sources disagree about the start time. One run (baseball) had 5 uncited lines (four recent postseason results with no source link and one start-time note). Costs stayed $0.26 to $0.33 and runs under a minute.
+- **Still open:** "cited" still does not mean "supported" (Milestone 3); sample is four runs.
+- **Finding that came out of the disagreeing start times (BUG, see D29):** the start time we show and give the agents is wrong.
+
 ---
 
 ## 4. Environment
