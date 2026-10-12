@@ -8,7 +8,7 @@ Last updated: 2026-10-12.
 
 ## 1. What we are building
 
-An AI research assistant for Kalshi prediction markets, focused on **soccer, baseball and tennis**. You pick a market (for example, "Will Arsenal beat Chelsea on Saturday?"). It researches the question on the web, and in the finished system it will estimate the probability and compare it with Kalshi's price. Every claim comes with a source link. A person decides whether to bet.
+An AI research assistant for Kalshi prediction markets, focused on **soccer, baseball and tennis**. You pick a game (for example, "Arsenal vs Chelsea"). It researches the game on the web, and in the finished system it will estimate the probability and compare it with Kalshi's price. Every claim comes with a source link. A person decides whether to bet.
 
 **It does not place bets on its own.** Any bet needs a person to approve it. During testing no bets are placed at all.
 
@@ -17,8 +17,8 @@ An AI research assistant for Kalshi prediction markets, focused on **soccer, bas
 | Part | State |
 |---|---|
 | Sign-in (one account, created by the operator with a script) | **Built** |
-| List of open Kalshi markets with prices | **Built** (tested with simulated Kalshi data; not yet run against the live Kalshi API from our build environment) |
-| Research run: a planner chooses angles, several researchers search the web in parallel, results with source links, cost per run | **Built** (tested with simulated OpenAI responses; not yet run with your real OpenAI key) |
+| Games list: upcoming soccer, baseball and tennis games with start times and buy and sell prices, filter by sport, search | **Built**, checked against live Kalshi data (335 games from 15 leagues and tours). The list of leagues is a setting the client chooses |
+| Research run **per game**: a planner chooses angles, several researchers search the web in parallel, results with source links, cost per run | **Built** (tested with simulated OpenAI responses and real Kalshi games; not yet run with your real OpenAI key) |
 | Checking that each source really supports its claim | Planned (Milestone 3) |
 | A probability estimate and comparison with Kalshi's price | Planned (Milestone 3) |
 | Results dashboard, accuracy testing | Planned (Milestone 4) |
@@ -96,7 +96,7 @@ We considered two ways to organize the AI agents.
 | AI models | OpenAI (your key). Planner `gpt-5.4-mini`, researchers `gpt-5.4`, both changeable in settings | You supplied the key |
 | Agent framework | LangGraph (Python) | The steps are an explicit, testable flow; it supports parallel helpers, saved progress and pausing for approval |
 | Evidence gathering | OpenAI web search tool | Uses your key; returns a link for each source |
-| Market data | Kalshi public API (no key needed to read) | Prices, rules and history |
+| Market data | Kalshi public API (no key needed to read) | Games, outcomes, prices, rules. Kalshi has no sports filter, so the Games page reads a configured list of series (leagues and tours), fetched in parallel and kept for a minute |
 | Backend | FastAPI (Python) | Runs research in the background and serves the web app |
 | Web app | Next.js with shadcn/ui, light theme | Pages: Markets, Prediction (research runs and results), Approval, Results |
 | Database | PostgreSQL | Runs, results, saved sources, forecasts, accounts, and the agents' saved progress |
@@ -105,6 +105,7 @@ We considered two ways to organize the AI agents.
 | Sign-in | Email and password, one account created by the operator with a script; no registration page | Single-user tool; a public registration page would let strangers approve bets |
 
 **Open:** whether your OpenAI key works for web search and the chosen models (confirmed only by a first real run).
+**Open:** which leagues and tours you trade. The Games page shows 15 by default (Premier League, Champions League, Europa League, MLS, La Liga, Serie A, Bundesliga, Ligue 1, MLB, Japan's NPB, Korea's KBO, ATP, WTA and both challenger tours).
 
 ## 5. How we will know if it works
 
@@ -138,7 +139,7 @@ The rule for when real betting could be considered is **deferred**; we will agre
 ## 8. Questions for you
 
 1. Which US state are you in?
-2. Do you trade only match winners, or also other contract types (totals, player props)?
+2. Which leagues and tours do you trade? Do you trade only game and match winners, or also totals, spreads and player props? (The Games page currently lists game and match winners only.)
 3. Is the Kalshi key a demo key or a production key? (We provide a command that tells you.)
 4. Do you want the system to re-check markets from time to time for new information (for example when lineups are announced)? This is proposed, not built.
 5. What should "help" cover: finding and researching bets, or also suggesting how much to bet?

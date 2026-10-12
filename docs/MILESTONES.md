@@ -35,9 +35,9 @@ The web pages (Markets, Prediction, Approval, Results) are built across mileston
 ## Milestone 1: Foundation (built)
 - Docker Compose runs the database, backend and web app together.
 - One-account sign-in (account created by the operator with a script), session cookie, lockout after repeated failures.
-- Read-only connection to Kalshi: list markets, read a market, price history. No Kalshi key is needed for this.
+- Read-only connection to Kalshi: markets, events, price history. No Kalshi key is needed for this.
 - Database tables managed with migrations; LangSmith tracing; LangGraph's saved progress in Postgres.
-- Web app: shared layout, login page, markets list with real data.
+- Web app: shared layout, login page, and the Games page (later rebuilt as one row per game, see Milestone 2).
 - A command that tells whether the Kalshi key is demo or production (`check-kalshi-key`).
 - Found and fixed along the way: a login lockout race, sessions surviving a password change, a login flood risk, and slow failures when Kalshi is unreachable.
 - **Done when:** a real market list loads and a traced test run is visible. **Still to do:** run the Kalshi check and the live market list from a machine that can reach Kalshi.
@@ -46,8 +46,8 @@ The web pages (Markets, Prediction, Approval, Results) are built across mileston
 - A lead agent plans up to 4 research angles written for soccer, baseball and tennis.
 - Researchers run in parallel, each forced to use web search (at most 3 searches), and return findings with source links taken from the search tool's own citations.
 - Every cited page is recorded with its link, title, time and the claims it was cited for. This is a record of what each source was used for, not a copy of the page (OpenAI's citations carry no page text); real page text is saved in Milestone 3.
-- Runs go in the background; one active run per market, at most 2 at once; interrupted runs are marked failed.
-- Web app: Analyze button on the Markets page, a list of runs, and a result page that updates itself while the run works and shows findings, source links, tokens and cost.
+- Runs go in the background; **one run per game**; one active run per game, at most 2 at once; interrupted runs are marked failed.
+- Web app: the **Games page** (upcoming soccer, baseball and tennis games from a configured league list, soonest first, with start time in your time zone, buy and sell prices for each outcome, sport filter and search, already-started games hidden by default), a Research button per game, a list of runs, and a result page that updates itself while the run works and shows findings, source links, tokens and cost.
 - **Done when:** for a sample of real markets, each result lists findings with working links and shows its cost. **Still to do:** the first run with your real OpenAI key.
 
 ## Milestone 3: Full prediction (planned, not approved)
@@ -55,7 +55,7 @@ The web pages (Markets, Prediction, Approval, Results) are built across mileston
 - Check each claim against its page: supported, not supported, or could not check. Only supported claims go forward; the rest stay visible.
 - Three independent forecasters estimate the probability (they are not shown Kalshi's price); the estimates are combined with the median and their spread is recorded.
 - Compare with the price a bet could actually be placed at; show the gap and the estimated edge after fees; flag a gap as meaningful only if it is large enough, the forecasters agree and the evidence is not thin.
-- Web app: probability, the gap bar, each forecaster's estimate, each claim's check result; the Markets list gets an estimate and gap column.
+- Web app: probability for each outcome of the game, the gap bar, each forecaster's estimate, each claim's check result; the Games list gets an estimate and gap column.
 - **Done when:** for any market, the system returns one probability, its reasoning, checked citations and the comparison, with the cost of the run.
 
 ## Milestone 4: Evaluation

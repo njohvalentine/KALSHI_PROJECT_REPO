@@ -12,15 +12,15 @@ Code lives in `backend/app/research/` (graph, model calls, prompts, claims, pric
 
 ## 1. The big picture
 
-A **run** is one research job for one Kalshi market. A person presses *Analyze* on the Markets page; the backend records a run and works on it in the background; the person watches the result page fill in.
+A **run** is one research job for one **game** (a Kalshi event, for example "Coventry vs Newcastle", with all its outcomes). A person presses *Research* on the Games page; the backend records a run and works on it in the background; the person watches the result page fill in.
 
 ```
  Browser: press "Analyze"
         │  POST /api/runs {ticker}
         ▼
  ┌─────────────────────────────  Backend (FastAPI)  ───────────────────────────────┐
- │ 1. checks: logged in, research on, not too many runs, no active run for market   │
- │ 2. fetch the market from Kalshi (server's own copy)                              │
+ │ 1. checks: logged in, research on, not too many runs, no active run for the game │
+ │ 2. fetch the game (event) from Kalshi (server's own copy)                        │
  │ 3. insert run row (status "queued")  ──► answer 202 immediately with the run id  │
  │ 4. start a background task ───────────────────────────────┐                      │
  └───────────────────────────────────────────────────────────┼──────────────────────┘
@@ -69,7 +69,7 @@ All steps read and write one state object (plain data only, because it is saved 
 
 | Field | Meaning | Written by | How combined |
 |---|---|---|---|
-| `market` | the market being researched (ticker, title, subtitle, close time, rules, price) | the runner, at the start | fixed |
+| `game` | the game being researched (event ticker, title, detail line, start time, outcome labels, rules text; **no prices**) | the runner, at the start | fixed |
 | `angles` | the research angles after the cap is applied | `plan` | set once |
 | `cut_angles` | how many proposed angles were dropped by the cap | `plan` | set once |
 | `findings` | one entry per researcher that produced findings | each `research` | **appended** (reducer: add lists) |
@@ -85,9 +85,9 @@ The *append* rule is what lets four researchers write to the same fields at the 
 | **Kind** | LLM agent, one call |
 | **Model** | `PLANNER_MODEL` (default `gpt-5.4-mini`), no web search |
 | **Runs** | first, alone (sequential) |
-| **Input** | market title, subtitle, close time, rules text, today's date. **Not** the market price. |
+| **Input** | game title, detail line, start time, the list of outcomes (for example "Newcastle wins; Tie is the result; Coventry wins"), rules text, today's date. **No prices.** |
 | **Output** | a structured list of angles; each has a short `name` and a specific `question` |
-| **Use case** | decide what is worth looking into for *this* market, so research is focused instead of generic |
+| **Use case** | decide what is worth looking into for *this* game, so research is focused instead of generic |
 | **How it is used** | its angles decide how many researchers start (one per angle) and what each is asked |
 
 What it is told (see `prompts.py`):
@@ -104,7 +104,7 @@ Settings that shape it: `PLANNER_MODEL`, `RESEARCH_REASONING_EFFORT` (default `l
 
 ### 2.4 Edge `fan_out`: how "spawning" works
 
-LangGraph has no "spawn" call. After `plan`, a function returns one `Send("research", {market, angle})` per angle. LangGraph starts one `research` step for each, **at the same time**, each with its own small input. The graph moves on only when all of them are done. A cap on simultaneous steps (`max_concurrency = MAX_RESEARCHERS`) is set in the run configuration.
+LangGraph has no "spawn" call. After `plan`, a function returns one `Send("research", {game, angle})` per angle. LangGraph starts one `research` step for each, **at the same time**, each with its own small input. The graph moves on only when all of them are done. A cap on simultaneous steps (`max_concurrency = MAX_RESEARCHERS`) is set in the run configuration.
 
 ### 2.5 Node `research`: the researcher agents
 
@@ -113,7 +113,7 @@ LangGraph has no "spawn" call. After `plan`, a function returns one `Send("resea
 | **Kind** | LLM agent with web search; one instance per angle |
 | **Model** | `RESEARCHER_MODEL` (default `gpt-5.4`) |
 | **Runs** | all researchers **in parallel** (up to `MAX_RESEARCHERS`); each starts only after `plan` finished |
-| **Input** | market title/subtitle/close time/rules, the angle's name and question, today's date. **Not** the market price (so researchers are not anchored by it). |
+| **Input** | the same game description, plus the angle's name and question and today's date. **No prices** (so researchers are not anchored by the market). |
 | **Tool** | OpenAI web search, forced (`tool_choice = required`; with "auto" the model may skip searching), at most `MAX_SEARCHES_PER_RESEARCHER` (default 3) searches, medium search context |
 | **Limits per call** | `RESEARCHER_MAX_OUTPUT_TOKENS` (default 4000, includes reasoning), `RESEARCH_REASONING_EFFORT` |
 | **Privacy** | `store = false`, so OpenAI is asked not to keep the response |
@@ -160,8 +160,8 @@ All of these happen **sequentially, before the graph starts**, and any one can r
 | 2 | research is configured (OpenAI key present) | 503 "Research is not configured" |
 | 3 | fewer than `MAX_CONCURRENT_RUNS` (default 2) runs active | 429 |
 | 4 | reserve a run slot (before any waiting, so parallel clicks cannot overshoot) | |
-| 5 | fetch the market from Kalshi (the server's copy, not what the browser sent) | 404 not found / 502 Kalshi problem |
-| 6 | insert the run row with status `queued`; the database allows **only one active run per market** | 409 with the existing run's id |
+| 5 | fetch the game from Kalshi with `GET /events/{event_ticker}` (the server's copy, not what the browser sent) | 404 "Game not found" / 502 Kalshi problem |
+| 6 | insert the run row with status `queued`; the database allows **only one active run per game** | 409 with the existing run's id |
 | 7 | start the background task and answer `202` with the run id | |
 
 Use case: stop accidental double clicks and runaway spending, and make the answer instant while the slow work happens later.
@@ -169,7 +169,7 @@ Use case: stop accidental double clicks and runaway spending, and make the answe
 ### 3.2 Running (`execute_run`)
 
 1. Status becomes `running`, start time recorded.
-2. The graph runs with: `thread_id = run id` (saved progress in Postgres), `max_concurrency = MAX_RESEARCHERS`, `recursion_limit = 10`, and LangSmith tags and metadata (run id, market ticker) when tracing is on.
+2. The graph runs with: `thread_id = run id` (saved progress in Postgres), `max_concurrency = MAX_RESEARCHERS`, `recursion_limit = 10`, and LangSmith tags and metadata (run id, event ticker) when tracing is on.
 3. When the graph returns, the runner computes **totals**: input and output tokens, searches, and cost from the price table. A model missing from the price table gives **cost unknown** with a note, never zero. A cost above `RUN_COST_WARN_USD` (default 3.00) sets `over_budget` (a flag and a log line; it cannot stop a run already in flight).
 4. Status becomes `done` if any findings exist, otherwise `failed` with the reasons.
 5. **Sources are saved** (`source_pages`): one row per distinct URL with link, title, time, and the claims that URL was cited for. This is a record of what each source was used for, **not** a copy of the page.
@@ -178,17 +178,46 @@ Use case: stop accidental double clicks and runaway spending, and make the answe
 ### 3.3 Reading results
 
 - `GET /api/runs/{id}`: the full record (plan, findings, errors, tokens, cost, flags). The result page polls this every 3 seconds only while the run is `queued` or `running`.
-- `GET /api/runs`: recent runs (light summaries). `GET /api/runs/latest`: the latest run per market, used by the Markets page buttons.
+- `GET /api/runs`: recent runs (light summaries). `GET /api/runs/latest`: the latest run per game, used by the Games page buttons.
 
 ### 3.4 Parallel and sequential, across runs
 
 | Thing | Relationship |
 |---|---|
-| runs for **different markets** | parallel, up to `MAX_CONCURRENT_RUNS` |
-| two runs for the **same market** | not allowed at once (database rule) |
+| runs for **different games** | parallel, up to `MAX_CONCURRENT_RUNS` |
+| two runs for the **same game** | not allowed at once (database rule) |
 | the start-up checks in 3.1 | sequential |
 | saving sources and run totals | sequential, after the graph |
-| Markets page (web app) | the market list and the latest-run lookup are fetched together |
+| Games page (web app) | the games list and the latest-run lookup are fetched together |
+
+---
+
+## 3b. The games list (Built): where the games a person researches come from
+
+Kalshi offers no "soccer, baseball and tennis games" filter and fetching everything is far too slow (measured on a VPN: thousands of series, events pages of 2 to 5 MB at 8 to 16 s each). So the Games page uses a **configured list of series** (`SPORTS_SERIES`, 15 by default: eight soccer leagues and cups, MLB, Japan's NPB, Korea's KBO, ATP, WTA and both challenger tours). The client chooses the leagues they trade.
+
+```
+ GET /api/games  ──► cache fresh (under GAMES_CACHE_SECONDS)? ──yes──► answer from memory (about 10 ms)
+                          │ no
+                          ▼   one refresh at a time (a lock): simultaneous page loads share it
+        for each configured series, up to SPORTS_FETCH_CONCURRENCY at once (parallel):
+            GET /events?series_ticker=S&status=open&with_nested_markets=true
+        ──► one entry per game, merged, kept in memory
+        ──► filter (sport, search text), hide games that already started, sort by start time
+```
+
+| Step | Relationship | Notes |
+|---|---|---|
+| fetching the series | **parallel**, at most 6 at a time | a first refresh of the default list took about 5 s on the VPN; later calls come from memory |
+| two page loads at the same moment | **sequential on purpose** (one lock) | the second waits for the first refresh instead of starting another |
+| one league failing | the others still show | the failed leagues are listed on the page; a result with a failure is kept only 10 s so a retry comes soon |
+| filtering, hiding, sorting | sequential, in memory | cheap |
+
+What a game entry holds: the event ticker, title ("Coventry vs Newcastle"), detail line, sport, league, start time (the earliest `occurrence_datetime`; Kalshi's `close_time` is days later and is not shown as the start), and one outcome per Kalshi market with its label ("Newcastle"), the price one can sell at (`bid`) and buy at (`ask`), and the last trade (not shown: it is often zero for markets that do have bids and asks).
+
+Games that already started are hidden by default, because Kalshi keeps finished or running games open until they settle and they would sit above the upcoming ones; the page counts them and offers "Show started games".
+
+**Use case:** give the person a short, fast, accurate list of the games the client trades, grouped one row per game. **How it is used:** the page shows it; pressing *Research* starts a run for that game's event ticker (section 3).
 
 ---
 
@@ -232,7 +261,7 @@ Design points behind it:
 
 **Approval and order** (`NOTEPAD.md` D18). After `compare`: `prepare_order` writes a proposal (market, side, price, quantity, expiry) to the database; `await_approval` pauses the graph with LangGraph's `interrupt()` and does nothing else; when a signed-in person approves or rejects in the web app, the backend resumes the graph with the decision. `place_order` is a **separate** step after approval (because a resumed step runs again from its start, an order in the same step could be sent twice); it rechecks the price, uses the proposal id as Kalshi's duplicate guard, and in paper mode only records a simulated fill. Strictly sequential, one at a time, never in parallel with anything.
 
-**Periodic re-checks** (D15). The same graph run again for a market from a schedule or a new signal, each producing a new forecast row; an updated estimate supersedes any waiting proposal.
+**Periodic re-checks** (D15). The same graph run again for a game from a schedule or a new signal, each producing a new forecast row; an updated estimate supersedes any waiting proposal.
 
 ---
 
@@ -249,6 +278,9 @@ Design points behind it:
 | `RESEARCHER_MAX_OUTPUT_TOKENS` | 4000 | output cap per call (planner too) |
 | `MAX_CONCURRENT_RUNS` | 2 | runs at once |
 | `RUN_COST_WARN_USD` | 3.00 | cost level that flags a run `over_budget` |
+| `SPORTS_SERIES` | the default list of 15 series | which Kalshi series appear on the Games page (`Sport:SERIES_TICKER:League label`, comma separated) |
+| `GAMES_CACHE_SECONDS` | 60 | how long the games list is kept in memory (10 s when a league failed) |
+| `SPORTS_FETCH_CONCURRENCY` | 6 | series fetched at the same time when the list is refreshed |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | off | traces of every graph run |
 
 Defaults are placeholders until real runs show real costs and times.
@@ -266,7 +298,8 @@ Defaults are placeholders until real runs show real costs and times.
 | prices and cost | `backend/app/research/pricing.py` |
 | run lifecycle, totals, saving | `backend/app/research/runner.py` |
 | endpoints and run guards | `backend/app/runs.py` |
+| the games list and its league list | `backend/app/games.py`, `DEFAULT_SPORTS_SERIES` in `backend/app/config.py` |
 
 ## 9. What is not yet proven
 
-Everything above marked Built was tested with a fake model and with a mock OpenAI server. Not yet confirmed on the live service: that the request settings (`store=false`, `max_tool_calls`, the reasoning value) are accepted, that citation positions line up with real answers, the real cost and time of a run, and whether the research itself is any good. The first live run and Milestone 4 answer those.
+Everything above marked Built was tested with a fake model and with a mock OpenAI server; the games list and the game description given to the agents were also checked against live Kalshi data (public calls, with a mock OpenAI so nothing was spent). Not yet confirmed on the live service: that the request settings (`store=false`, `max_tool_calls`, the reasoning value) are accepted, that citation positions line up with real answers, the real cost and time of a run, and whether the research itself is any good. The first live run and Milestone 4 answer those.
