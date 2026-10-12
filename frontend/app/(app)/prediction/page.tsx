@@ -46,9 +46,9 @@ export default async function PredictionPage() {
                 <TableRow key={r.id}>
                   <TableCell className="whitespace-normal px-4 py-3.5">
                     <Link href={`/prediction/${r.id}`} className="block max-w-[46ch] font-medium text-primary underline-offset-4 hover:underline">
-                      {r.market_title}
+                      {r.event_title}
                     </Link>
-                    <span className="text-sm text-muted-foreground">{r.market_ticker}</span>
+                    <span className="text-sm text-muted-foreground">{r.event_ticker}</span>
                   </TableCell>
                   <TableCell className="px-4 py-3.5">
                     <StatusBadge status={r.status} />

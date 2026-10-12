@@ -33,11 +33,11 @@ class FakeModel:
         self.running = 0
         self.max_running = 0
 
-    async def plan(self, market, max_angles):
-        self.plan_calls.append((market, max_angles))
+    async def plan(self, game, max_angles):
+        self.plan_calls.append((game, max_angles))
         return Plan(angles=[Angle(name=n, question=f"What about {n}?") for n in self.angle_names]), self.planner_usage
 
-    async def research(self, market, angle):
+    async def research(self, game, angle):
         self.research_calls.append(angle.name)
         self.running += 1
         self.max_running = max(self.max_running, self.running)

@@ -6,7 +6,7 @@ from openai.types.responses import ResponseFunctionWebSearch, ResponseOutputMess
 
 from app.config import load_settings
 from app.research.model import OpenAIResearchModel, ResearchModelError, segments_and_searches, usage_from
-from app.research.schemas import Angle, MarketInfo, Plan
+from app.research.schemas import Angle, GameInfo, Plan
 
 SETTINGS = load_settings({
     "DATABASE_URL": "postgresql://u:p@db:5432/x",
@@ -14,7 +14,7 @@ SETTINGS = load_settings({
     "SESSION_SECRET": "s" * 40,
     "OPENAI_API_KEY": "sk-test",
 })
-MARKET = MarketInfo(ticker="KX-1", title="Will Team A beat Team B?", subtitle="Group stage", close_time="2026-11-01T18:00:00Z")
+MARKET = GameInfo(event_ticker="KX-1", title="Team A vs Team B", sub_title="Group stage", starts_at="2026-11-01T18:00:00+00:00", outcomes=["Team A wins", "Tie is the result", "Team B wins"])
 
 
 def search_call(action):
@@ -97,15 +97,18 @@ def test_research_call_uses_forced_search_caps_and_no_storage():
     assert kw["max_tool_calls"] == 3 and kw["max_output_tokens"] == 4000
     assert kw["store"] is False and kw["reasoning"] == {"effort": "low"}
     assert kw["tools"] == [{"type": "web_search", "search_context_size": "medium"}]
-    assert "How has A played?" in kw["input"] and "Will Team A beat Team B?" in kw["input"]
+    assert "How has A played?" in kw["input"] and "Team A vs Team B" in kw["input"]
+    assert "Starts: 2026-11-01T18:00:00+00:00" in kw["input"] and "Team A wins; Tie is the result; Team B wins" in kw["input"]
     assert out.usage.search_calls == 1 and out.segments[0].citations[0].url == "https://a.test"
 
 
-def test_researchers_are_not_shown_the_market_price():
+def test_the_game_description_has_no_price_field_so_agents_cannot_see_prices():
+    assert not any("price" in f or "bid" in f or "ask" in f for f in GameInfo.__dataclass_fields__)
     model, responses = make_model()
-    market = MarketInfo(ticker="K", title="T", price_dollars="0.4800")
-    asyncio.run(model.research(market, Angle(name="n", question="q")))
-    assert "0.48" not in responses.calls[0][1]["input"] and "48" not in responses.calls[0][1]["input"]
+    asyncio.run(model.plan(MARKET, 3))
+    asyncio.run(model.research(MARKET, Angle(name="n", question="q")))
+    for _, kw in responses.calls:
+        assert "¢" not in kw["input"] and "price" not in kw["input"].lower()
 
 
 def test_plan_call_uses_structured_output_and_the_planner_model():
@@ -133,8 +136,21 @@ def test_api_errors_become_clear_model_errors_without_secrets():
         asyncio.run(model.plan(MARKET, 3))
 
 
-def test_market_from_kalshi_json_is_tolerant():
-    assert MarketInfo.from_kalshi({"market": {"ticker": "T", "title": "Q?", "last_price_dollars": "0.5"}}).title == "Q?"
-    assert MarketInfo.from_kalshi({"ticker": "T"}).title == "T"  # no title field: falls back to the ticker
-    with pytest.raises(ValueError):
-        MarketInfo.from_kalshi({"market": {}})
+def test_game_from_a_kalshi_event_response():
+    data = {
+        "event": {"event_ticker": "KXEPL-26OCT12COVNEW", "title": "Coventry vs Newcastle", "sub_title": "COV vs NEW (Oct 12)"},
+        "markets": [
+            {"ticker": "A", "title": "Coventry wins", "yes_sub_title": "Coventry", "occurrence_datetime": "2026-10-12T22:00:00Z", "rules_primary": "If Coventry wins ..."},
+            {"ticker": "B", "title": "Tie is the result", "yes_sub_title": "Tie", "occurrence_datetime": "2026-10-12T22:00:00Z"},
+            {"ticker": "C", "title": "Newcastle wins", "yes_sub_title": "Newcastle", "occurrence_datetime": "2026-10-12T21:00:00Z"},
+        ],
+    }
+    game = GameInfo.from_kalshi_event(data)
+    assert game.event_ticker == "KXEPL-26OCT12COVNEW" and game.title == "Coventry vs Newcastle" and game.sub_title == "COV vs NEW (Oct 12)"
+    assert game.outcomes == ["Coventry wins", "Tie is the result", "Newcastle wins"]
+    assert game.starts_at == "2026-10-12T21:00:00Z" and game.rules == "If Coventry wins ..."  # earliest start; first rules text
+    nested = {"event": {"event_ticker": "E", "markets": [{"ticker": "X", "yes_sub_title": "Only"}]}}
+    assert GameInfo.from_kalshi_event(nested).outcomes == ["Only"]  # markets nested inside the event also work
+    for bad in ({"event": {}, "markets": [{"ticker": "x"}]}, {"event": {"event_ticker": "E"}, "markets": []}, {}):
+        with pytest.raises(ValueError):
+            GameInfo.from_kalshi_event(bad)

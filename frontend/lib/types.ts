@@ -5,8 +5,8 @@ export type RunError = { angle: string; error: string };
 
 export type RunSummary = {
   id: string;
-  market_ticker: string;
-  market_title: string;
+  event_ticker: string;
+  event_title: string;
   status: "queued" | "running" | "done" | "failed";
   error: string | null;
   created_at: string | null;

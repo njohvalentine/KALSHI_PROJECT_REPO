@@ -84,26 +84,26 @@ class SourcePage(Base):
 
 
 class Run(Base):
-    """One research run for one market. The result is kept here so it survives restarts."""
+    """One research run for one game (a Kalshi event). The result is kept here so it survives restarts."""
 
     __tablename__ = "runs"
     __table_args__ = (
         CheckConstraint("status IN ('queued', 'running', 'done', 'failed')", name="runs_status_values"),
-        Index("ix_runs_market_created", "market_ticker", "created_at"),
+        Index("ix_runs_event_created", "event_ticker", "created_at"),
         Index("ix_runs_status", "status"),
-        # At most one active run per market, enforced by the database so two simultaneous clicks
+        # At most one active run per game, enforced by the database so two simultaneous clicks
         # cannot both start (and pay for) a run.
         Index(
-            "uq_runs_one_active_per_market",
-            "market_ticker",
+            "uq_runs_one_active_per_event",
+            "event_ticker",
             unique=True,
             postgresql_where=text("status IN ('queued', 'running')"),
         ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    market_ticker: Mapped[str] = mapped_column(String(128))
-    market_title: Mapped[str] = mapped_column(Text)
+    event_ticker: Mapped[str] = mapped_column(String(128))
+    event_title: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(10))
     error: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))

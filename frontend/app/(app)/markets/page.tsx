@@ -10,6 +10,7 @@ import type { RunSummary } from "@/lib/types";
 // live response, so every field is read defensively and shown as a dash when missing.
 type Market = {
   ticker: string;
+  event_ticker: string;
   title?: string;
   subtitle?: string;
   close_time?: string;
@@ -47,8 +48,8 @@ async function MarketsTable() {
   }
   const latest = new Map<string, { id: string; status: RunSummary["status"] }>();
   if (latestRes.ok) {
-    for (const r of ((await latestRes.json()) as { runs: { market_ticker: string; id: string; status: RunSummary["status"] }[] }).runs) {
-      latest.set(r.market_ticker, { id: r.id, status: r.status });
+    for (const r of ((await latestRes.json()) as { runs: { event_ticker: string; id: string; status: RunSummary["status"] }[] }).runs) {
+      latest.set(r.event_ticker, { id: r.id, status: r.status });
     }
   }
 
@@ -82,7 +83,7 @@ async function MarketsTable() {
               <TableCell className="px-4 py-3.5">{closes(m.close_time)}</TableCell>
               <TableCell className="px-4 py-3.5 text-right tabular-nums">{percent(m.last_price_dollars)}</TableCell>
               <TableCell className="px-4 py-3.5 text-right">
-                <AnalyzeButton ticker={m.ticker} latest={latest.get(m.ticker) ?? null} />
+                <AnalyzeButton eventTicker={m.event_ticker} latest={latest.get(m.event_ticker) ?? null} />
               </TableCell>
             </TableRow>
           ))}

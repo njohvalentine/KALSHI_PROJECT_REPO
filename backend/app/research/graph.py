@@ -11,7 +11,7 @@ from langgraph.types import Send
 from app.config import Settings
 from app.research.claims import build_claims
 from app.research.model import ResearchModel, ResearchModelError
-from app.research.schemas import Angle, MarketInfo
+from app.research.schemas import Angle, GameInfo
 
 log = logging.getLogger("app.research")
 
@@ -21,7 +21,7 @@ class EmptyPlanError(ResearchModelError):
 
 
 class ResearchState(TypedDict, total=False):
-    market: dict  # MarketInfo as a plain dict (checkpoints must hold plain data)
+    game: dict  # GameInfo as a plain dict (checkpoints must hold plain data)
     angles: list[dict]
     cut_angles: int  # how many planned angles were dropped to stay within the cap
     findings: Annotated[list[dict], operator.add]  # one entry per researcher that produced findings
@@ -31,8 +31,8 @@ class ResearchState(TypedDict, total=False):
 
 def build_graph(model: ResearchModel, settings: Settings, checkpointer=None):
     async def plan(state: ResearchState) -> dict:
-        market = MarketInfo(**state["market"])
-        plan_, usage = await model.plan(market, settings.max_researchers)
+        game = GameInfo(**state["game"])
+        plan_, usage = await model.plan(game, settings.max_researchers)
         angles = plan_.angles
         if not angles:
             raise EmptyPlanError("The planner returned no research angles")
@@ -51,13 +51,13 @@ def build_graph(model: ResearchModel, settings: Settings, checkpointer=None):
     def fan_out(state: ResearchState) -> list[Send]:
         # One researcher per angle. Each runs in parallel with its own input; results are merged by
         # the list reducers in ResearchState, and the graph ends once every researcher is done.
-        return [Send("research", {"market": state["market"], "angle": a}) for a in state["angles"]]
+        return [Send("research", {"game": state["game"], "angle": a}) for a in state["angles"]]
 
     async def research(work: dict) -> dict:
-        market = MarketInfo(**work["market"])
+        game = GameInfo(**work["game"])
         angle = Angle(**work["angle"])
         try:
-            output = await model.research(market, angle)
+            output = await model.research(game, angle)
         except ResearchModelError as exc:
             log.warning("Researcher for angle %r failed: %s", angle.name, exc)
             return {"errors": [{"angle": angle.name, "error": str(exc)}]}

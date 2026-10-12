@@ -10,7 +10,7 @@ from openai import AsyncOpenAI
 
 from app.config import Settings
 from app.research.prompts import PLANNER_INSTRUCTIONS, RESEARCHER_INSTRUCTIONS, planner_input, researcher_input
-from app.research.schemas import Angle, Citation, MarketInfo, Plan, ResearchOutput, TextSegment, Usage
+from app.research.schemas import Angle, Citation, GameInfo, Plan, ResearchOutput, TextSegment, Usage
 
 
 class ResearchModelError(Exception):
@@ -18,9 +18,9 @@ class ResearchModelError(Exception):
 
 
 class ResearchModel(Protocol):
-    async def plan(self, market: MarketInfo, max_angles: int) -> tuple[Plan, Usage]: ...
+    async def plan(self, game: GameInfo, max_angles: int) -> tuple[Plan, Usage]: ...
 
-    async def research(self, market: MarketInfo, angle: Angle) -> ResearchOutput: ...
+    async def research(self, game: GameInfo, angle: Angle) -> ResearchOutput: ...
 
 
 def _today() -> str:
@@ -72,13 +72,13 @@ class OpenAIResearchModel:
                 client = wrap_openai(client)
         self._client = client
 
-    async def plan(self, market: MarketInfo, max_angles: int) -> tuple[Plan, Usage]:
+    async def plan(self, game: GameInfo, max_angles: int) -> tuple[Plan, Usage]:
         today = _today()
         try:
             response = await self._client.responses.parse(
                 model=self._s.planner_model,
                 instructions=PLANNER_INSTRUCTIONS.format(max_angles=max_angles, today=today),
-                input=planner_input(market, today),
+                input=planner_input(game, today),
                 text_format=Plan,
                 reasoning={"effort": self._s.research_reasoning_effort},
                 max_output_tokens=self._s.researcher_max_output_tokens,
@@ -90,13 +90,13 @@ class OpenAIResearchModel:
             raise ResearchModelError("The planner returned no usable plan")
         return response.output_parsed, usage_from(response, self._s.planner_model)
 
-    async def research(self, market: MarketInfo, angle: Angle) -> ResearchOutput:
+    async def research(self, game: GameInfo, angle: Angle) -> ResearchOutput:
         today = _today()
         try:
             response = await self._client.responses.create(
                 model=self._s.researcher_model,
                 instructions=RESEARCHER_INSTRUCTIONS.format(today=today),
-                input=researcher_input(market, angle, today),
+                input=researcher_input(game, angle, today),
                 tools=[{"type": "web_search", "search_context_size": "medium"}],
                 tool_choice="required",  # with "auto" the model may skip searching
                 max_tool_calls=self._s.max_searches_per_researcher,

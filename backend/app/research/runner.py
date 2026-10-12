@@ -55,17 +55,17 @@ def _finish(engine, run_id: str, fields: dict, findings: list[dict], finished_at
             db.commit()
 
 
-async def execute_run(*, engine, graph, settings: Settings, run_id: str, market: dict) -> None:
+async def execute_run(*, engine, graph, settings: Settings, run_id: str, game: dict) -> None:
     await asyncio.to_thread(_update, engine, run_id, status="running", started_at=datetime.now(UTC))
     config = {
         "configurable": {"thread_id": run_id},  # saved progress per run
         "max_concurrency": settings.max_researchers,
         "recursion_limit": 10,
         "tags": ["research"],
-        "metadata": {"run_id": run_id, "market_ticker": market["ticker"]},
+        "metadata": {"run_id": run_id, "event_ticker": game["event_ticker"]},
     }
     try:
-        state = await graph.ainvoke({"market": market}, config)
+        state = await graph.ainvoke({"game": game}, config)
         fields = summarize(state, settings)
         if fields["over_budget"]:
             log.warning("Run %s cost %s USD, above RUN_COST_WARN_USD=%s", run_id, fields["cost_usd"], settings.run_cost_warn_usd)

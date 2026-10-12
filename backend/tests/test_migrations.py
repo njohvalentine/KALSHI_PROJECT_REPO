@@ -56,12 +56,12 @@ def test_migrations_refuse_to_run_without_database_url(monkeypatch):
 def test_runs_table_rules(fresh_db):
     command.upgrade(_config(), "head")
     with fresh_db.begin() as conn:
-        conn.execute(text("INSERT INTO runs (id, market_ticker, market_title, status, plan) VALUES ('r1', 'T', 'Q', 'queued', '{\"angles\": [1]}')"))
+        conn.execute(text("INSERT INTO runs (id, event_ticker, event_title, status, plan) VALUES ('r1', 'T', 'Q', 'queued', '{\"angles\": [1]}')"))
         assert conn.execute(text("SELECT plan->'angles'->>0 FROM runs WHERE id='r1'")).scalar_one() == "1"
         assert conn.execute(text("SELECT input_tokens, over_budget, cost_usd FROM runs")).one() == (0, False, None)
     with pytest.raises(Exception, match="runs_status_values"):
         with fresh_db.begin() as conn:
-            conn.execute(text("INSERT INTO runs (id, market_ticker, market_title, status) VALUES ('r2', 'T', 'Q', 'bogus')"))
+            conn.execute(text("INSERT INTO runs (id, event_ticker, event_title, status) VALUES ('r2', 'T', 'Q', 'bogus')"))
 
 
 def test_models_match_migrations_and_langgraph_tables_are_left_alone(fresh_db):

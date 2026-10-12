@@ -17,9 +17,9 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
         <Link href="/prediction" className="text-primary underline underline-offset-4">
           All runs
         </Link>{" "}
-        / {run.market_ticker}
+        / {run.event_ticker}
       </p>
-      <PageHeader title={run.market_title} description="Research gathered for this market, with the sources it relies on." />
+      <PageHeader title={run.event_title} description="Research gathered for this market, with the sources it relies on." />
       <RunView initial={run} />
     </>
   );

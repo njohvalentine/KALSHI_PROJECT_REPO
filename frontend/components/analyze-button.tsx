@@ -8,7 +8,7 @@ import { isActive, type RunSummary } from "@/lib/types";
 
 type Latest = { id: string; status: RunSummary["status"] } | null;
 
-export function AnalyzeButton({ ticker, latest }: { ticker: string; latest: Latest }) {
+export function AnalyzeButton({ eventTicker, latest }: { eventTicker: string; latest: Latest }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export function AnalyzeButton({ ticker, latest }: { ticker: string; latest: Late
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Requested-With": "web" },
-        body: JSON.stringify({ ticker }),
+        body: JSON.stringify({ event_ticker: eventTicker }),
       });
       const body = await res.json().catch(() => ({}));
       if (res.status === 202) return router.push(`/prediction/${body.id}`);

@@ -6,29 +6,33 @@ from pydantic import BaseModel, Field
 
 
 @dataclass(frozen=True)
-class MarketInfo:
-    ticker: str
+class GameInfo:
+    """The game (a Kalshi event) a run is about, with the outcomes people can bet on."""
+
+    event_ticker: str
     title: str
-    subtitle: str | None = None
-    close_time: str | None = None
+    sub_title: str | None = None
+    starts_at: str | None = None
+    outcomes: list[str] = field(default_factory=list)  # e.g. ["Newcastle wins", "Tie is the result", ...]
     rules: str | None = None
-    price_dollars: str | None = None  # kept for later steps; researchers are not shown it (avoids anchoring)
+    # Prices are deliberately not part of what the agents are shown (avoids anchoring on the market).
 
     @classmethod
-    def from_kalshi(cls, data: dict) -> "MarketInfo":
-        """Builds from Kalshi's market JSON. Field names follow Kalshi's docs and are unverified
-        against a live response, so every field except the ticker is optional."""
-        m = data.get("market", data)
-        ticker = m.get("ticker")
-        if not ticker:
-            raise ValueError("Kalshi market data has no ticker")
+    def from_kalshi_event(cls, data: dict) -> "GameInfo":
+        """Builds from Kalshi's GET /events/{ticker} response: {"event": {...}, "markets": [...]}."""
+        event = data.get("event") or {}
+        ticker = event.get("event_ticker")
+        markets = data.get("markets") or event.get("markets") or []
+        if not ticker or not markets:
+            raise ValueError("Kalshi event data has no ticker or no outcome markets")
+        starts = sorted(m["occurrence_datetime"] for m in markets if m.get("occurrence_datetime"))
         return cls(
-            ticker=ticker,
-            title=m.get("title") or ticker,
-            subtitle=m.get("subtitle") or None,
-            close_time=m.get("close_time") or None,
-            rules=m.get("rules_primary") or None,
-            price_dollars=m.get("last_price_dollars") or None,
+            event_ticker=ticker,
+            title=event.get("title") or ticker,
+            sub_title=event.get("sub_title") or None,
+            starts_at=starts[0] if starts else None,
+            outcomes=[m.get("title") or m.get("yes_sub_title") or m["ticker"] for m in markets],
+            rules=next((m["rules_primary"] for m in markets if m.get("rules_primary")), None),
         )
 
 

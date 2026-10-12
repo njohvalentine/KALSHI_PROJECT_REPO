@@ -22,8 +22,15 @@ def kalshi_mock(missing=(), broken=(), no_ticker=()):
             return httpx2.Response(404)
         if ticker in broken:
             return httpx2.Response(500)
-        market = {} if ticker in no_ticker else {"ticker": ticker, "title": f"Title of {ticker}", "subtitle": "Group stage", "last_price_dollars": "0.4800"}
-        return httpx2.Response(200, json={"market": market})
+        if ticker in no_ticker:
+            return httpx2.Response(200, json={"event": {}, "markets": []})
+        return httpx2.Response(200, json={
+            "event": {"event_ticker": ticker, "title": f"Game {ticker}", "sub_title": "Group stage"},
+            "markets": [
+                {"ticker": f"{ticker}-H", "title": "Home wins", "yes_sub_title": "Home", "occurrence_datetime": "2026-10-20T18:00:00Z", "rules_primary": "If Home wins ...", "yes_bid_dollars": "0.4800"},
+                {"ticker": f"{ticker}-A", "title": "Away wins", "yes_sub_title": "Away", "occurrence_datetime": "2026-10-20T18:00:00Z"},
+            ],
+        })
 
     return KalshiClient("https://kalshi.test/trade-api/v2", client=httpx2.Client(transport=httpx2.MockTransport(handler)), sleep=lambda s: None)
 
@@ -37,7 +44,7 @@ def signed_in(make_client, model=None, kalshi=None, **env):
 
 
 def start(client, ticker="KX-1"):
-    return client.post("/api/runs", json={"ticker": ticker}, headers=H)
+    return client.post("/api/runs", json={"event_ticker": ticker}, headers=H)
 
 
 def wait_done(client, run_id, timeout=15):
@@ -51,14 +58,18 @@ def wait_done(client, run_id, timeout=15):
 
 
 def test_a_run_goes_from_start_to_a_stored_result_with_cost_and_sources(make_client):
-    client = signed_in(make_client, FakeModel(angle_names=["Form", "Injuries"]))
+    model = FakeModel(angle_names=["Form", "Injuries"])
+    client = signed_in(make_client, model)
     try:
         r = start(client)
         assert r.status_code == 202 and r.json()["status"] == "queued"
         run = wait_done(client, r.json()["id"])
         assert run["status"] == "done" and run["error"] is None
-        assert run["market_ticker"] == "KX-1" and run["market_title"] == "Title of KX-1"
+        assert run["event_ticker"] == "KX-1" and run["event_title"] == "Game KX-1"
         assert [a["name"] for a in run["plan"]["angles"]] == ["Form", "Injuries"]
+        game, _ = model.plan_calls[0]  # what the lead agent was given: the server's copy of the game
+        assert (game.title, game.outcomes, game.starts_at, game.rules) == (
+            "Game KX-1", ["Home wins", "Away wins"], "2026-10-20T18:00:00Z", "If Home wins ...")
         assert [f["angle"] for f in run["result"]["findings"]] == ["Form", "Injuries"]
         assert run["sourced_claims"] == 4
         planner, researcher = Usage("gpt-5.4-mini", 1000, 0, 200), Usage("gpt-5.4", 5000, 1000, 800, 2)
@@ -76,10 +87,10 @@ def test_a_run_goes_from_start_to_a_stored_result_with_cost_and_sources(make_cli
 def test_starting_needs_login_and_the_request_header(make_client):
     client = make_client(research_model=FakeModel())
     with client:
-        assert client.post("/api/runs", json={"ticker": "KX-1"}, headers=H).status_code == 401
+        assert client.post("/api/runs", json={"event_ticker": "KX-1"}, headers=H).status_code == 401
         client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
-        assert client.post("/api/runs", json={"ticker": "KX-1"}).status_code == 403
-        assert client.post("/api/runs", json={"ticker": ""}, headers=H).status_code == 422
+        assert client.post("/api/runs", json={"event_ticker": "KX-1"}).status_code == 403
+        assert client.post("/api/runs", json={"event_ticker": ""}, headers=H).status_code == 422
 
 
 def test_refused_when_research_is_not_configured(make_client):
@@ -118,7 +129,8 @@ def test_too_many_runs_at_once_are_refused_and_the_slot_comes_back(make_client):
 def test_kalshi_problems_are_reported_and_release_the_slot(make_client):
     client = signed_in(make_client, FakeModel(), kalshi_mock(missing={"NOPE"}, broken={"BAD"}, no_ticker={"ODD"}), MAX_CONCURRENT_RUNS="1")
     try:
-        assert start(client, "NOPE").status_code == 404
+        not_found = start(client, "NOPE")
+        assert not_found.status_code == 404 and not_found.json()["detail"] == "Game not found"
         assert start(client, "BAD").status_code == 502
         assert start(client, "ODD").status_code == 502
         assert client.app.state.active_runs == 0  # every refusal gave its slot back
@@ -176,7 +188,7 @@ def test_a_run_over_the_cost_warning_is_flagged(make_client):
 
 def test_runs_cut_off_by_a_restart_are_marked_failed_at_startup(make_client):
     with make_client.engine.begin() as conn:
-        conn.execute(text("INSERT INTO runs (id, market_ticker, market_title, status) VALUES ('old1', 'T1', 'Q', 'running'), ('old2', 'T2', 'Q', 'queued'), ('ok', 'T3', 'Q', 'done')"))
+        conn.execute(text("INSERT INTO runs (id, event_ticker, event_title, status) VALUES ('old1', 'T1', 'Q', 'running'), ('old2', 'T2', 'Q', 'queued'), ('ok', 'T3', 'Q', 'done')"))
     client = signed_in(make_client, FakeModel())
     try:
         runs = {r["id"]: r for r in client.get("/api/runs").json()["runs"]}
@@ -204,10 +216,10 @@ def test_reading_and_listing_runs(make_client):
         listing = client.get("/api/runs").json()["runs"]
         assert [r["id"] for r in listing] == ids[::-1]  # newest first
         assert "result" not in listing[0] and listing[0]["sourced_claims"] == 4  # a light summary
-        assert [r["market_ticker"] for r in client.get("/api/runs?ticker=KX-1").json()["runs"]] == ["KX-1"]
+        assert [r["event_ticker"] for r in client.get("/api/runs?event_ticker=KX-1").json()["runs"]] == ["KX-1"]
         assert len(client.get("/api/runs?limit=1").json()["runs"]) == 1
         assert client.get("/api/runs?limit=0").status_code == 422
-        latest = {r["market_ticker"]: r for r in client.get("/api/runs/latest").json()["runs"]}
+        latest = {r["event_ticker"]: r for r in client.get("/api/runs/latest").json()["runs"]}
         assert latest["KX-1"]["id"] == ids[0] and latest["KX-2"]["status"] == "done"
     finally:
         client.__exit__(None, None, None)
