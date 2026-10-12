@@ -66,3 +66,28 @@ New module `app/research/fetch.py`. Input: the run's cited URLs. Output: updates
 - A cited page can be stale or a derived claim cited to a page that does not say it: the checker is the answer, and its accuracy is measured, not assumed.
 - Fetching raises the safety surface; the tests above are the main defense, and the Jina task adds a browser.
 - Extra cost per game is not measured yet; it is measured on the first full run.
+
+## Task 2 result, and detail for the Jina task (FEAT-20261012-1622)
+
+**Plain fetcher measured on the 46 distinct pages cited in the four real runs (2026-10-12, through the user's VPN, 2 to 11 s per page):**
+
+| Result | Pages | Notes |
+|---|---|---|
+| ok | 37 | text saved; sizes from 0.9k to 11k characters |
+| failed, HTTP 403 | 8 | atptour.com, betmgm.com, oddschecker.com (2), reutersconnect.com, rotascore.com, worldfootball.net, it.wikipedia.org (bot blocking) |
+| failed, no DNS | 1 | img.legaseriea.it (an image host) |
+| empty_js | 0 | |
+
+Two things the numbers do not show and the Jina comparison must: (1) several "ok" pages are short (about 900 to 1,500 characters, mostly on legaseriea.it and veneziafc.it) and may be navigation text from a page whose real content loads with JavaScript, so "ok" is not "has the content"; (2) the 403 pages are the odds and tennis sources, the ones most useful for the forecast. The list of non-ok links is kept so the same pages can be tried with Jina.
+
+**Jina Reader facts (official README, read 2026-10-12):** image `ghcr.io/jina-ai/reader:oss`; `docker run --rm -p 3000:8081 ...`; no required settings; stateless by default; call is `GET http://host:port/<full URL>` with `X-Respond-With: text` (or `markdown`), `X-Timeout` (max 180) and `Accept: application/json` for JSON; any `.pdf` is parsed with PDF.js; `x-proxy-url` lets a request go through our own proxy. The README states no memory or CPU need and **no option to block private or internal addresses**.
+
+**The safety problem (decision for you):** our own checks stop a bad link before Jina sees it, but not what Jina's Chrome does afterwards (a JavaScript redirect, a page that loads an internal address). A container in the default network can reach the host and the local network. Options:
+
+1. **Egress proxy (recommended if Jina proves worth it):** the Jina container is reachable only from the backend, has no other route out, and sends all its web traffic through a small filtering proxy container that refuses private addresses (Jina's `x-proxy-url` header). One more small container; the rule is enforced where the traffic leaves, so Chrome cannot go around it. A proxy package (for example Squid or tinyproxy) is a new dependency to approve then.
+2. **Host firewall rules** on the machine that runs Docker (block private ranges from the Jina network). Works, but lives outside the repo and is easy to forget at handover.
+3. **No extra protection** (only our URL checks). Rejected: it leaves the Chrome gap open.
+
+**Plan, in order:**
+1. Measurement only (no code in the app): run the image locally, send the non-ok links and ten of the short "ok" links, compare text length and content with the plain fetch, and record the time. Result goes in this file. If Jina recovers few pages or is slow, stop here and keep the plain fetcher.
+2. Only if worth it: the container, the proxy (option 1), the app fallback (`empty_js`, `unsupported` PDF and optionally 403 go to Jina, `fetch_method = jina`), tests including private-address URLs sent through the proxy, and the compose wiring.
