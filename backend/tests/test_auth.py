@@ -163,7 +163,7 @@ def test_parallel_wrong_logins_cannot_beat_the_lockout(make_client, caplog):
 
     caplog.set_level(logging.WARNING, logger="app.auth")
     workers = 12
-    barrier = Barrier(workers)
+    barrier = Barrier(workers, timeout=30)
     clients = [make_client() for _ in range(workers)]  # separate apps and connections
 
     def attack(client):

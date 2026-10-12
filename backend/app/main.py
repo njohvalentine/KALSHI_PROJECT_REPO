@@ -6,6 +6,7 @@ from fastapi import FastAPI, Response
 from sqlalchemy import create_engine, text
 
 from app.auth import router as auth_router
+from app.checkpoint import open_checkpointer
 from app.config import Settings, load_settings
 from app.kalshi import KalshiClient
 from app.markets import router as markets_router
@@ -21,7 +22,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.settings = settings or load_settings(os.environ)
         app.state.engine = create_engine(app.state.settings.sqlalchemy_url, pool_pre_ping=True)
         app.state.kalshi = KalshiClient(app.state.settings.kalshi_api_base)
+        # Fails here if the database is unreachable, instead of starting half-working.
+        app.state.checkpoint_pool, app.state.checkpointer = await open_checkpointer(
+            app.state.settings.database_url
+        )
         yield
+        await app.state.checkpoint_pool.close()
         app.state.kalshi.close()
         app.state.engine.dispose()
 

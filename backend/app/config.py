@@ -94,8 +94,8 @@ def load_settings(env: Mapping[str, str]) -> Settings:
 
     if not cookie_secure:
         log.warning("SESSION_COOKIE_SECURE=false: session cookies are sent over plain http. Local use only.")
-    if not tracing:
-        log.info("LangSmith tracing is off (LANGSMITH_TRACING is not 'true').")
+    # LangSmith reads LANGSMITH_TRACING and LANGSMITH_API_KEY from the environment itself.
+    log.info("LangSmith tracing is %s.", "ON" if tracing else "off (LANGSMITH_TRACING is not 'true')")
 
     return Settings(
         database_url=database_url,
