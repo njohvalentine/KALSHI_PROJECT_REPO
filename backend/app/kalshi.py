@@ -39,8 +39,9 @@ class KalshiClient:
         sleep: Callable[[float], None] = time.sleep,
     ):
         self.base_url = base_url.rstrip("/")
-        # Short limits on purpose: a page waits on this. A healthy Kalshi answers in well under a second.
-        self._client = client or httpx2.Client(timeout=httpx2.Timeout(10.0, connect=3.0))
+        # Limits sized for slow networks: on a VPN a connection took 1.6 s and one events page 5 s.
+        # They are also short enough that an unreachable Kalshi shows an error in about 20 s, not a minute.
+        self._client = client or httpx2.Client(timeout=httpx2.Timeout(20.0, connect=6.0))
         self._max_attempts = max_attempts
         self._backoff = backoff_seconds
         self._sleep = sleep
@@ -110,6 +111,25 @@ class KalshiClient:
     ) -> dict[str, Any]:
         path = f"/series/{quote(series_ticker, safe='')}/markets/{quote(ticker, safe='')}/candlesticks"
         return self._get(path, dict(start_ts=start_ts, end_ts=end_ts, period_interval=period_interval))
+
+    # Events: one game or match with all its outcome markets.
+    def list_events(
+        self,
+        *,
+        series_ticker: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+        with_nested_markets: bool | None = None,
+    ) -> dict[str, Any]:
+        nested = None if with_nested_markets is None else ("true" if with_nested_markets else "false")
+        return self._get("/events", dict(
+            series_ticker=series_ticker, status=status, limit=limit, cursor=cursor, with_nested_markets=nested,
+        ))
+
+    def get_event(self, event_ticker: str) -> dict[str, Any]:
+        """Returns {"event": ..., "markets": [...]}. Without with_nested_markets Kalshi puts the markets at the top level."""
+        return self._get(f"/events/{quote(event_ticker, safe='')}")
 
     # Markets that settled before Kalshi's "historical cutoff" are only served here.
     def get_historical_cutoff(self) -> dict[str, Any]:

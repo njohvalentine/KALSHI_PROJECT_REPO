@@ -137,10 +137,10 @@ def test_endpoints_need_login_and_map_errors(make_client):
         assert client.get("/api/markets?limit=0").status_code == 422
 
 
-def test_default_client_fails_fast_when_kalshi_is_unreachable():
+def test_default_client_timeouts_suit_slow_networks_but_still_give_up_in_about_twenty_seconds():
     c = KalshiClient(BASE)
     try:
-        assert c._client.timeout.connect == 3.0 and c._client.timeout.read == 10.0
+        assert c._client.timeout.connect == 6.0 and c._client.timeout.read == 20.0
         assert c._max_attempts == 3
     finally:
         c.close()
@@ -169,3 +169,21 @@ def test_markets_endpoint_excludes_combination_markets_by_default(make_client):
         assert client.get("/api/markets?mve_filter=only").status_code == 200
         assert client.get("/api/markets?mve_filter=whatever").status_code == 422
     assert seen == ["exclude", "only"]
+
+
+def test_events_calls_use_the_documented_paths_and_parameters():
+    seen = []
+    c, _ = make(lambda r: (seen.append((r.url.path, dict(r.url.params))), httpx2.Response(200, json={"events": []}))[1])
+    c.list_events(series_ticker="KXEPLGAME", status="open", limit=200, with_nested_markets=True)
+    c.list_events(series_ticker="KXEPLGAME", with_nested_markets=False)
+    c.list_events()
+    c.get_event("KXEPLGAME-26OCT12COVNEW")
+    raw = []
+    c2, _ = make(lambda r: (raw.append(r.url.raw_path.decode()), httpx2.Response(200, json={}))[1])
+    c2.get_event("../../portfolio/balance")
+    base = "/trade-api/v2"
+    assert seen[0] == (f"{base}/events", {"series_ticker": "KXEPLGAME", "status": "open", "limit": "200", "with_nested_markets": "true"})
+    assert seen[1][1] == {"series_ticker": "KXEPLGAME", "with_nested_markets": "false"}
+    assert seen[2][1] == {}  # nothing is sent that was not asked for
+    assert seen[3] == (f"{base}/events/KXEPLGAME-26OCT12COVNEW", {})
+    assert "%2F" in raw[0] and "/portfolio" not in raw[0]  # an event ticker cannot climb out of its path segment
