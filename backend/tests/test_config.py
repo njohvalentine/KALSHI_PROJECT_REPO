@@ -51,3 +51,39 @@ def test_bad_bool_and_int_rejected():
         load_settings({**GOOD, "LANGSMITH_TRACING": "yes"})
     with pytest.raises(SettingsError, match="SESSION_TTL_HOURS"):
         load_settings({**GOOD, "SESSION_TTL_HOURS": "0"})
+
+
+def test_research_defaults_and_off_without_key(caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="app.config")
+    s = load_settings(GOOD)
+    assert s.research_enabled is False and s.openai_api_key is None
+    assert (s.planner_model, s.researcher_model) == ("gpt-5.4-mini", "gpt-5.4")
+    assert (s.max_researchers, s.max_searches_per_researcher, s.researcher_max_output_tokens) == (4, 3, 4000)
+    assert (s.max_concurrent_runs, s.run_cost_warn_usd, s.research_reasoning_effort) == (2, 3.0, "low")
+    assert "Research is OFF" in caplog.text  # the off state is visible, not silent
+
+
+def test_research_on_with_key_and_key_never_logged(caplog):
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="app.config")
+    s = load_settings({**GOOD, "OPENAI_API_KEY": "sk-secret-value"})
+    assert s.research_enabled
+    assert "Research is ON" in caplog.text and "sk-secret-value" not in caplog.text
+
+
+@pytest.mark.parametrize("name,value", [
+    ("RESEARCH_REASONING_EFFORT", "none"),
+    ("RESEARCH_REASONING_EFFORT", "extreme"),
+    ("MAX_RESEARCHERS", "0"),
+    ("MAX_SEARCHES_PER_RESEARCHER", "x"),
+    ("RESEARCHER_MAX_OUTPUT_TOKENS", "-5"),
+    ("MAX_CONCURRENT_RUNS", "0"),
+    ("RUN_COST_WARN_USD", "0"),
+    ("PLANNER_MODEL", " "),
+])
+def test_bad_research_settings_rejected(name, value):
+    with pytest.raises(SettingsError, match=name.split("_")[0] if name != "PLANNER_MODEL" else "MODEL"):
+        load_settings({**GOOD, name: value})

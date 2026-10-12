@@ -29,6 +29,19 @@ class Settings:
     login_max_attempts: int
     login_lockout_minutes: int
     session_cookie_secure: bool
+    openai_api_key: str | None
+    planner_model: str
+    researcher_model: str
+    research_reasoning_effort: str
+    max_researchers: int
+    max_searches_per_researcher: int
+    researcher_max_output_tokens: int
+    max_concurrent_runs: int
+    run_cost_warn_usd: float
+
+    @property
+    def research_enabled(self) -> bool:
+        return self.openai_api_key is not None
 
     @property
     def sqlalchemy_url(self) -> str:
@@ -52,6 +65,20 @@ def _parse_positive_int(name: str, raw: str, problems: list[str]) -> int:
         pass
     problems.append(f"{name} must be a positive whole number, got {raw!r}")
     return 1
+
+
+def _parse_positive_float(name: str, raw: str, problems: list[str]) -> float:
+    try:
+        value = float(raw)
+        if value > 0:
+            return value
+    except ValueError:
+        pass
+    problems.append(f"{name} must be a positive number, got {raw!r}")
+    return 1.0
+
+
+EFFORTS = ("low", "medium", "high")  # never "none": OpenAI warns it can lower web search quality
 
 
 def load_settings(env: Mapping[str, str]) -> Settings:
@@ -89,6 +116,24 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         "LOGIN_LOCKOUT_MINUTES", env.get("LOGIN_LOCKOUT_MINUTES", "15"), problems
     )
 
+    openai_api_key = env.get("OPENAI_API_KEY", "").strip() or None
+    planner_model = env.get("PLANNER_MODEL", "gpt-5.4-mini").strip()
+    researcher_model = env.get("RESEARCHER_MODEL", "gpt-5.4").strip()
+    if not planner_model or not researcher_model:
+        problems.append("PLANNER_MODEL and RESEARCHER_MODEL must not be empty")
+    effort = env.get("RESEARCH_REASONING_EFFORT", "low").strip()
+    if effort not in EFFORTS:
+        problems.append(f"RESEARCH_REASONING_EFFORT must be one of {', '.join(EFFORTS)}, got {effort!r}")
+    max_researchers = _parse_positive_int("MAX_RESEARCHERS", env.get("MAX_RESEARCHERS", "4"), problems)
+    max_searches = _parse_positive_int(
+        "MAX_SEARCHES_PER_RESEARCHER", env.get("MAX_SEARCHES_PER_RESEARCHER", "3"), problems
+    )
+    max_output = _parse_positive_int(
+        "RESEARCHER_MAX_OUTPUT_TOKENS", env.get("RESEARCHER_MAX_OUTPUT_TOKENS", "4000"), problems
+    )
+    max_runs = _parse_positive_int("MAX_CONCURRENT_RUNS", env.get("MAX_CONCURRENT_RUNS", "2"), problems)
+    warn_usd = _parse_positive_float("RUN_COST_WARN_USD", env.get("RUN_COST_WARN_USD", "3.00"), problems)
+
     if problems:
         raise SettingsError("Invalid settings:\n- " + "\n- ".join(problems))
 
@@ -96,6 +141,11 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         log.warning("SESSION_COOKIE_SECURE=false: session cookies are sent over plain http. Local use only.")
     # LangSmith reads LANGSMITH_TRACING and LANGSMITH_API_KEY from the environment itself.
     log.info("LangSmith tracing is %s.", "ON" if tracing else "off (LANGSMITH_TRACING is not 'true')")
+
+    if openai_api_key:
+        log.info("Research is ON: planner model %s, researcher model %s.", planner_model, researcher_model)
+    else:
+        log.warning("Research is OFF: OPENAI_API_KEY is not set. Starting a run will be refused.")
 
     return Settings(
         database_url=database_url,
@@ -107,4 +157,13 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         login_max_attempts=attempts,
         login_lockout_minutes=lockout,
         session_cookie_secure=cookie_secure,
+        openai_api_key=openai_api_key,
+        planner_model=planner_model,
+        researcher_model=researcher_model,
+        research_reasoning_effort=effort,
+        max_researchers=max_researchers,
+        max_searches_per_researcher=max_searches,
+        researcher_max_output_tokens=max_output,
+        max_concurrent_runs=max_runs,
+        run_cost_warn_usd=warn_usd,
     )

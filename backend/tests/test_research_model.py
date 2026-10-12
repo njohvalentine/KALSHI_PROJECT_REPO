@@ -1,0 +1,140 @@
+import asyncio
+from types import SimpleNamespace
+
+import pytest
+from openai.types.responses import ResponseFunctionWebSearch, ResponseOutputMessage, ResponseUsage
+
+from app.config import load_settings
+from app.research.model import OpenAIResearchModel, ResearchModelError, segments_and_searches, usage_from
+from app.research.schemas import Angle, MarketInfo, Plan
+
+SETTINGS = load_settings({
+    "DATABASE_URL": "postgresql://u:p@db:5432/x",
+    "KALSHI_API_BASE": "https://kalshi.test/trade-api/v2",
+    "SESSION_SECRET": "s" * 40,
+    "OPENAI_API_KEY": "sk-test",
+})
+MARKET = MarketInfo(ticker="KX-1", title="Will Team A beat Team B?", subtitle="Group stage", close_time="2026-11-01T18:00:00Z")
+
+
+def search_call(action):
+    return ResponseFunctionWebSearch.model_validate({"id": "ws_1", "type": "web_search_call", "status": "completed", "action": action})
+
+
+def message(text, annotations):
+    return ResponseOutputMessage.model_validate({
+        "id": "msg_1", "type": "message", "role": "assistant", "status": "completed",
+        "content": [{"type": "output_text", "text": text, "annotations": annotations}],
+    })
+
+
+def usage(inp=1000, cached=200, out=300):
+    return ResponseUsage.model_validate({
+        "input_tokens": inp, "output_tokens": out, "total_tokens": inp + out,
+        "input_tokens_details": {"cached_tokens": cached, "cache_write_tokens": 0},
+        "output_tokens_details": {"reasoning_tokens": 50},
+    })
+
+
+def cite(url, title, start, end):
+    return {"type": "url_citation", "url": url, "title": title, "start_index": start, "end_index": end}
+
+
+def test_parses_text_citations_searches_and_usage_from_sdk_objects():
+    text = "- Star out injured (https://a.test). \n- Won last 5."
+    response = SimpleNamespace(
+        output=[
+            search_call({"type": "search", "query": "team a injuries"}),
+            search_call({"type": "open_page", "url": "https://a.test"}),  # opening a page is not a search
+            search_call({"type": "search", "query": "team a form"}),
+            message(text, [cite("https://a.test", "A news", 0, 25)]),
+        ],
+        usage=usage(),
+    )
+    segments, searches = segments_and_searches(response)
+    assert searches == 2
+    assert len(segments) == 1 and segments[0].text == text
+    c = segments[0].citations[0]
+    assert (c.url, c.title, c.start, c.end) == ("https://a.test", "A news", 0, 25)
+    u = usage_from(response, "gpt-5.4", searches)
+    assert (u.input_tokens, u.cached_tokens, u.output_tokens, u.search_calls, u.model) == (1000, 200, 300, 2, "gpt-5.4")
+
+
+def test_non_url_annotations_are_ignored():
+    response = SimpleNamespace(output=[ResponseOutputMessage.model_validate({
+        "id": "m", "type": "message", "role": "assistant", "status": "completed",
+        "content": [{"type": "output_text", "text": "x", "annotations": [
+            {"type": "file_citation", "file_id": "f", "filename": "n", "index": 0}, cite("https://a.test", "t", 0, 1)]}],
+    })], usage=usage())
+    segments, _ = segments_and_searches(response)
+    assert [c.url for c in segments[0].citations] == ["https://a.test"]
+
+
+class FakeResponses:
+    def __init__(self):
+        self.calls = []
+
+    async def create(self, **kw):
+        self.calls.append(("create", kw))
+        return SimpleNamespace(output=[search_call({"type": "search", "query": "q"}), message("- fact", [cite("https://a.test", "t", 0, 6)])], usage=usage())
+
+    async def parse(self, **kw):
+        self.calls.append(("parse", kw))
+        return SimpleNamespace(output_parsed=Plan(angles=[Angle(name="Form", question="How has A played?")]), usage=usage(500, 0, 100))
+
+
+def make_model():
+    fake = SimpleNamespace(responses=FakeResponses())
+    return OpenAIResearchModel(SETTINGS, client=fake), fake.responses
+
+
+def test_research_call_uses_forced_search_caps_and_no_storage():
+    model, responses = make_model()
+    out = asyncio.run(model.research(MARKET, Angle(name="Form", question="How has A played?")))
+    kind, kw = responses.calls[0]
+    assert kind == "create" and kw["model"] == "gpt-5.4"
+    assert kw["tool_choice"] == "required"          # the model may not skip searching
+    assert kw["max_tool_calls"] == 3 and kw["max_output_tokens"] == 4000
+    assert kw["store"] is False and kw["reasoning"] == {"effort": "low"}
+    assert kw["tools"] == [{"type": "web_search", "search_context_size": "medium"}]
+    assert "How has A played?" in kw["input"] and "Will Team A beat Team B?" in kw["input"]
+    assert out.usage.search_calls == 1 and out.segments[0].citations[0].url == "https://a.test"
+
+
+def test_researchers_are_not_shown_the_market_price():
+    model, responses = make_model()
+    market = MarketInfo(ticker="K", title="T", price_dollars="0.4800")
+    asyncio.run(model.research(market, Angle(name="n", question="q")))
+    assert "0.48" not in responses.calls[0][1]["input"] and "48" not in responses.calls[0][1]["input"]
+
+
+def test_plan_call_uses_structured_output_and_the_planner_model():
+    model, responses = make_model()
+    plan, u = asyncio.run(model.plan(MARKET, max_angles=4))
+    kind, kw = responses.calls[0]
+    assert kind == "parse" and kw["model"] == "gpt-5.4-mini" and kw["text_format"] is Plan and kw["store"] is False
+    assert "tools" not in kw  # the planner does not search
+    assert "up to" not in kw["instructions"] and "4 research angles" in kw["instructions"]
+    assert plan.angles[0].name == "Form" and u.model == "gpt-5.4-mini"
+
+
+def test_api_errors_become_clear_model_errors_without_secrets():
+    class Boom:
+        async def create(self, **kw):
+            raise RuntimeError("rate limit hit")
+
+        async def parse(self, **kw):
+            return SimpleNamespace(output_parsed=None, usage=usage())
+
+    model = OpenAIResearchModel(SETTINGS, client=SimpleNamespace(responses=Boom()))
+    with pytest.raises(ResearchModelError, match="Researcher call failed: RuntimeError: rate limit hit"):
+        asyncio.run(model.research(MARKET, Angle(name="n", question="q")))
+    with pytest.raises(ResearchModelError, match="no usable plan"):
+        asyncio.run(model.plan(MARKET, 3))
+
+
+def test_market_from_kalshi_json_is_tolerant():
+    assert MarketInfo.from_kalshi({"market": {"ticker": "T", "title": "Q?", "last_price_dollars": "0.5"}}).title == "Q?"
+    assert MarketInfo.from_kalshi({"ticker": "T"}).title == "T"  # no title field: falls back to the ticker
+    with pytest.raises(ValueError):
+        MarketInfo.from_kalshi({"market": {}})
