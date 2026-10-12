@@ -61,16 +61,20 @@ def segments_and_searches(response) -> tuple[list[TextSegment], int]:
     return segments, searches
 
 
+def openai_client(settings: Settings) -> AsyncOpenAI:
+    """The one place an OpenAI client is built (with LangSmith tracing when it is switched on)."""
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    if settings.langsmith_tracing:
+        from langsmith.wrappers import wrap_openai
+
+        client = wrap_openai(client)
+    return client
+
+
 class OpenAIResearchModel:
     def __init__(self, settings: Settings, client: AsyncOpenAI | None = None):
         self._s = settings
-        if client is None:
-            client = AsyncOpenAI(api_key=settings.openai_api_key)
-            if settings.langsmith_tracing:
-                from langsmith.wrappers import wrap_openai
-
-                client = wrap_openai(client)
-        self._client = client
+        self._client = client or openai_client(settings)
 
     async def plan(self, game: GameInfo, max_angles: int) -> tuple[Plan, Usage]:
         today = _today()
