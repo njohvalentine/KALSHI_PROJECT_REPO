@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.config import Settings
 from app.models import ClaimCheck, Run, SourcePage
 from app.research.model import ResearchModelError, _today, openai_client, usage_from
-from app.research.prompts import CHECKER_INSTRUCTIONS, checker_input
+from app.research.prompts import CHECKER_INSTRUCTIONS, PAGE_TAG, checker_input
 from app.research.schemas import Usage
 
 log = logging.getLogger("app.research.check")
@@ -86,8 +86,15 @@ def quote_is_on_page(quote: str, page_text: str) -> bool:
     return bool(pieces) and all(len(p) >= MIN_QUOTE_CHARS and p in page for p in pieces)
 
 
-def decide(verdict: ClaimVerdict | None, page_text: str) -> tuple[str, str]:
-    """Turns the judge's answer for one claim into the saved (verdict, reason). Anything unbacked is could_not_check."""
+def _numbers(text: str) -> set[str]:
+    return set(re.findall(r"\d+(?:[.,]\d+)?", text.translate(_QUOTES)))
+
+
+def decide(verdict: ClaimVerdict | None, page_text: str, claim_text: str = "") -> tuple[str, str]:
+    """Turns the judge's answer for one claim into the saved (verdict, reason). Anything unbacked is could_not_check.
+
+    `page_text` must be exactly the text the judge was shown. A `supported` quote must also contain every
+    number in the claim: a real but unrelated quote from the page proves nothing."""
     if verdict is None:
         return "could_not_check", "The judge gave no answer for this claim."
     if verdict.verdict == "could_not_check":
@@ -96,6 +103,8 @@ def decide(verdict: ClaimVerdict | None, page_text: str) -> tuple[str, str]:
         return "could_not_check", f"The judge said {verdict.verdict} without a quote from the page."
     if not quote_is_on_page(verdict.quote, page_text):
         return "could_not_check", f"The judge said {verdict.verdict}, but its quote was not found in the page."
+    if verdict.verdict == "supported" and not _numbers(claim_text) <= _numbers(verdict.quote):
+        return "could_not_check", "The judge said supported, but its quote does not contain all the numbers in the claim."
     return verdict.verdict, f'{verdict.reason} Quote: "{verdict.quote.strip()}"'.strip()
 
 
@@ -174,21 +183,24 @@ async def check_run(engine, run_id: str, judge: ClaimJudge, settings: Settings) 
             save([("could_not_check", why)] * len(todo))
             return
         cut = len(job.text) > settings.check_page_chars
+        shown = PAGE_TAG.sub("[tag removed]", job.text[: settings.check_page_chars])  # exactly what the judge sees
         async with semaphore:
             try:
                 verdicts, usage = await judge.judge(
-                    title, job.url, job.title, job.text[: settings.check_page_chars], cut, [c[2] for c in todo]
+                    title, job.url, job.title, shown, cut, [c[2] for c in todo]
                 )
             except Exception as exc:  # one failed page must not lose the others; logged, and saved as could_not_check
                 log.warning("Checking %s failed: %s", job.url, exc)
                 save([("could_not_check", f"The check could not be run: {type(exc).__name__}")] * len(todo))
                 return
         summary.usages.append(asdict(usage))
-        by_number = {v.claim_number: v for v in verdicts}
-        if len(by_number) != len(todo) or set(by_number) != set(range(1, len(todo) + 1)):
+        numbers = [v.claim_number for v in verdicts]
+        # A claim number answered twice has no trustworthy answer (the last one must not win silently).
+        by_number = {v.claim_number: v for v in verdicts if numbers.count(v.claim_number) == 1}
+        if sorted(numbers) != list(range(1, len(todo) + 1)):
             log.warning("The judge's answer for %s did not match its claims (%d answers for %d claims)",
                         job.url, len(verdicts), len(todo))
-        save([decide(by_number.get(i), job.text) for i in range(1, len(todo) + 1)])
+        save([decide(by_number.get(i), shown, todo[i - 1][2]) for i in range(1, len(todo) + 1)])
 
     await asyncio.gather(*(one_page(job) for job in build_jobs(findings, pages).values()))
 

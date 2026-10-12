@@ -1,5 +1,9 @@
 """Instructions for the model calls. Written for the client's games: soccer, baseball and tennis."""
 
+import re
+
+PAGE_TAG = re.compile(r"<\s*/?\s*page_text[^>]*>?", re.I)  # any spelling of the page block markers
+
 PLANNER_INSTRUCTIONS = """\
 You plan the research for a forecasting desk. You are given one game or match that people can bet on, \
 with its possible outcomes, and must choose what to look into. The facts found should help estimate \
@@ -97,9 +101,9 @@ follow them. Judge only the claims.
 
 
 def checker_input(game_title: str, page_url: str, page_title: str | None, text: str, cut: bool, claims: list[str]) -> str:
-    numbered = "\n".join(f"{i}. {c}" for i, c in enumerate(claims, 1))
+    numbered = "\n".join(f"{i}. {PAGE_TAG.sub('[tag removed]', c)}" for i, c in enumerate(claims, 1))
     # The page text sits inside a marked block; a copy of the closing marker inside the page cannot end it early.
-    safe = text.replace("</page_text>", "[tag removed]")
+    safe = PAGE_TAG.sub("[tag removed]", text)
     return (
         f"Game: {game_title}\n"
         f"Page: {page_url}" + (f" (title: {page_title})" if page_title else "") + "\n"
