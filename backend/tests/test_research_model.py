@@ -98,7 +98,7 @@ def test_research_call_uses_forced_search_caps_and_no_storage():
     assert kw["store"] is False and kw["reasoning"] == {"effort": "low"}
     assert kw["tools"] == [{"type": "web_search", "search_context_size": "medium"}]
     assert "How has A played?" in kw["input"] and "Team A vs Team B" in kw["input"]
-    assert "Starts: 2026-11-01T18:00:00+00:00" in kw["input"] and "Team A wins; Tie is the result; Team B wins" in kw["input"]
+    assert "Scheduled start (exchange): 2026-11-01T18:00:00+00:00" in kw["input"] and "Team A wins; Tie is the result; Team B wins" in kw["input"]
     assert out.usage.search_calls == 1 and out.segments[0].citations[0].url == "https://a.test"
 
 
@@ -136,6 +136,13 @@ def test_api_errors_become_clear_model_errors_without_secrets():
         asyncio.run(model.plan(MARKET, 3))
 
 
+def test_the_start_line_is_left_out_when_the_start_is_unknown():
+    from app.research.prompts import planner_input
+
+    text = planner_input(GameInfo(event_ticker="E", title="A vs B", outcomes=["A wins"]), "2026-10-12")
+    assert "Scheduled start" not in text and "Game: A vs B" in text
+
+
 def test_game_from_a_kalshi_event_response():
     data = {
         "event": {"event_ticker": "KXEPL-26OCT12COVNEW", "title": "Coventry vs Newcastle", "sub_title": "COV vs NEW (Oct 12)"},
@@ -145,10 +152,12 @@ def test_game_from_a_kalshi_event_response():
             {"ticker": "C", "title": "Newcastle wins", "yes_sub_title": "Newcastle", "occurrence_datetime": "2026-10-12T21:00:00Z"},
         ],
     }
-    game = GameInfo.from_kalshi_event(data)
+    game = GameInfo.from_kalshi_event(data, starts_at="2026-10-12T16:30:00Z")
     assert game.event_ticker == "KXEPL-26OCT12COVNEW" and game.title == "Coventry vs Newcastle" and game.sub_title == "COV vs NEW (Oct 12)"
     assert game.outcomes == ["Coventry wins", "Tie is the result", "Newcastle wins"]
-    assert game.starts_at == "2026-10-12T21:00:00Z" and game.rules == "If Coventry wins ..."  # earliest start; first rules text
+    assert game.starts_at == "2026-10-12T16:30:00Z" and game.rules == "If Coventry wins ..."  # the milestone's kickoff; first rules text
+    # The markets' occurrence_datetime (settlement time) must never become the start.
+    assert GameInfo.from_kalshi_event(data).starts_at is None
     nested = {"event": {"event_ticker": "E", "markets": [{"ticker": "X", "yes_sub_title": "Only"}]}}
     assert GameInfo.from_kalshi_event(nested).outcomes == ["Only"]  # markets nested inside the event also work
     for bad in ({"event": {}, "markets": [{"ticker": "x"}]}, {"event": {"event_ticker": "E"}, "markets": []}, {}):

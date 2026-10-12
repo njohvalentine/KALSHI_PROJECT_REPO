@@ -416,6 +416,14 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Still open:** "cited" still does not mean "supported" (Milestone 3); sample is four runs.
 - **Finding that came out of the disagreeing start times (BUG, see D29):** the start time we show and give the agents is wrong.
 
+### D29. Wrong game start times found and fixed: `occurrence_datetime` is settlement time (2026-10-12)
+- **How it surfaced:** in the comparison runs (D28) the researchers wrote that sources gave a different start time from the one we told them (we said 19:30 UTC, the league said 16:30).
+- **Verified cause:** the markets' `occurrence_datetime` equals `expected_expiration_time`: the expected settlement time. Against milestones (`GET /milestones`, needs `limit`): Atalanta vs Venezia milestone 16:30 UTC vs 19:30 (3 h late); Dodgers vs Brewers game 2 milestone 21:00 UTC (5 p.m. ET, as MLB says) vs 03:00 next day (6 h late); Hurkacz vs Davidovich Fokina milestone 11:10 vs 07:00 (4 h early). So the Games page "Starts" column, the "started" hiding and the agents' "Starts:" line were all wrong. (This corrects D26 and D25, which treated `occurrence_datetime` as the game time.)
+- **Fix (BUG item in `TODO.md`, spec `docs/specs/BUG-...-wrong-start-times.md`):** the games list takes kickoff from one bulk milestones fetch (Sports, 48 hours back, all pages, mapped by every listed event ticker, cached 10 minutes, parallel with the series, own worker); no milestone means no start time (shown "–", sorted last), never a guess; a failed fetch gives null starts plus a note on the page and a retry after 10 s; a run start fetches the milestone for its event and gives the agents "Scheduled start (exchange)" only when known. A test also caught that my first version let 5 series run at once with a limit of 4; fixed with a separate worker for start times.
+- **Verified live:** 334 of 334 games have a start time; the three samples match their milestones; first call after a restart 10.6 s on the VPN (series and start times together), repeats 8 ms. 169 backend tests pass.
+- **Also learned (not used yet):** a milestone's `primary_event_tickers` lists every market type for the same game (winner, spread, totals, both-teams-to-score, halves; player props for baseball), which will matter if the client wants more than game winners.
+- **Not verified:** whether every league in the default list has milestones at all times (all 334 games did today); behaviour from the client's own network.
+
 ---
 
 ## 4. Environment

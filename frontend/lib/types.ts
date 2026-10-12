@@ -56,5 +56,6 @@ export type GamesResponse = {
   hidden_started: number;
   sports: string[];
   errors: { series: string; league: string; error: string }[];
+  notes: string[];
   fetched_at: string;
 };

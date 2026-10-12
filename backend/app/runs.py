@@ -61,6 +61,21 @@ class StartBody(BaseModel):
     event_ticker: str = Field(min_length=1, max_length=128)
 
 
+def _kickoff(kalshi, event_ticker: str) -> str | None:
+    """The game's real start time from Kalshi's milestones, or None. The market's own occurrence time is
+    the expected settlement time, so it is never a substitute: unknown is better than wrong."""
+    try:
+        data = kalshi.list_milestones(limit=5, related_event_ticker=event_ticker)
+    except KalshiError as exc:
+        log.warning("No start time for %s: %s", event_ticker, exc)
+        return None
+    for m in data.get("milestones", []):
+        tickers = (m.get("primary_event_tickers") or []) + (m.get("related_event_tickers") or [])
+        if event_ticker in tickers and m.get("start_date"):
+            return m["start_date"]
+    return None
+
+
 def _insert_run(engine, run_id: str, game: GameInfo, user_id: int) -> None:
     from sqlalchemy.orm import Session
 
@@ -106,7 +121,8 @@ async def start_run(body: StartBody, request: Request, user: Annotated[User, Dep
         except KalshiError as exc:
             raise HTTPException(status_code=502, detail=f"Kalshi request failed: {exc}") from exc
         try:
-            game = GameInfo.from_kalshi_event(raw)  # the server's copy of the game, not the browser's
+            starts_at = await run_in_threadpool(_kickoff, state.kalshi, body.event_ticker)
+            game = GameInfo.from_kalshi_event(raw, starts_at=starts_at)  # the server's copy of the game
         except ValueError as exc:
             raise HTTPException(status_code=502, detail="Kalshi returned game data we cannot use") from exc
         run_id = uuid.uuid4().hex

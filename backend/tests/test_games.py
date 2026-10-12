@@ -30,11 +30,31 @@ def event(ticker, title, outcomes, **kw):
 
 
 class FakeKalshi:
-    def __init__(self, by_series, fail=(), delay=0.0, pages=None):
+    """Stands in for Kalshi. Unless `milestones` is given, kickoff times are derived from the fixtures'
+    occurrence_datetime (a test shortcut; the real service never does that)."""
+
+    def __init__(self, by_series, fail=(), delay=0.0, pages=None, milestones=None, milestone_fail=False, milestone_pages=None):
         self.by_series, self.fail, self.delay, self.pages = by_series, set(fail), delay, pages or {}
+        self.milestones, self.milestone_fail, self.milestone_pages = milestones, milestone_fail, milestone_pages
+        self.milestone_calls = []
         self.calls = []
         self.running = self.max_running = 0
         self._lock = threading.Lock()
+
+    def list_milestones(self, *, limit, category=None, minimum_start_date=None, related_event_ticker=None, cursor=None):
+        with self._lock:
+            self.milestone_calls.append(dict(limit=limit, category=category, minimum_start_date=minimum_start_date, cursor=cursor))
+        if self.milestone_fail:
+            raise RuntimeError("Kalshi request failed: milestones boom")
+        if self.milestone_pages is not None:
+            index = 0 if cursor is None else int(cursor)
+            return {"milestones": self.milestone_pages[index], "cursor": str(index + 1) if index + 1 < len(self.milestone_pages) else ""}
+        starts = self.milestones
+        if starts is None:
+            events = [e for evs in self.by_series.values() for e in evs] + [e for pgs in self.pages.values() for pg in pgs for e in pg]
+            starts = {e["event_ticker"]: min(m["occurrence_datetime"] for m in e["markets"] if m.get("occurrence_datetime"))
+                      for e in events if any(m.get("occurrence_datetime") for m in e.get("markets", []))}
+        return {"milestones": [{"start_date": v, "primary_event_tickers": [k], "related_event_tickers": [k]} for k, v in starts.items()], "cursor": ""}
 
     def list_events(self, *, series_ticker, status=None, limit=None, with_nested_markets=None, cursor=None):
         with self._lock:
@@ -67,14 +87,23 @@ MLB = [event("KXMLB-26OCT161800TBCLE", "Game 1: Tampa Bay vs Cleveland", [("Tamp
 
 
 def test_a_game_is_one_entry_with_all_its_outcomes_prices_and_times():
-    game = build_game(EPL[0], SeriesEntry("Soccer", "KXEPL", "Premier League"))
+    game = build_game(EPL[0], SeriesEntry("Soccer", "KXEPL", "Premier League"), {"KXEPL-26OCT12COVNEW": "2026-10-12T19:00:00Z"})
     assert game["title"] == "Coventry vs Newcastle" and game["sport"] == "Soccer" and game["league"] == "Premier League"
-    assert game["starts_at"] == "2026-10-12T22:00:00+00:00"  # the game time, not the later close time
+    assert game["starts_at"] == "2026-10-12T19:00:00+00:00"  # the kickoff from the milestone, not the later close time
     assert game["closes_at"] == "2026-10-14T19:00:00+00:00"
     assert [(o["label"], o["bid"], o["ask"]) for o in game["outcomes"]] == [
         ("Coventry", "0.2900", "0.3000"), ("Newcastle", "0.4300", "0.4400"), ("Tie", "0.2600", "0.2700")]
     assert game["outcomes"][0]["market_ticker"] == "KXEPL-26OCT12COVNEW-O0"
     assert game["outcomes"][0]["last"] == "0.0000"  # kept as sent; the page does not use it
+
+
+def test_the_markets_occurrence_time_is_never_used_as_the_start():
+    # In the fixtures occurrence_datetime is 22:00; Kalshi's milestone says kickoff is 19:00. Occurrence is the
+    # expected settlement time, so without a milestone the start is unknown (None), not 22:00.
+    entry = SeriesEntry("Soccer", "KXEPL", "PL")
+    assert build_game(EPL[0], entry, {})["starts_at"] is None and build_game(EPL[0], entry)["starts_at"] is None
+    s = service(FakeKalshi({"KXEPL": EPL}, milestones={"KXEPL-26OCT12COVNEW": "2026-10-12T19:00:00Z"}))
+    assert s.query(sport="Soccer", include_started=True)["games"][0]["starts_at"] == "2026-10-12T19:00:00+00:00"
 
 
 def test_events_without_markets_are_skipped_and_missing_times_are_none():
@@ -225,3 +254,63 @@ def test_endpoint_needs_login_and_serves_filtered_games(make_client):
         assert client.get("/api/games?include_started=true").status_code == 200
         assert client.get("/api/games?limit=0").status_code == 422
         assert client.get("/api/games?limit=501").status_code == 422
+
+
+# --- start times from milestones ----------------------------------------------
+
+def test_milestones_are_fetched_for_sports_from_48_hours_back_across_all_pages_and_mapped_by_every_ticker():
+    pages = [
+        [{"start_date": "2026-10-12T19:00:00Z", "primary_event_tickers": ["KXEPL-26OCT12COVNEW"], "related_event_tickers": ["KXEPL-26OCT12COVNEW", "KXEPLTOTAL-26OCT12COVNEW"]}],
+        [{"start_date": "2026-10-13T11:10:00Z", "primary_event_tickers": ["KXATP-26OCT13HURDAV"]},
+         {"start_date": "2026-10-12T18:00:00Z", "related_event_tickers": ["KXEPL-26OCT12COVNEW"]}],  # same ticker again: earliest wins
+    ]
+    k = FakeKalshi({"KXEPL": EPL, "KXATP": ATP}, milestone_pages=pages)
+    result = service(k).query(include_started=True)
+    assert len(k.milestone_calls) == 2 and [c["cursor"] for c in k.milestone_calls] == [None, "1"]
+    first = k.milestone_calls[0]
+    assert first["category"] == "Sports" and first["limit"] == 500
+    assert first["minimum_start_date"] == "2026-10-10T12:00:00Z"  # now (2026-10-12 12:00) minus 48 hours
+    starts = {g["event_ticker"]: g["starts_at"] for g in result["games"]}
+    assert starts["KXEPL-26OCT12COVNEW"] == "2026-10-12T18:00:00+00:00"
+    assert starts["KXATP-26OCT13HURDAV"] == "2026-10-13T11:10:00+00:00"
+
+
+def test_milestones_are_cached_longer_than_games():
+    now = [0.0]
+    k = FakeKalshi({"KXEPL": EPL})
+    s = service(k, clock=lambda: now[0], GAMES_CACHE_SECONDS="60")
+    s.get()
+    now[0] = 61.0; s.get()   # the games expired, the start times (10 minutes) did not
+    assert len(k.calls) == 6 and len(k.milestone_calls) == 1
+    now[0] = 601.0; s.get()
+    assert len(k.milestone_calls) == 2
+
+
+def test_if_start_times_fail_games_still_show_without_a_start_and_with_a_note_and_a_quick_retry():
+    now = [0.0]
+    k = FakeKalshi({"KXEPL": EPL, "KXATP": ATP}, milestone_fail=True)
+    s = service(k, clock=lambda: now[0])
+    result = s.query(include_started=True)
+    assert [g["starts_at"] for g in result["games"]] == [None, None]  # unknown, never a wrong time
+    assert len(result["notes"]) == 1 and "Start times are unavailable" in result["notes"][0] and result["errors"] == []
+    now[0] = 11.0; s.get()
+    assert len(k.milestone_calls) == 2  # retried after 10 s, not after 10 minutes
+
+
+def test_a_game_with_no_milestone_has_no_start_and_sorts_last():
+    k = FakeKalshi({"KXEPL": EPL, "KXATP": ATP}, milestones={"KXATP-26OCT13HURDAV": "2026-10-13T11:10:00Z"})
+    result = service(k).query(include_started=True)
+    assert [g["title"] for g in result["games"]] == ["Hurkacz vs Davidovich", "Coventry vs Newcastle"]
+    assert result["games"][1]["starts_at"] is None and result["notes"] == []
+
+
+def test_milestones_load_in_parallel_with_the_series():
+    k = FakeKalshi({"KXEPL": EPL}, delay=0.15)
+    original = k.list_milestones
+    def slow(**kw):
+        time.sleep(0.15)
+        return original(**kw)
+    k.list_milestones = slow
+    start = time.time()
+    service(k).get()
+    assert time.time() - start < 0.15 * 2 + 0.2  # not 0.15 (milestones) + 0.15 x (series in turn)

@@ -76,6 +76,13 @@ async function GamesList({ params }: { params: Params }) {
         </Alert>
       ) : null}
 
+      {data.notes.length > 0 ? (
+        <Alert className="mb-4">
+          <AlertTitle>Start times are missing</AlertTitle>
+          <AlertDescription>{data.notes.join(" ")}</AlertDescription>
+        </Alert>
+      ) : null}
+
       {data.games.length === 0 ? (
         <p className="text-muted-foreground">
           {params.q || params.sport ? "No upcoming games match." : "No upcoming games were found."}

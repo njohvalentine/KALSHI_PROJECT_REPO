@@ -131,6 +131,22 @@ class KalshiClient:
         """Returns {"event": ..., "markets": [...]}. Without with_nested_markets Kalshi puts the markets at the top level."""
         return self._get(f"/events/{quote(event_ticker, safe='')}")
 
+    # Milestones carry the real start time of a game (a market's occurrence time is the expected
+    # settlement time instead). Kalshi requires `limit`.
+    def list_milestones(
+        self,
+        *,
+        limit: int,
+        category: str | None = None,
+        minimum_start_date: str | None = None,
+        related_event_ticker: str | None = None,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        return self._get("/milestones", dict(
+            limit=limit, category=category, minimum_start_date=minimum_start_date,
+            related_event_ticker=related_event_ticker, cursor=cursor,
+        ))
+
     # Markets that settled before Kalshi's "historical cutoff" are only served here.
     def get_historical_cutoff(self) -> dict[str, Any]:
         return self._get("/historical/cutoff")

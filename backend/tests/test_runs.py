@@ -15,8 +15,15 @@ pytestmark = needs_db
 H = {"X-Requested-With": "t"}
 
 
-def kalshi_mock(missing=(), broken=(), no_ticker=()):
+def kalshi_mock(missing=(), broken=(), no_ticker=(), milestone_broken=False, milestone_calls=None):
     def handler(request):
+        if request.url.path.endswith("/milestones"):
+            if milestone_calls is not None:
+                milestone_calls.append(dict(request.url.params))
+            if milestone_broken:
+                return httpx2.Response(500)
+            ev = request.url.params["related_event_ticker"]
+            return httpx2.Response(200, json={"milestones": [{"start_date": "2026-10-20T16:30:00Z", "primary_event_tickers": [ev], "related_event_tickers": [ev]}]})
         ticker = request.url.path.rsplit("/", 1)[-1]
         if ticker in missing:
             return httpx2.Response(404)
@@ -69,7 +76,7 @@ def test_a_run_goes_from_start_to_a_stored_result_with_cost_and_sources(make_cli
         assert [a["name"] for a in run["plan"]["angles"]] == ["Form", "Injuries"]
         game, _ = model.plan_calls[0]  # what the lead agent was given: the server's copy of the game
         assert (game.title, game.outcomes, game.starts_at, game.rules) == (
-            "Game KX-1", ["Home wins", "Away wins"], "2026-10-20T18:00:00Z", "If Home wins ...")
+            "Game KX-1", ["Home wins", "Away wins"], "2026-10-20T16:30:00Z", "If Home wins ...")  # kickoff from the milestone, not the 18:00 occurrence time
         assert [f["angle"] for f in run["result"]["findings"]] == ["Form", "Injuries"]
         assert run["sourced_claims"] == 4
         planner, researcher = Usage("gpt-5.4-mini", 1000, 0, 200), Usage("gpt-5.4", 5000, 1000, 800, 2)
@@ -221,5 +228,24 @@ def test_reading_and_listing_runs(make_client):
         assert client.get("/api/runs?limit=0").status_code == 422
         latest = {r["event_ticker"]: r for r in client.get("/api/runs/latest").json()["runs"]}
         assert latest["KX-1"]["id"] == ids[0] and latest["KX-2"]["status"] == "done"
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_the_start_time_comes_from_a_milestone_for_this_event_and_a_failure_means_no_start_not_a_wrong_one(make_client):
+    calls = []
+    model = FakeModel()
+    client = signed_in(make_client, model, kalshi_mock(milestone_calls=calls))
+    try:
+        wait_done(client, start(client).json()["id"])
+        assert calls == [{"limit": "5", "related_event_ticker": "KX-1"}]
+    finally:
+        client.__exit__(None, None, None)
+    broken_model = FakeModel()
+    client = signed_in(make_client, broken_model, kalshi_mock(milestone_broken=True))
+    try:
+        run = wait_done(client, start(client, "KX-2").json()["id"])
+        assert run["status"] == "done"  # the run still goes ahead
+        assert broken_model.plan_calls[0][0].starts_at is None  # and the agents are not given a wrong time
     finally:
         client.__exit__(None, None, None)

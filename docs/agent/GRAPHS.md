@@ -85,7 +85,7 @@ The *append* rule is what lets four researchers write to the same fields at the 
 | **Kind** | LLM agent, one call |
 | **Model** | `PLANNER_MODEL` (default `gpt-5.4-mini`), no web search |
 | **Runs** | first, alone (sequential) |
-| **Input** | game title, detail line, start time, the list of outcomes (for example "Newcastle wins; Tie is the result; Coventry wins"), rules text, today's date. **No prices.** |
+| **Input** | game title, detail line, scheduled start (from the milestone, left out when unknown), the list of outcomes (for example "Newcastle wins; Tie is the result; Coventry wins"), rules text, today's date. **No prices.** |
 | **Output** | a structured list of angles; each has a short `name` and a specific `question` |
 | **Use case** | decide what is worth looking into for *this* game, so research is focused instead of generic |
 | **How it is used** | its angles decide how many researchers start (one per angle) and what each is asked |
@@ -209,11 +209,14 @@ Kalshi offers no "soccer, baseball and tennis games" filter and fetching everyth
 | Step | Relationship | Notes |
 |---|---|---|
 | fetching the series | **parallel**, at most 6 at a time | a first refresh of the default list took about 5 s on the VPN; later calls come from memory |
+| fetching start times | **parallel** with the series, on its own worker | about 10 s together with the series on the VPN the first time; then cached for 10 minutes |
 | two page loads at the same moment | **sequential on purpose** (one lock) | the second waits for the first refresh instead of starting another |
 | one league failing | the others still show | the failed leagues are listed on the page; a result with a failure is kept only 10 s so a retry comes soon |
 | filtering, hiding, sorting | sequential, in memory | cheap |
 
-What a game entry holds: the event ticker, title ("Coventry vs Newcastle"), detail line, sport, league, start time (the earliest `occurrence_datetime`; Kalshi's `close_time` is days later and is not shown as the start), and one outcome per Kalshi market with its label ("Newcastle"), the price one can sell at (`bid`) and buy at (`ask`), and the last trade (not shown: it is often zero for markets that do have bids and asks).
+What a game entry holds: the event ticker, title ("Coventry vs Newcastle"), detail line, sport, league, start time, and one outcome per Kalshi market with its label ("Newcastle"), the price one can sell at (`bid`) and buy at (`ask`), and the last trade (not shown: it is often zero for markets that do have bids and asks).
+
+**Start times come from Kalshi's milestones, not from the markets.** A market's `occurrence_datetime` is the expected settlement time (about 3 hours after a soccer kickoff, 6 hours after the sampled baseball start), so it is never used. One bulk call for all sports milestones from 48 hours back (about 1,500 of them, three pages) is mapped by every event ticker the milestones list, runs in parallel with the series fetches, and is kept for 10 minutes (a failure is retried after 10 s and the page says start times are unavailable; a game with no milestone shows no start, never a guessed one). When a run starts, one milestones call for that game supplies the kickoff given to the agents.
 
 Games that already started are hidden by default, because Kalshi keeps finished or running games open until they settle and they would sit above the upcoming ones; the page counts them and offers "Show started games".
 

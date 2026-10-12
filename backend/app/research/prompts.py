@@ -63,7 +63,7 @@ def _game_text(game) -> str:
     if game.sub_title:
         lines.append(f"Detail: {game.sub_title}")
     if game.starts_at:
-        lines.append(f"Starts: {game.starts_at}")
+        lines.append(f"Scheduled start (exchange): {game.starts_at}")
     if game.outcomes:
         lines.append("Outcomes people can bet on: " + "; ".join(game.outcomes))
     if game.rules:

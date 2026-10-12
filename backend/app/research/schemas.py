@@ -18,19 +18,21 @@ class GameInfo:
     # Prices are deliberately not part of what the agents are shown (avoids anchoring on the market).
 
     @classmethod
-    def from_kalshi_event(cls, data: dict) -> "GameInfo":
-        """Builds from Kalshi's GET /events/{ticker} response: {"event": {...}, "markets": [...]}."""
+    def from_kalshi_event(cls, data: dict, starts_at: str | None = None) -> "GameInfo":
+        """Builds from Kalshi's GET /events/{ticker} response: {"event": {...}, "markets": [...]}.
+
+        `starts_at` is the real kickoff from Kalshi's milestones. The markets' occurrence_datetime is
+        NOT used: it is the expected settlement time (hours after kickoff), so it would be wrong."""
         event = data.get("event") or {}
         ticker = event.get("event_ticker")
         markets = data.get("markets") or event.get("markets") or []
         if not ticker or not markets:
             raise ValueError("Kalshi event data has no ticker or no outcome markets")
-        starts = sorted(m["occurrence_datetime"] for m in markets if m.get("occurrence_datetime"))
         return cls(
             event_ticker=ticker,
             title=event.get("title") or ticker,
             sub_title=event.get("sub_title") or None,
-            starts_at=starts[0] if starts else None,
+            starts_at=starts_at,
             outcomes=[m.get("title") or m.get("yes_sub_title") or m["ticker"] for m in markets],
             rules=next((m["rules_primary"] for m in markets if m.get("rules_primary")), None),
         )
