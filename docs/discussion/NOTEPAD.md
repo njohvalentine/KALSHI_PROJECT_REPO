@@ -389,6 +389,16 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Left over from before and still present:** `GET /api/markets` and `/api/markets/{ticker}` (single-market endpoints, now unused by the web app; protected by sign-in; remove when convenient); the Prediction page still lists runs by game title; the run result page says "game".
 - **Next:** the user runs one real game with the OpenAI key and reports cost, time and results; the user decides whether to merge the branch; the client confirms leagues and contract types; then the Milestone 3 plan (D23) needs approval, and it should now be read per game (one probability per outcome of the game).
 
+### D27. First real research run (2026-10-12, the user chose "run one real research"; real OpenAI key, live Kalshi, VPN on)
+- **Run:** Atalanta vs Venezia (Serie A, same day), run `3833f5bb...` via `POST /api/runs` with the event ticker. **Result: done, no errors, about 37 s of run time (46 s from the press to done), cost $0.3216, 56,109 input and 5,398 output tokens, 11 web searches, 4 angles, 22 claims all with citations, 0 citations ignored as out of range.** The run record is still in the local database.
+- **Now confirmed on the live OpenAI service (were unverified):** `store=false`, forced search (`tool_choice=required`), `max_tool_calls` (11 searches across 4 researchers, none above 3 each), reasoning effort `low`, the web search tool, structured planner output, and citation positions that line up with the text. Cost is far below my estimate (about $1.50 per market) and the run is far faster than expected (estimated minutes). Cost and time per game are therefore small; there is room to raise `MAX_SEARCHES_PER_RESEARCHER` if the research benefits (not yet tried).
+- **Research quality, honest reading (a first sample, one game):**
+  - Useful: official club and league pages for squad lists, fixtures and previews; head-to-head with dates and scores; the planner chose four sensible angles for a soccer game.
+  - Weak: low-value padding lines (for example "the league page showed no data"); **kickoff times disagree between sources (16:30, 18:30 and Kalshi's 19:30 UTC)**; the only betting odds found came from a page "crawled two weeks ago", so there are **no current odds**; some derived claims (days of rest) are the model's own arithmetic cited to pages that do not state them; the fourth angle mixes venue, rest and odds. "Cited" is not "supported", which is what the Milestone 3 source check is for.
+  - Presentation bug: 16 of 22 claims contain literal `**` bold markers, shown as asterisks on the result page (logged as BUG-20261012-1449). Quality issues logged as ISS-20261012-1450. Neither is fixed yet (the user chose only the real run).
+- **Other timings seen:** `GET /events/{ticker}` took 2.8 s on the VPN; a games-list refresh took 4.8 s for 15 series, 333 games, no failures.
+- **Next options for the user:** fix the asterisk bug and tighten the researcher instructions (plain text, only informative facts, one topic per angle, state the date of odds, no derived arithmetic); try a few more games (soccer, baseball, tennis) to see how consistent the quality is; then plan Milestone 3 per game (D23, D26).
+
 ---
 
 ## 4. Environment
