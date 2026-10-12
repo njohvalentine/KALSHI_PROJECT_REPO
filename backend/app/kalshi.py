@@ -34,12 +34,13 @@ class KalshiClient:
         base_url: str,
         *,
         client: httpx2.Client | None = None,
-        max_attempts: int = 4,
+        max_attempts: int = 3,
         backoff_seconds: float = 0.5,
         sleep: Callable[[float], None] = time.sleep,
     ):
         self.base_url = base_url.rstrip("/")
-        self._client = client or httpx2.Client(timeout=15.0)
+        # Short limits on purpose: a page waits on this. A healthy Kalshi answers in well under a second.
+        self._client = client or httpx2.Client(timeout=httpx2.Timeout(10.0, connect=3.0))
         self._max_attempts = max_attempts
         self._backoff = backoff_seconds
         self._sleep = sleep

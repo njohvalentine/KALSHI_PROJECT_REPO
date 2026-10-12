@@ -127,3 +127,12 @@ def test_endpoints_need_login_and_map_errors(make_client):
         assert client.get("/api/markets/MISSING").status_code == 404
         assert client.get("/api/markets/BROKEN").status_code == 502
         assert client.get("/api/markets?limit=0").status_code == 422
+
+
+def test_default_client_fails_fast_when_kalshi_is_unreachable():
+    c = KalshiClient(BASE)
+    try:
+        assert c._client.timeout.connect == 3.0 and c._client.timeout.read == 10.0
+        assert c._max_attempts == 3
+    finally:
+        c.close()
