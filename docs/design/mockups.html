@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forecast desk mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Design tokens: every page reads from these. Change here, changes everywhere. */
+  :root {
+    --ink: #13212e;
+    --muted: #566676;
+    --line: #e2e8ee;
+    --page: #f5f7f9;
+    --card: #ffffff;
+    --ours: #2446d6;
+    --ours-soft: #e6ebfc;
+    --market: #6f7c89;
+    --good: #0b7a4f;
+    --good-soft: #e2f4ec;
+    --warn: #9a4a08;
+    --warn-soft: #fcefdc;
+    --bad: #b3261e;
+
+    --content-width: 1120px;   /* one width for every page */
+    --gutter: 24px;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --font: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  td.num, .stat .value, .score, dl.facts dd, .progress + p, .bar-row .score { font-variant-numeric: tabular-nums; }
+  a { color: var(--ours); text-underline-offset: 3px; }
+  :focus-visible { outline: 3px solid var(--ours); outline-offset: 2px; border-radius: 4px; }
+
+  /* Shared width: header, banner and every page use .wrap */
+  .wrap { max-width: var(--content-width); margin: 0 auto; padding: 0 var(--gutter); }
+
+  header.top { background: var(--card); border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; align-items: center; gap: 32px; min-height: 64px; flex-wrap: wrap; }
+  .brand { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+  nav { display: flex; gap: 4px; flex-wrap: wrap; }
+  nav a {
+    color: var(--muted); text-decoration: none; font-weight: 500;
+    padding: 8px 12px; border-radius: var(--radius-sm);
+  }
+  nav a:hover { background: var(--page); color: var(--ink); }
+  nav a[aria-current="page"] { color: var(--ink); background: var(--ours-soft); }
+
+  .mode {
+    background: var(--warn-soft); color: var(--warn);
+    border-bottom: 1px solid #f1d9b6; font-size: 14px;
+  }
+  .mode .wrap { padding-top: 8px; padding-bottom: 8px; }
+
+  main { padding: 40px 0 72px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .page-head { margin-bottom: 28px; max-width: 70ch; }
+  h1 { font-size: 30px; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 8px; font-weight: 700; }
+  h2 { font-size: 20px; line-height: 1.3; letter-spacing: -0.01em; margin: 40px 0 12px; font-weight: 650; }
+  p { margin: 0 0 12px; }
+  .lede { color: var(--muted); margin: 0; }
+  .small { font-size: 14px; color: var(--muted); }
+
+  /* Panels: used where content needs a surface, not around everything */
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+  .panel.pad { padding: 24px; }
+
+  /* The one memorable element: the gap track.
+     Grey marker = Kalshi's price. Blue marker = our estimate. Shaded band = the disagreement. */
+  .track { position: relative; height: 28px; min-width: 160px; }
+  .track::before { content: ""; position: absolute; left: 0; right: 0; top: 13px; height: 2px; background: var(--line); border-radius: 2px; }
+  .track .band { position: absolute; top: 9px; height: 10px; background: var(--ours-soft); border-radius: 5px; left: calc(var(--lo) * 1%); width: calc(var(--w) * 1%); }
+  .track .pin { position: absolute; top: 4px; width: 4px; height: 20px; margin-left: -2px; border-radius: 2px; }
+  .track .pin.market { left: calc(var(--m) * 1%); background: var(--market); }
+  .track .pin.ours { left: calc(var(--o) * 1%); background: var(--ours); }
+  .track.big { height: 56px; }
+  .track.big::before { top: 27px; height: 3px; }
+  .track.big .band { top: 19px; height: 20px; border-radius: 10px; }
+  .track.big .pin { top: 6px; height: 46px; width: 6px; margin-left: -3px; border-radius: 3px; }
+  .scale { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .key { display: flex; gap: 20px; flex-wrap: wrap; font-size: 14px; color: var(--muted); margin-top: 12px; }
+  .key i { display: inline-block; width: 4px; height: 14px; border-radius: 2px; margin-right: 8px; vertical-align: -2px; }
+  .key i.m { background: var(--market); } .key i.o { background: var(--ours); }
+  .key i.g { width: 18px; height: 10px; background: var(--ours-soft); border-radius: 5px; vertical-align: -1px; }
+
+  /* Tables */
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: 14px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; }
+  td .q { font-weight: 550; display: block; max-width: 46ch; }
+  td .sub { font-size: 14px; color: var(--muted); }
+
+  /* Chips and buttons */
+  .chip { display: inline-block; font-size: 13px; font-weight: 550; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+  .chip.good { background: var(--good-soft); color: var(--good); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.plain { background: var(--page); color: var(--muted); border: 1px solid var(--line); }
+  .btn {
+    font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block;
+    padding: 10px 18px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  }
+  .btn:hover { background: var(--page); }
+  .btn.primary { background: var(--ours); border-color: var(--ours); color: #fff; }
+  .btn.primary:hover { background: #1b39b3; }
+  .btn.sm { padding: 6px 12px; font-size: 14px; }
+  .btn.danger { color: var(--bad); }
+
+  /* Two-column layout used on detail and approval pages */
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; align-items: start; }
+
+  .stat-row { display: flex; gap: 40px; flex-wrap: wrap; margin-bottom: 20px; }
+  .stat .label { font-size: 14px; color: var(--muted); }
+  .stat .value { font-size: 38px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; }
+  .stat .value.ours { color: var(--ours); }
+  .stat .value.market { color: var(--market); }
+  .stat .note { font-size: 14px; color: var(--muted); }
+
+  /* Evidence list */
+  .evidence { list-style: none; margin: 0; padding: 0; }
+  .evidence li { padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .evidence li:last-child { border-bottom: 0; }
+  .evidence .claim { font-weight: 550; margin-bottom: 4px; }
+  .evidence .meta { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+
+  .forecasters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .forecasters .f { border-left: 3px solid var(--ours-soft); padding-left: 12px; }
+  .forecasters .f b { font-size: 22px; display: block; }
+
+  /* Side rail facts */
+  dl.facts { margin: 0; }
+  dl.facts div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  dl.facts div:last-child { border-bottom: 0; }
+  dl.facts dt { color: var(--muted); }
+  dl.facts dd { margin: 0; font-weight: 550; text-align: right; }
+
+  /* Approval */
+  .checks { list-style: none; margin: 0; padding: 0; }
+  .checks li { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .checks li:last-child { border-bottom: 0; }
+  .checks .tick { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--good-soft); color: var(--good); display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+  .checks .what { font-weight: 550; }
+  .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+
+  /* Results bars */
+  .bars { display: grid; gap: 14px; }
+  .bar-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 64px; gap: 16px; align-items: center; }
+  .bar { height: 14px; background: var(--page); border-radius: 7px; border: 1px solid var(--line); overflow: hidden; }
+  .bar span { display: block; height: 100%; border-radius: 7px; }
+  .bar-row .score { text-align: right; font-weight: 650; }
+  .progress { height: 10px; background: var(--page); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; margin: 8px 0; }
+  .progress span { display: block; height: 100%; background: var(--ours); }
+
+  footer.note { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+  @media (max-width: 860px) {
+    .split { grid-template-columns: minmax(0, 1fr); }
+    .forecasters { grid-template-columns: minmax(0, 1fr); }
+    .bar-row { grid-template-columns: 1fr 64px; }
+    .bar-row .bar { grid-column: 1 / -1; grid-row: 2; }
+    h1 { font-size: 26px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#markets">Forecast desk</a>
+    <nav aria-label="Main">
+      <a href="#markets">Markets</a>
+      <a href="#prediction">Prediction</a>
+      <a href="#approval">Approval</a>
+      <a href="#results">Results</a>
+    </nav>
+  </div>
+</header>
+<div class="mode"><div class="wrap">Paper trading: predictions are recorded and scored. No orders are sent to Kalshi.</div></div>
+
+<main>
+<div class="wrap">
+
+  <!-- 1. MARKETS -->
+  <section class="page" id="page-markets" aria-labelledby="h-markets">
+    <div class="page-head">
+      <h1 id="h-markets">Markets</h1>
+      <p class="lede">Open Kalshi markets and how our estimate compares with the market price. Pick one to see the research behind it.</p>
+    </div>
+
+    <div class="panel table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Question</th>
+            <th>Market vs. our estimate</th>
+            <th class="num">Market</th>
+            <th class="num">Ours</th>
+            <th class="num">Gap</th>
+            <th><span class="sr">Action</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="q">Will the Fed cut rates at its December meeting?</span><span class="sub">Closes Dec 10, Economics</span></td>
+            <td><div class="track sm" style="--m:48;--o:62;--lo:48;--w:14"><span class="band"></span><span class="pin market"></span><span class="pin ours"></span></div></td>
+            <td class="num">48%</td><td class="num">62%</td><td class="num"><span class="chip good">+14 pts</span></td>
+            <td><a class="btn sm" href="#prediction">View</a></td>
+          </tr>
+          <tr>
+            <td><span class="q">Will US CPI for November come in above 3.0%?</span><span class="sub">Closes Dec 11, Economics</span></td>
+            <td><div class="track sm" style="--m:35;--o:38;--lo:35;--w:3"><span class="band"></span><span class="pin market"></span><span class="pin ours"></span></div></td>
+            <td class="num">35%</td><td class="num">38%</td><td class="num"><span class="chip plain">+3 pts</span></td>
+            <td><a class="btn sm" href="#prediction">View</a></td>
+          </tr>
+          <tr>
+            <td><span class="q">Will the unemployment rate be 4.5% or higher in November?</span><span class="sub">Closes Dec 5, Economics</span></td>
+            <td><div class="track sm" style="--m:41;--o:29;--lo:29;--w:12"><span class="band"></span><span class="pin market"></span><span class="pin ours"></span></div></td>
+            <td class="num">41%</td><td class="num">29%</td><td class="num"><span class="chip warn">&minus;12 pts</span></td>
+            <td><a class="btn sm" href="#prediction">View</a></td>
+          </tr>
+          <tr>
+            <td><span class="q">Will a named storm make US landfall before Dec 1?</span><span class="sub">Closes Nov 30, Weather</span></td>
+            <td><span class="small">No estimate yet</span></td>
+            <td class="num">9%</td><td class="num">&ndash;</td><td class="num">&ndash;</td>
+            <td><button class="btn sm primary" type="button">Analyze</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="key">
+      <span><i class="m"></i>Kalshi price</span>
+      <span><i class="o"></i>Our estimate</span>
+      <span><i class="g"></i>Disagreement</span>
+    </div>
+    <footer class="note small">Sample data for layout only.</footer>
+  </section>
+
+  <!-- 2. PREDICTION -->
+  <section class="page" id="page-prediction" aria-labelledby="h-prediction">
+    <div class="page-head">
+      <p class="small"><a href="#markets">Markets</a> / Fed decision</p>
+      <h1 id="h-prediction">Will the Fed cut rates at its December meeting?</h1>
+      <p class="lede">Closes Dec 10. Resolves yes if the target rate is lowered at that meeting.</p>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="stat-row">
+          <div class="stat"><div class="label">Our estimate</div><div class="value ours">62%</div><div class="note">3 forecasters, range 55–68%</div></div>
+          <div class="stat"><div class="label">Kalshi price</div><div class="value market">48%</div><div class="note">as of 14:05 today</div></div>
+          <div class="stat"><div class="label">Gap</div><div class="value">+14 pts</div><div class="note">we think yes is underpriced</div></div>
+        </div>
+        <div class="track big" style="--m:48;--o:62;--lo:48;--w:14"><span class="band"></span><span class="pin market"></span><span class="pin ours"></span></div>
+        <div class="scale"><span>0%</span><span>50%</span><span>100%</span></div>
+
+        <h2>Why we think this</h2>
+        <p>Recent labor data softened and two Fed officials signaled openness to a cut. Futures markets price a cut slightly higher than Kalshi does. The main risk is a hot inflation report before the meeting.</p>
+
+        <h2>Forecaster estimates</h2>
+        <div class="forecasters">
+          <div class="f"><b>68%</b><span class="small">Weighted the labor data most</span></div>
+          <div class="f"><b>62%</b><span class="small">Anchored on Fed speeches</span></div>
+          <div class="f"><b>55%</b><span class="small">Worried about the inflation report</span></div>
+        </div>
+
+        <h2>Evidence</h2>
+        <ul class="evidence">
+          <li>
+            <div class="claim">Payrolls grew by 90,000 in October, below the 150,000 forecast.</div>
+            <div class="meta"><span class="chip good">Source checked</span><a href="#prediction">bls.gov, Employment Situation</a><span>retrieved Oct 9</span></div>
+          </li>
+          <li>
+            <div class="claim">A Fed governor said further cuts are on the table if labor conditions keep cooling.</div>
+            <div class="meta"><span class="chip good">Source checked</span><a href="#prediction">federalreserve.gov, speech transcript</a><span>retrieved Oct 9</span></div>
+          </li>
+          <li>
+            <div class="claim">Core inflation was unchanged at 2.9% in September.</div>
+            <div class="meta"><span class="chip good">Source checked</span><a href="#prediction">bls.gov, CPI release</a><span>retrieved Oct 9</span></div>
+          </li>
+          <li>
+            <div class="claim">A claim about a planned Fed announcement was removed: no source supported it.</div>
+            <div class="meta"><span class="chip warn">Removed by citation check</span></div>
+          </li>
+        </ul>
+      </div>
+
+      <aside class="panel pad" aria-label="Run details">
+        <dl class="facts">
+          <div><dt>Run finished</dt><dd>Oct 9, 14:09</dd></div>
+          <div><dt>Researchers</dt><dd>4</dd></div>
+          <div><dt>Forecasters</dt><dd>3</dd></div>
+          <div><dt>Pages cited</dt><dd>9</dd></div>
+          <div><dt>Run cost</dt><dd>$1.62</dd></div>
+        </dl>
+        <div class="actions"><a class="btn primary" href="#approval">Review bet</a><a class="btn" href="#markets">Back</a></div>
+        <p class="small" style="margin-top:16px">A bet is only prepared here. Nothing is sent until a person approves it.</p>
+      </aside>
+    </div>
+    <footer class="note small">Sample data for layout only.</footer>
+  </section>
+
+  <!-- 3. APPROVAL -->
+  <section class="page" id="page-approval" aria-labelledby="h-approval">
+    <div class="page-head">
+      <h1 id="h-approval">Approve bet</h1>
+      <p class="lede">Check the order below. Approving applies to exactly this market, side, price and size.</p>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="panel pad">
+          <p class="small" style="margin:0">Market</p>
+          <p style="font-size:20px;font-weight:600;margin-bottom:20px">Will the Fed cut rates at its December meeting?</p>
+          <dl class="facts">
+            <div><dt>Side</dt><dd>Yes</dd></div>
+            <div><dt>Limit price</dt><dd>49¢ per contract</dd></div>
+            <div><dt>Quantity</dt><dd>100 contracts</dd></div>
+            <div><dt>Most you can lose</dt><dd>$49.00</dd></div>
+            <div><dt>Estimated fee</dt><dd>$1.75</dd></div>
+            <div><dt>Our estimate vs. price</dt><dd>62% vs. 48%</dd></div>
+          </dl>
+          <div class="actions">
+            <button class="btn primary" type="button">Approve bet</button>
+            <button class="btn danger" type="button">Reject</button>
+            <a class="btn" href="#prediction">Back to prediction</a>
+          </div>
+          <p class="small" style="margin-top:16px">Paper trading is on, so approving records the decision and sends nothing to Kalshi.</p>
+        </div>
+      </div>
+
+      <aside class="panel pad" aria-label="Safety checks">
+        <h2 style="margin-top:0;font-size:18px">Checks before sending</h2>
+        <ul class="checks">
+          <li><span class="tick" aria-hidden="true">&#10003;</span><div><div class="what">Within per-bet limit</div><div class="small">$49 of $100</div></div></li>
+          <li><span class="tick" aria-hidden="true">&#10003;</span><div><div class="what">Within daily limit</div><div class="small">$49 of $250 used today</div></div></li>
+          <li><span class="tick" aria-hidden="true">&#10003;</span><div><div class="what">Sources checked</div><div class="small">All cited claims have a source</div></div></li>
+          <li><span class="tick" aria-hidden="true">&#10003;</span><div><div class="what">Price still current</div><div class="small">Rechecked when you approve. A large move cancels the order.</div></div></li>
+        </ul>
+        <p class="small" style="margin:16px 0 0">This approval expires in 10 minutes.</p>
+      </aside>
+    </div>
+    <footer class="note small">Sample data and limits for layout only. Real limits are set by the client.</footer>
+  </section>
+
+  <!-- 4. RESULTS -->
+  <section class="page" id="page-results" aria-labelledby="h-results">
+    <div class="page-head">
+      <h1 id="h-results">Results</h1>
+      <p class="lede">How accurate our estimates have been compared with the market price and a plain single AI call, on the same resolved questions. Lower scores are better.</p>
+    </div>
+
+    <div class="panel pad">
+      <div class="bars" role="list">
+        <div class="bar-row" role="listitem"><span>Full system</span><div class="bar"><span style="width:62%;background:var(--ours)"></span></div><span class="score">0.171</span></div>
+        <div class="bar-row" role="listitem"><span>Single AI call</span><div class="bar"><span style="width:74%;background:var(--market)"></span></div><span class="score">0.204</span></div>
+        <div class="bar-row" role="listitem"><span>Kalshi price</span><div class="bar"><span style="width:60%;background:var(--market)"></span></div><span class="score">0.166</span></div>
+      </div>
+      <p class="small" style="margin:20px 0 0">Brier score: the average squared miss between a forecast and what happened. Our bar for going live is a lower score than both others, by more than run-to-run noise.</p>
+    </div>
+
+    <h2>Progress toward the go-live bar</h2>
+    <div class="panel pad">
+      <p style="margin:0"><b>34</b> of <b>100</b> questions resolved</p>
+      <div class="progress" role="progressbar" aria-valuenow="34" aria-valuemin="0" aria-valuemax="100"><span style="width:34%"></span></div>
+      <p class="small" style="margin:0">Too few questions to tell the scores apart yet.</p>
+    </div>
+
+    <h2>Resolved questions</h2>
+    <div class="panel table-scroll">
+      <table>
+        <thead><tr><th>Question</th><th class="num">Ours</th><th class="num">Market</th><th>Outcome</th><th>Closer to the outcome</th></tr></thead>
+        <tbody>
+          <tr><td><span class="q">Will the Fed hold rates in October?</span><span class="sub">Resolved Oct 1</span></td><td class="num">81%</td><td class="num">74%</td><td>Yes</td><td><span class="chip good">Ours</span></td></tr>
+          <tr><td><span class="q">Will September CPI be above 3.0%?</span><span class="sub">Resolved Sep 24</span></td><td class="num">44%</td><td class="num">31%</td><td>No</td><td><span class="chip plain">Market</span></td></tr>
+          <tr><td><span class="q">Will unemployment be 4.4% or higher in September?</span><span class="sub">Resolved Sep 19</span></td><td class="num">57%</td><td class="num">62%</td><td>Yes</td><td><span class="chip plain">Market</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <footer class="note small">Sample data for layout only. These numbers are invented to show the layout and say nothing about real performance.</footer>
+  </section>
+
+</div>
+</main>
+
+<style>.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}</style>
+<script>
+  // Show the page named in the URL hash; default to Markets.
+  var pages = ["markets", "prediction", "approval", "results"];
+  function show() {
+    var id = location.hash.slice(1);
+    if (pages.indexOf(id) === -1) id = "markets";
+    pages.forEach(function (p) {
+      document.getElementById("page-" + p).classList.toggle("active", p === id);
+    });
+    document.querySelectorAll("nav a").forEach(function (a) {
+      if (a.getAttribute("href") === "#" + id) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    });
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", show);
+  show();
+</script>
+</body>
+</html>

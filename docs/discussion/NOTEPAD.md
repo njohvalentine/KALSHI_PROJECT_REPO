@@ -1,0 +1,317 @@
+# Discussion Notepad
+
+Read this first. It explains what we are building, every route we chose and why, what we rejected, and what is still open.
+It is a discussion log, not tracking. Approved work items go in `TODO.md` (CLAUDE.md Module 7). No spec or code exists yet.
+Last updated: 2026-10-09.
+
+---
+
+## 1. The goal (what and why)
+
+**What:** a multi-agent AI system for the client that researches a Kalshi market, plans, and returns a **probability prediction with citations**. A human approves any bet.
+
+**Why this shape:** the client wants help deciding bets, not a bot that spends their money. Research -> planning -> result with citations makes every prediction checkable.
+
+**Honest caveat (we keep this in view):** an AI only makes money if it beats the market price. Kalshi prices are already well calibrated, and the reported room for an edge is tiny (about 0.01-0.03 Brier, a score where lower is better). Fees also eat small edges. So the system may end up as a research assistant, not a money machine. The evaluation (section 5) exists to find that out before any real money is used.
+
+---
+
+## 2. Background: Kalshi (so nobody has to re-research)
+
+Source quality: many web sources are affiliate/SEO guides. Items marked *unverified* rest on one source.
+
+- **What it is:** US exchange for yes/no event contracts priced $0.01-$0.99. Pays $1 if yes. Kalshi is the marketplace, not the other side of your bet.
+- **Regulation:** CFTC-approved Designated Contract Market (2020) and registered clearing organization. Customer funds segregated. US users 18+, brokerage-style ID checks.
+- **Fees:** taker fee about `0.07 x price x (1 - price)`, highest near 50 cents. Makers mostly pay zero. Sources disagree, so check Kalshi's current schedule before relying on it. A "fee-free for winners" claim is unverified; ignore it.
+- **API:** REST, WebSocket, FIX. Docs: docs.kalshi.com.
+  - REST prod `https://external-api.kalshi.com/trade-api/v2`, demo `https://external-api.demo.kalshi.co/trade-api/v2`.
+  - WebSocket prod `wss://external-api-ws.kalshi.com/trade-api/ws/v2`, demo uses the `.demo.kalshi.co` host.
+  - Auth: API key ID + signature from a private key + timestamp headers. Demo and prod keys are not interchangeable. Some third-party guides are outdated (old v1 URL, "30 minute token"), so use official docs only.
+- **Legal risk (as of late Sep 2026):** sports contracts are the weak spot (reportedly ~89% of fees, *unverified*).
+  - 9th Circuit (Aug 28) and 6th Circuit (Sep 25) ruled states can regulate them. Kalshi geofenced Ohio and Tennessee.
+  - Massachusetts injunction (Jan), New York $36B suit (Jul 31), Connecticut suit (Aug). Reports say "a dozen+" to "~20" states act against it. A nationwide class action is pending. Supreme Court petition reported, status not found.
+  - The CFTC (Chair Selig) backs Kalshi.
+  - **Why it matters to us:** if the client picks sports markets, their state's law could affect them. This is why market genre is an open question (section 6).
+- **Funding:** reported $1B Series F at $22B valuation (May 2026), *unverified*.
+
+---
+
+## 3. Decisions (what / why / rejected / how)
+
+### D1. Users: the client only
+- **Why:** offering it to the client's customers would bring licensing and legal exposure far beyond this job.
+- **Rejected:** a product for the client's end users.
+
+### D2. A human approves every bet
+- **Why:** an AI moving real money needs a human check. It also keeps a person making each bet, which helps with the state-law risk above.
+- **Rejected:** suggest-only (too little value); fully automatic with spending caps (too risky before we have evidence of an edge).
+- **How:** LangGraph `interrupt()` pauses the run and waits for approve/reject (see D4). The order is placed in its own step *after* approval (see gotcha in D4).
+
+### D3. Architecture: one master agent that spawns subagents, fixed pipeline, one level deep
+- **Why:** Anthropic's research system uses this shape (a lead agent plus parallel searchers). They report it beat a single agent by about 90% on research tasks at roughly 15x the tokens (secondary summaries, since only the intro of their post was readable). A fixed pipeline is easy to test and control.
+- **Client-facing version:** the full comparison table (cost, testing, debugging, approval, evidence) is in `docs/ARCHITECTURE.md`, section 2, "Why this design and not the alternative".
+- **Rejected:** several agents that each spawn their own agents. More cost and less control, and I found no evidence it forecasts better.
+- **How (the agents):**
+
+| Stage | Agent | Job |
+|---|---|---|
+| Research | Lead / planner | Reads the market, writes the plan, splits the work |
+| Research | Researchers (parallel) | Each digs a *different* angle or source set, returns facts with links |
+| Planning | Forecasters (parallel, independent) | Each gives its own probability and reasoning |
+| Result | Aggregator | Combines estimates (median or weighted), calibrates |
+| Result | Citation checker | Rejects any claim not backed by a real source |
+| Result | Market comparer | Compares final probability to Kalshi's price, flags only large gaps |
+| Result | Human approval | See D2 |
+
+- **Why researchers get different angles:** a 2026 preprint (InfoDelphi) finds multi-agent forecasting helps mainly when agents see *different* evidence. Same evidence just reinforces the same view. Preprints, small samples, so treat as a lead.
+
+### D4. Framework: LangGraph
+- **Constraint that forced this choice:** the client gave an **OpenAI API key**. The Claude Agent SDK only runs Claude models, so it is out.
+- **Compared on official docs and PyPI** (not blogs): LangGraph 1.2.14 and OpenAI Agents SDK 0.23.1. Both need Python >=3.10 (ours is 3.13.11; 3.13 specifically not confirmed on either page).
+  - Both can do everything we need: parallel workers, structured output, human approval, saved state. The difference is style.
+  - **OpenAI Agents SDK:** less code. Master agent calls specialists with `Agent.as_tool()`; parallel via `asyncio.gather`; built-in tracing; approval via `needs_approval=True`. Tied to OpenAI by default, heavier dependencies.
+  - **LangGraph:** more code, but the pipeline is an explicit graph, so each stage is visible and testable. Saves progress (matters: a run costs real tokens). Lighter dependencies, model-agnostic.
+- **Why LangGraph:** the user leaned this way, and a fixed pipeline with approval and saved state fits a graph naturally.
+- **Rejected:** OpenAI Agents SDK (fine choice, would also work; picked less on merit than on fit and preference). Pydantic AI (single-agent focus, multi-agent claim unverified). Plain Python (we would rebuild orchestration).
+- **How "spawning" works** (official docs): there is no spawn call.
+  1. The lead node asks the LLM for a structured plan (e.g. a list of research angles).
+  2. A routing function returns one `Send("researcher", {"angle": a})` per item. Each is a parallel worker with its own small state.
+  3. A shared state field declared `Annotated[list, operator.add]` merges every worker's result. Without this merge rule, workers overwrite each other.
+  4. A normal edge to the next node runs only after all workers finish.
+  5. Two fan-outs in a row: researchers, then forecasters. A worker can itself be a small graph (subgraph) but we stay one level deep.
+  - **Gotcha - double orders:** when a run resumes after approval, the node *re-runs from its start*. If the approval and the order are in the same node, a bet could be sent twice. So: order placement is its own node after the approval node.
+  - **Gotcha - cost:** every `Send` is a separate model run, so the lead must be capped (planned default, to confirm in spec: up to 4 researchers, 3 forecasters).
+  - **Gotcha - testing needed:** calling the same subgraph in parallel on one thread can clash on saved state (docs). Test before relying on it.
+  - Don't wrap `interrupt()` in a bare try/except, it works by raising an exception.
+
+### D5. Observability: LangSmith free tier + our own table
+- **Why:** LangSmith traces LangGraph with two environment variables (`LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY`) and shows each run as a tree. That covers debugging and cost. It does *not* track forecast vs market vs real outcome, which we need for evaluation anyway, so we keep our own table (forecast, Kalshi price at the time, outcome).
+- **Limits (official pricing page):** free = 1 seat, 5k base traces a month, kept 14 days. Paid = $39/seat/month for 10k traces. Self-hosting is Enterprise only.
+- **Rejected:** Langfuse self-hosted (needs Postgres, Redis, ClickHouse and S3; its Docker Compose option is a single machine with no backups). Fully own logging (we would build the viewing screens ourselves). Kept as the fallback if the client refuses cloud tracing.
+- **Open risk:** 5k traces/month may run out fast with multi-agent runs. Measure on real runs.
+- **Open risk:** traces contain prompts and the client's reasoning. **Client consent to send them to LangSmith's cloud has not been confirmed.**
+
+### D6. Evaluation: backtest, then live paper trading, no real orders
+- **What "paper trading" means:** the agent only *records* predictions. Nothing is ordered, so no money is at risk. The order tool is mocked during all evals (LangSmith supports `config={"env": "test"}` for this).
+- **Why two stages:**
+  - *Backtest on past markets:* fast and repeatable, good for catching bugs and comparing versions. Risk: **leakage**, because the model or web search may already know the answer.
+  - *Live paper trading on open markets, scored when they resolve:* no leakage, so this is the real test, but it takes weeks. This is how ForecastBench works.
+- **Leakage guards (from research):** use questions that resolved after the model's training cutoff; limit search to pages dated before the question opened; flag suspicious questions with a judge model and re-score without them (one study found under 1% change, but the detector is imperfect).
+- **What we measure:**
+  1. Brier score of final probabilities vs outcomes.
+  2. Calibration (do 70% calls happen ~70% of the time). Method not found in sources; the usual one is binning forecasts, *unverified*.
+  3. Citation quality: code check that each claim has a link, plus an LLM judge that the source supports the claim.
+  4. Process: LangSmith trajectory checks (did the lead plan, did the citation checker run) and single-stage tests.
+  5. Safety: no order without approval.
+- **Three-way comparison, same questions:** (A) full pipeline, (B) one plain OpenAI call with no research, (C) Kalshi's own price.
+  - A does not beat B: research and multi-agent parts add cost, no accuracy. Simplify.
+  - A beats B but not C: a research assistant, not a betting edge.
+  - A beats both: worth taking further.
+  - **Why B matters:** the pipeline costs ~15x tokens, and the research found news retrieval did not consistently help LLM forecasts.
+- **Why raw Brier can mislead:** it breaks down when forecasters answer different questions (ForecastBench uses a difficulty-adjusted score). We compare on the *same* questions.
+- **Go-live bar (my suggestion, NOT from a source, needs client sign-off):** only go live if, over an agreed number of resolved live questions, A scores better than C *and* better than B, with a gap bigger than run-to-run noise. The question count is TBD (to work out in the spec).
+- **Reference numbers:** random predictor ~0.333 Brier, general public ~0.121, frontier LLMs ~0.122-0.136, superforecasters ~0.096 (ForecastBench via the Foresight Arena paper; early-2025 figures, leaderboard may have changed).
+
+### D6 correction (found while researching data sources)
+- I earlier listed "limit search to pages dated before the question opened" as a leakage guard. **Research says that guard is not enough.** A 2026 paper (arxiv 2602.00758) found date-filtered Google/DuckDuckGo results still had major post-cutoff leakage for 71% / 81% of questions (updated articles, "related content" boxes, wrong metadata). They recommend frozen, time-stamped web snapshots. Also, OpenAI's web search tool has **no date filter at all** (official docs).
+- **Consequence:** live web search is only trustworthy for *live paper trading*. A fair *backtest* needs a frozen snapshot of sources (see D7). Until we have one, backtest results using live search must not be trusted.
+
+### D7. Data sources for researchers (DECIDED: start with option A, OpenAI web search)
+- **Decision (2026-10-09):** start with Source 2 option A. **Why:** it uses the client's existing key, needs no new vendor or dependency approval, and returns URL citations we need anyway. **How we cover its gaps:** (1) force search with `tool_choice: required` so the model can't skip it; (2) save every cited page with a timestamp into our own table, building a frozen snapshot for later backtests (see D6 correction); (3) if the client's key cannot use web search, or we need controlled page text, add option B (needs Module 5 approval first).
+- **Rejected for now:** option B (Tavily/Exa/Brave) from day one. Not wrong, just extra cost and approval with no proven need yet.
+- **Still to verify:** client's key can use the web search tool; per-call price (OpenAI pricing page, not read); Kalshi endpoint paths, settled-market status value and rate limits from official docs.
+- **Original proposal and research below (kept for the reasoning):**
+- **What the researchers need:** (1) the market itself: question, rules, close date, current price, history; (2) outside evidence with links, so every claim can be cited.
+- **Source 1, market data: Kalshi REST API.** Third-party guides (not official docs, I could not load Kalshi's docs page) say market data endpoints are public with no key: list markets, one market, price history candles. WebSocket always needs auth. Official docs must confirm paths, the status value for settled markets, and rate limits (tiered, no numbers found).
+- **Source 2, outside evidence, option A: OpenAI web search tool** (Responses API, official docs).
+  - Works with the client's existing key, no new vendor. Returns `url_citation` annotations (URL, title) and can list every URL consulted. Domain allow/block lists up to 100 each. `search_context_size` low/medium/high.
+  - Limits: Responses API only (Chat Completions only has a search-specific model without filters). 128k search context. No date filter. With `tool_choice: auto` the model may skip searching, so force `required`. Per-call price is on a separate pricing page, not read.
+- **Source 2, option B: separate search API (Tavily, Exa, Brave).** Gives us the raw results and page text, so we can store a snapshot for backtests. Cost, latency and quality differ; vendor benchmarks conflict (each vendor tests itself); Brave reportedly removed its free plan Feb 2026. Needs a new account/key and Module 5 approval. No source tested their date filters for leakage.
+- **Source 3, domain data:** official sources per topic (e.g. economic releases, sports stats, polls). Depends on market genre, which the client hasn't chosen.
+- **Citation rule:** a claim is only kept if it maps to a URL we actually retrieved. Citation checker verifies this.
+
+---
+
+### D8. Frontend (requirements stated, nothing decided yet)
+- **User's requirements (2026-10-09):** every page uses the same content width; alignment is clean and consistent; modern visuals; looks polished.
+- **Why it matters:** this is what the client sees and where the human approves bets (D2), so it carries trust.
+- **DECIDED (user, 2026-10-09):**
+  - Pages: market list, prediction detail (probability, reasoning, citations), bet approval, results dashboard (forecast vs Kalshi price vs outcome).
+  - Stack: Next.js + React. **Why:** common, large ecosystem, talks to a Python backend over an API. Verified on official docs: Next.js 16.4.0 needs Node >=20.9 (ours is v24.18.0, fine); `create-next-app` is the official generator (Module 8) with TypeScript, Tailwind, ESLint, App Router by default.
+  - Look: light and clean (no dark theme for now, less to polish; can add later).
+- **DECIDED (user, 2026-10-09): shadcn/ui for components.** **Why:** official CLI `shadcn init -t next` copies components into our project as source files, so we get polished buttons, cards and tables without a heavy UI library. Dependency approval (Module 5) is given for shadcn/ui only; install still waits for the approved spec and must be project-local.
+- **Mockups:** user said not yet. Revisit later, before the client demo.
+- **Open:** how the frontend talks to the Python/LangGraph backend (API design) and how approval is wired (D2); not discussed.
+- **Not built:** no scaffolding until the spec is approved.
+- **Mockups made (2026-10-09, user asked to see them; format: HTML file in repo):** `docs/design/mockups.html`, plain HTML/CSS, open in a browser, no install. Four pages (markets, prediction, approval, results) share one width (`--content-width: 1120px`) and one set of tokens. Light theme. All numbers and names ("Forecast desk" is a placeholder) are invented sample data, labeled as such on each page.
+  - **One memorable element, the "gap track":** a bar showing Kalshi's price (grey pin) and our estimate (blue pin) with the disagreement shaded. Used small in the market list, large on the prediction page. Chosen because the gap between our estimate and the market is the one thing this product exists to show.
+  - **Choices:** Schibsted Grotesk font (loaded from Google Fonts, falls back to system font offline); cool grey-blue palette, not the cream/terracotta default; surfaces only where content needs them; a "paper trading, no orders sent" banner on every page; approval page shows the checks (per-bet limit, daily limit, sources checked, price re-check) and a 10-minute expiry, matching D12.
+  - **Checked:** screenshots at 1280px and 390px wide in headless Chrome. Fixed two bugs found that way (page jumped past the header on navigation; odd spacing from tabular numerals on all text). Keyboard focus visible, reduced motion respected. Not tested in other browsers or with a screen reader.
+  - **Limits of the mockup:** buttons do nothing; the real build uses Next.js + shadcn/ui and will need empty, loading and error states not drawn here.
+- **How we will keep widths consistent (plan):** one shared page layout with a single max-width container used by every page, plus shared spacing and type scale defined once as design tokens.
+
+---
+
+### D9. Milestones (draft for client, `docs/MILESTONES.md`)
+- **Order and why:** foundation, research, full pipeline, then **evaluation before the web app**, so we learn whether the system beats the market price before spending effort on polish. Live paper trading, then go/no-go, then optional real bets last.
+- **No dates or prices on purpose:** effort is not scoped; any number would be a guess. Add estimates after the spec (M0) is approved.
+- **Judgment call to confirm:** I placed the web app (M5) after evaluation (M4). It could run in parallel if the client wants to see screens early; mockups are on hold per D8.
+
+### D10. How we use the Kalshi API (PROPOSED, from what we already know; official docs not re-read this round)
+- **Use 1, read market data (M1):** list markets, read one market (question, rules, close time, current price), read price history. Feeds the lead agent and the "market comparer" step. Third-party guides say these REST endpoints need no key; unconfirmed in official docs.
+- **Use 2, record outcomes (M4/M6):** read resolved markets to score our forecasts (our own table: forecast, Kalshi price at that time, outcome).
+- **Use 3, place orders (M7 only):** authenticated REST (key ID + signed request, per official docs seen earlier). Only after human approval, in its own step (D4 gotcha). Demo environment first; demo and prod keys are separate.
+- **Not used:** WebSocket streaming. It always needs auth and we do not need live ticks to forecast; skip until a need appears.
+- **Safety:** Kalshi keys are required config, validated at startup, no defaults (CLAUDE.md Module 4). Keys live in project-local env, never in code. Rate limits are tiered and unknown, so we add backoff and log retries visibly.
+- **Verified against Kalshi's official docs (2026-10-09; read via search-result summaries of docs.kalshi.com pages, because direct page fetch and curl failed here; pages are some months old, re-check the OpenAPI spec at docs.kalshi.com/openapi.yaml before coding):**
+  - **No key needed for reads.** `GET https://external-api.kalshi.com/trade-api/v2/markets` is a plain GET; the market-data quick start says no auth headers for those endpoints. Confirms the third-party claim.
+  - **Settled markets:** filter `status=settled` (also `unopened, open, closed, paused`); a settled market's own `status` field reads `finalized`. Timestamp filters `min_settled_ts` / `max_settled_ts`.
+  - **Two data tiers:** markets that settled before a "historical cutoff" are NOT returned by `/markets`; use `GET /historical/markets` and `GET /historical/markets/{ticker}/candlesticks`. Read the live cutoff from `GET /historical/cutoff` (do not hardcode). Candle periods: 1, 60, 1440 minutes, with required `start_ts` and `end_ts`. Live route for recent markets: `/series/{series_ticker}/markets/{ticker}/candlesticks`.
+  - **Rate limits (token budgets per second, reads):** Basic 200, Advanced 300, Expert 600, Premier 1,200, Prime 4,800. Most requests cost 10 tokens, so Basic is about 20 reads per second. Basic tier comes with signup. Check yours at `GET /trade-api/v2/account/limits`. Numbers may have changed (changelog mentions a 20% increase for higher tiers).
+  - **Why it matters to us:** 20 reads per second is far more than we need. Candlestick history lets us record "Kalshi price at forecast time" for backtests. Archived markets need the separate historical routes, so the code must check the cutoff.
+- **Still unverified:** exact request/response field names (read the OpenAPI spec when building M1); whether any endpoint we need has a higher token cost.
+
+### D11. Backend to frontend connection (DECIDED 2026-10-09: option B, own FastAPI, and Postgres for all data)
+- **Decision:** user chose option B and Postgres. **Why B:** production licensing for option A is unclear (reported enterprise key + Redis) and surprise license cost is a risk on a client project; B uses only free open-source libraries and gives us full control over approval and the order step. **Why Postgres:** LangGraph's checkpointer needs a durable shared store in production (in-memory is per-process), and keeping our own tables (forecasts, outcomes, saved source pages) in the same database avoids running two stores. This **replaces the SQLite assumption in D5**.
+- **Dependency approval status (Module 5):** user approved the *choice* of FastAPI + Postgres. Exact packages (FastAPI, a Postgres driver, LangGraph Postgres checkpointer) still to be listed with versions in the spec and checked against Python 3.13 before install. Postgres server itself is a runtime requirement the client must host or provide: **Open: where does it run (client machine, cloud, Docker)?**
+- **Original comparison and research below (kept for the reasoning):**
+- **Need:** the Next.js app must (1) start a run for a market, (2) show progress while agents work, (3) show the final prediction with citations, (4) let a person approve/reject a bet, which resumes the paused LangGraph run (D2, D4).
+- **Option A: LangGraph Agent Server + React `useStream` hook** (`@langchain/react`). Official docs: hook exposes the pending interrupt, resume via `stream.submit(null, {command: {resume}})`, pending approval survives page reload via the thread checkpoint. `langgraph dev` is a local server, no license. **Concerns:** production self-hosting is reported to need a LangSmith enterprise license key plus Redis (sources conflict on free-tier limits and on what the key gates; one forum reading says it only gates observability, unofficial); docs show different stream API versions (`stream.interrupt` vs v3 `stream.interrupts`), so copied code may not match installed versions; ties us to LangChain's server product.
+- **Option B: our own FastAPI service around the compiled graph.** Only MIT-licensed libraries. Sources describe: Postgres checkpointer (`AsyncPostgresSaver`) so state survives restarts and multiple workers (in-memory is per-process); `graph.astream(...)` streamed to the browser as Server-Sent Events; `interrupt()` shows up in the stream and we resume with `Command(resume=...)`. **Concerns:** we write the glue (start, stream, resume, reconnect) ourselves; no single source covered the full combination, code sketch is unverified.
+- **Proposed endpoints (B):** start run, stream run events, get run result, approve/reject (resume), list/score results. The order step stays a separate node after approval (D4).
+- **Design point from me (inference, not sourced):** a multi-agent run is slow and costs money, so it should run as a background job, not tied to one browser request. If the tab closes, the run keeps going and the page reconnects by thread ID. The sources' streaming example is request-bound; reconnect/replay needs extra work.
+- **Implication to decide:** the LangGraph checkpointer wants Postgres for production, so our own tables (forecasts, outcomes, snapshots) should probably live in that same Postgres instead of SQLite. Changes the earlier "SQLite" assumption (D5). New dependencies (FastAPI, Postgres driver, etc.) need approval first (Module 5).
+- **Verify before building:** `AsyncPostgresSaver` setup details, the `__interrupt__` key in stream output, installed-version stream API, LangSmith/Agent Server license terms (only if we pick A).
+
+### D12. Cost and safety limits (user agreed 2026-10-09 to log as proposed; betting limits are REQUIRED config with no default)
+- **Decision:** per-bet, per-day and total-exposure limits are required settings validated at startup; the system refuses to start without them (CLAUDE.md Module 4). **Why:** a conservative-looking default could silently allow bets the client never approved. Cost/search caps (researcher count etc.) may keep safe code defaults, with the client's values set in the spec.
+- Everything below is still the proposal; client numbers still open.
+**Verified prices (OpenAI pricing page, standard tier, per 1M tokens, input / cached / output):** gpt-5.5 $5 / $0.50 / $30; gpt-5.4 $2.50 / $0.25 / $15; gpt-5.4-mini $0.75 / $0.075 / $4.50; gpt-5.4-nano $0.20 / $0.02 / $1.25. **Web search tool: $10 per 1,000 calls, plus the pages it reads are billed as input tokens at the model's rate.**
+**Rough cost per market (MY ESTIMATE, assumed token counts, not measured):** 4 researchers (~50k in, 5k out, ~3 searches each) + 3 forecasters (~20k in, 2k out) + lead/aggregator/checker (~0.2 USD) on gpt-5.4 is about **$1.5 per market**; roughly double on gpt-5.5; much less with mini for some steps. Real numbers come from Milestone 2 tracing. Cost scales with how many markets we run, so a daily market cap matters.
+
+**Layer 1, OpenAI account (hard stop, verified):** a dedicated OpenAI *project* for this system with a monthly **hard spend limit** (Project settings > Limits > Spend, "Enforce a hard limit"). At the cap requests fail with 429 `project_spend_limit_exceeded`. Enforcement is approximate (spend can slightly exceed). Alerts (e.g. 50%/80%) only notify. Only org/project Owners can set it, so **the client must set this, not us**. Hard limits were added July 2026; an older help article saying "soft only" is outdated.
+**Layer 2, per-run caps in our code:**
+- Max researchers (4) and forecasters (3), max search calls per run (number TBD in spec).
+- LangGraph `max_concurrency` (top-level config key) caps parallel workers. `recursion_limit` default is 1000 steps since langgraph 1.0.6, far too loose; set it low. Hitting it raises `GraphRecursionError` we must catch and report.
+- A per-run cost/token budget that stops the run: **I found no built-in LangGraph feature for this, so we would count tokens ourselves (unverified, to design in spec).**
+- Daily cap on runs, and skip re-running the same market within a set window (TBD).
+**Layer 3, betting limits (only matter from M7):**
+- Our own checks BEFORE any order: max per bet, max per day, max open exposure. **These are the client's numbers: open.** Per CLAUDE.md Module 4 they are required config validated at startup, no hidden defaults (my reading; confirm).
+- Kalshi side (verified): `client_order_id` lets a retry after a network failure be rejected as a duplicate (use it so an order can never double-send, supports D4 gotcha); *order groups* cap contracts matched in a rolling 15-second window and auto-cancel the rest (a contract-count cap, not a dollar cap); `DELETE /portfolio/events/orders` cancels all resting orders (our emergency stop). **Max order size / per-market position limit: not found in docs, check `GET /account/limits` and ask Kalshi.** Use the `/portfolio/events/orders` path; the legacy `/portfolio/orders` is being deprecated.
+- **Approval bound to the exact order (my recommendation, no source):** the approval covers market, side, price, quantity; it expires; price is re-checked right before sending and a big move cancels the order and asks again. Stops "approve now, executes later at a different price".
+**Layer 4, agent safety (my recommendation, general knowledge):** web pages can contain text that tries to give the AI instructions (prompt injection). Researchers and forecasters get NO order tool; only the order node can trade, and only after human approval, so injected text cannot place a bet.
+**Other:** all API keys come from project-local environment settings, validated at startup, never logged or put in traces. A visible kill switch (stop new runs, cancel all resting orders) in the web app.
+**Open for the client:** monthly OpenAI budget; allowed models; daily market cap; per-bet / daily / exposure limits.
+
+### D13. Backend language: Python 3.13 (CONFIRMED by compatibility check, 2026-10-09)
+- **Why Python:** LangGraph, the OpenAI SDK, LangSmith and FastAPI are all Python-first, and the whole backend design (D3 to D12) is written around them. Local Python is 3.13.11.
+- **Checked against PyPI (current releases):**
+
+| Package | Version | Python 3.13 evidence |
+|---|---|---|
+| langgraph | 1.2.14 | 3.13 classifier listed (3.14 not) |
+| langgraph-checkpoint-postgres | 3.1.2 | no classifiers; needs `psycopg` and `psycopg-pool` |
+| fastapi | 0.143.0 | 3.13 and 3.14 listed |
+| psycopg | 3.3.6 | 3.13 to 3.15 listed; extras `binary`, `pool` |
+| langsmith | 0.14.5 | no classifiers; requires >=3.10 |
+| openai | 3.26.1 | 3.13 and 3.14 listed |
+
+- **Real test:** a dry-run dependency resolve for Python 3.13 on Linux (`uv pip compile`, in the scratchpad, nothing installed) succeeded for all six together, pulling `langchain-core 1.6.9` and `psycopg-pool 3.3.3`. So there are no version conflicts today. It proves the versions resolve together, not that the code runs; the first real test is Milestone 1.
+- **Do not use Python 3.14:** langgraph does not list it.
+- **Still needs approval (Module 5) before install:** the package list above goes into the spec; install into a project-local venv only (uv), never globally.
+
+### D14. Client also supplied Kalshi API keys (2026-10-09)
+- **What we know:** the client gave Kalshi keys in addition to the OpenAI key. **Not yet known:** demo or production keys; whether tied to a funded real account; what the key can do (read-only vs trade). I have not seen the keys and should not.
+- **Effect on plan:** reads (M1 to M6) need no key (D10), so the Kalshi key is only needed for orders (M7) and for checking account limits (`GET /account/limits`). **Until M7, the Kalshi key should not be loaded by the running system at all** (least exposure). Production keys are real money access, so they are treated as the most sensitive item in the project.
+- **Handling rules (proposed, CLAUDE.md Module 4):** keys live only in a project-local, git-ignored settings file or the host's secret store; never in code, docs, chat, traces or logs; validated at startup when the feature that needs them is on; demo and production keys kept separate and clearly named. The Kalshi private key is a signing key: the file itself is the secret.
+- **If a key was pasted in chat/email/docs anywhere:** treat it as exposed and rotate it before real use.
+- **User update:** user has "just an API key" and does not know if it is valid, demo or prod, funded, or its permissions.
+- **Verified from Kalshi docs (via search summaries of docs.kalshi.com):** a Kalshi credential is a PAIR: a Key ID plus a private key (RSA or Ed25519; the private key can NOT be retrieved again after creation). Each request is signed (timestamp + method + path, RSA-PSS/SHA-256 for RSA) and sent with headers `KALSHI-ACCESS-KEY`, `KALSHI-ACCESS-TIMESTAMP`, `KALSHI-ACCESS-SIGNATURE`. **If the client only gave one string (a Key ID) and no private key file, the key cannot be used.** Demo (`external-api.demo.kalshi.co`) and production keys are separate. Keys appear to support scopes (the balance endpoint mentions a `read::portfolio_balance` scope), so a read-only key is likely possible; exact scope list not checked.
+- **Safe validity test:** call `GET /trade-api/v2/portfolio/balance` (read-only, returns cents) on demo first, then production. Success = key valid for that environment and shows account balance; auth error = wrong environment, wrong key, or bad signature. Not yet run. A check script needs an RSA/Ed25519 signing library (new dependency, approval first, Module 5), so the plan is to do it in Milestone 1, run by the user locally so the key never enters chat.
+- **Open:** demo vs production; scopes (ask client to create a read-only or limited key if possible); who holds the keys long term.
+
+### D15. Many markets, and periodic checks for new signals (client question, user decided 2026-10-10)
+- **Client asked:** does it check one market at a time, or several as scheduled for the day?
+- **Answer given:** each run analyzes one market in depth (research, forecasts, sources for that market). To cover several, the system works through a list of markets the client chooses (picked in the app, or a daily list). Results show in the app as each market finishes.
+- **Added at user's direction:** the system also **re-checks markets periodically for new signals** (new information that could change the estimate), and updates the prediction when it finds one.
+- **Not yet decided (needs spec):** how often to re-check; what counts as a "new signal" (a new source, a price move on Kalshi, a data release, or any change); whether a re-check redoes the full pipeline or a lighter one; which markets are re-checked (all listed, or only open ones close to closing); how an updated estimate is shown next to the earlier one; whether a changed estimate re-triggers approval of a prepared bet (should: the old approval covers only the old price and size, see D12).
+- **Effects to keep in view (my notes, not told to the client):**
+  - Cost: each re-check is another run, so it multiplies D12's per-market cost and uses the daily market cap and the LangSmith 5k trace limit faster. The spec needs a re-check cap.
+  - Evaluation (D6): every update is a new forecast. For scoring, we must decide which forecast counts (first, last before close, or each at its own time), and store Kalshi's price at each update time, or the comparison with the market is unfair.
+  - Data: our table needs forecast history per market, not one row per market.
+  - The scheduling itself (a background job on a timer) is new; it was not in the milestones. Add to the spec, probably Milestone 3 or later.
+- **Scheduling was not in the earlier plan.** The client-facing docs (`ARCHITECTURE.md`, `MILESTONES.md`) are not updated yet; update them when the user agrees to scope.
+
+### D16. Client answers and scope changes (user, 2026-10-12)
+- **Markets:** client has not said which market types. Stay open, do not design around sports.
+- **OpenAI budget / allowed models:** user says do not think about it. Dropped as a planning topic. (D12 per-run caps stay as engineering safeguards, no budget number needed.)
+- **Betting limits:** user says do not fixate. Not a blocker; handle at Milestone 7 only. This relaxes the D12 "required with no default" line for now: decide when we reach order placement.
+- **LangSmith cloud tracing: consent given** (closes the open risk in D5).
+- **Runtime: everything runs in Docker with Docker Compose** (backend, frontend, Postgres together). Closes the "where Postgres runs" question. Docker is the host runtime, not a Python/npm package, so no Module 5 conflict; the spec lists the compose services. Secrets reach containers through env/secret files kept out of the images and out of git.
+- **Go-live bar:** user says do not think about it for now. Evaluation (D6) still measures against the market price and a single-AI baseline; the formal go/no-go rule is deferred.
+- **Kalshi Developer Agreement:** could NOT be read (page text did not load through the tools here, tried twice). Known only: Kalshi docs say using the API means accepting that agreement, and the agreement describes itself as the terms for programmatic trading. Clauses on bots, limits and liability unread. **Action: user opens kalshi.com/developer-agreement in a browser and pastes the text, or shares it, and I summarize.** Only matters for Milestone 7.
+
+### D17. How to tell a Kalshi key is demo or production (official docs, via search summaries)
+- **A key carries no mark.** Docs describe no visual marker in the Key ID (a UUID-style string) or the private key (a PEM file). Environment is set by the account the key was created in.
+- **Demo and production are separate accounts and separate keys.** Demo keys only work on demo endpoints, production keys only on production. Demo site: demo.kalshi.co (the .com version is not a Kalshi domain). Demo REST `https://external-api.demo.kalshi.co/trade-api/v2`; production `https://external-api.kalshi.com/trade-api/v2`.
+- **Test to run (read-only):** sign a `GET /portfolio/balance` request and send it to the demo host. If it succeeds, it is a demo key. If it fails with an auth error, send the same request to the production host. If that succeeds, it is a production key. If both fail, the key ID or private key is wrong, or the pair is incomplete. Never try an order endpoint to test.
+- **Ask the client instead (fastest):** which site they logged into when creating the key (demo.kalshi.co or kalshi.com), under Account & security, API Keys.
+- **Scopes:** create-key endpoints take a `scopes` list, but the docs I could read do not list the values. A key can also be limited to one sub-account. Check the scope list in the API reference or in the key dialog.
+- **Where the test runs:** a small script we write in Milestone 1, run by the user locally or inside the Docker setup. It needs an Ed25519/RSA signing library (new dependency, needs approval first). Not run yet.
+
+### D18. Approval flow: how the approval screen connects to the paused run (PROPOSED, not yet agreed)
+Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses and saves state, resume with `Command(resume=...)` and the same `thread_id`, needs a Postgres checkpointer, the interrupted node re-runs from its start on resume, typed resume validation needs langgraph >= 1.2.12 (we resolve 1.2.14).
+1. **Graph ends in three nodes:** `prepare_order` (builds a proposal: market, side, limit price, quantity, estimated cost; saves it to our Postgres table as `pending` with an id and an expiry time), `await_approval` (only calls `interrupt()` with the proposal id, no side effects), `place_order` (separate node, runs only after approval).
+2. **Run status in our DB:** running, awaiting_approval, done, failed. `thread_id` = run id.
+3. **Web app:** the prediction page shows "Review bet" when status is awaiting_approval. The approval page reads the proposal from OUR table, not from LangGraph state.
+4. **Approve/reject endpoint** `POST /runs/{id}/approval` with `{proposal_id, decision}`. The backend checks: proposal exists and is still `pending`, not expired, id matches the one the run is paused on, the caller is allowed to approve. Only then it resumes the graph with `Command(resume={decision, proposal_id})`. A reject resumes the graph to a clean end.
+5. **`place_order` rules:** (a) re-fetch the Kalshi price just before sending; if it moved beyond a set tolerance, do not send, mark the proposal `needs_reapproval` and loop back to `prepare_order` through a conditional edge (docs say to avoid a `while True` around `interrupt()`); (b) use the proposal id as Kalshi `client_order_id`, so a retry cannot double-send (D12); (c) in paper mode it records a simulated fill and never calls Kalshi.
+6. **Expiry:** the backend refuses an approval after `expires_at` and closes the run with a reject. I have not found an interrupt timeout in the docs read, so expiry is our own check.
+7. **Re-checks (D15):** a new estimate creates a new proposal and marks the old pending one `superseded`. An approval for a superseded proposal is refused.
+8. **Why this shape:** keeps `interrupt()` side-effect free, so the re-run on resume is harmless; the order step is separate and single-send; the screen shows what the backend will actually send.
+- **Open:** **who is allowed to approve.** No login or user model has been discussed. A single-client tool still needs at least a simple sign-in, otherwise anyone who can reach the app can approve a bet. Decide in the spec. Also: price-move tolerance and approval expiry length (the mockup shows 10 minutes as a placeholder).
+
+### D19. Sign-in: simple email and password (user decided 2026-10-12; details PROPOSED)
+- **Decision (user):** the app needs a simple login with email and password. **Why:** answers the open point in D18. Without sign-in, anyone who can reach the app could approve a bet.
+- **Where auth lives (my recommendation): in the FastAPI backend, not in Next.js.** **Why:** the Next.js docs say to do auth checks "as close as possible to the data source" and not to rely on layouts or the proxy file alone. Our sensitive action (approve a bet) is a backend endpoint, so the backend must check who is calling. One user table, one place to check. **Rejected:** an auth library inside Next.js (e.g. Better Auth, Auth.js): a second user store the backend would have to trust; more parts for one client.
+- **How (proposed):**
+  - A `users` table in our Postgres (email, password hash, created date).
+  - Passwords hashed with Argon2 through `pwdlib` (the library FastAPI's current security tutorial uses; install `pwdlib[argon2]`). Plain passwords are never stored or logged.
+  - Login endpoint checks the password (and runs a dummy hash when the email is unknown, as the FastAPI tutorial does, so response time does not reveal which emails exist), then creates a **server-side session**: a random token stored hashed in a `sessions` table with an expiry; the browser gets it as an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. **Why a database session and not a signed token (JWT):** logout and "sign everyone out" work immediately; the FastAPI tutorial's JWT example does not cover revocation. A new package is not needed for this.
+  - Every API endpoint (start run, stream, approve, results) requires a valid session. Approve also records WHO approved (user id and time) on the proposal (D18).
+  - Next.js pages redirect to the login page when there is no session, but that is only for convenience: the backend check is the real protection.
+  - No public sign-up page. Accounts are created by the operator through a backend command. Failed logins are rate-limited.
+- **Needs checking before build:** `pwdlib[argon2]` support for Python 3.13 (not yet checked; see D13 method) and Module 5 approval. Cookie `Secure` flag needs HTTPS: fine on `localhost`, but real use needs HTTPS in front of the Docker Compose stack (open: who provides it). Protection against cross-site request forgery for the approve endpoint (SameSite=Lax helps; confirm the exact extra step in the spec). The Next.js guide's own examples (bcrypt, Zod, jose) are for a Next.js-side design and do not apply to this one.
+- **Scope decision 2026-10-12 (user): single user, no register page.** The user first asked for a register page and multiple users, then reversed it: the Kalshi key belongs to one client, so keep it simple. **Accounts are created by a script run by the operator** (this is the original D19 design). **Why this is right:** a public register page would let anyone who finds the app approve bets on the client's one Kalshi account and spend their OpenAI budget. Multi-user, roles, invite codes and an admin screen are NOT built. If the client later wants more than one person, add them with the same script.
+- **Auth checks done 2026-10-12:** `pwdlib` 0.3.1 lists Python 3.13 and 3.14; `argon2-cffi` 25.1.0 is its dependency. A dry-run resolve for Python 3.13 on Linux succeeded for all seven packages together (langgraph 1.2.14, fastapi 0.143.0, psycopg, langsmith, openai, langgraph-checkpoint-postgres, pwdlib[argon2]). Nothing installed. **New dependency awaiting approval (Module 5): `pwdlib[argon2]`.** No email-validation package planned (pydantic's `EmailStr` needs one; we use a simple check and the unique-email rule instead). No rate-limit package planned; failed-login throttling is done in the database.
+- **Project state 2026-10-12:** git repo exists on branch `master` with no commits; `CLAUDE.md` and `docs/` are untracked; no `TODO.md`, no `docs/specs/`, no code.
+- **Still open:** password reset is by the same script (no email service); a login page is a fifth page and is not in the mockup or milestones yet; HTTPS in front of Docker Compose for real use.
+
+---
+
+## 4. Environment
+Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules apply: project-local installs only, ask before adding any dependency, spec and approval before code.
+
+---
+
+## 5. Not decided yet (so no one assumes)
+- **Sign-in details** (D19): HTTPS for real use; login page not yet in mockups.
+- **Data sources:** decided in D7 (OpenAI web search first). Open: confirm client's key can use web search; snapshot table design (spec); domain data sources depend on market genre.
+- **Approval screen connection:** proposed in D18, needs the user's agreement.
+- **Dropped by the user (D16):** OpenAI budget and models, betting limits (until Milestone 7), go-live bar.
+
+---
+
+## 6. Questions for the client
+1. Which market types? (Not answered yet; stay open.)
+2. Which US state are they in? (Not answered yet.)
+3. What should "help" cover: finding bets, researching, sizing, or all?
+4. Can the OpenAI key use the web search tool? (D7 depends on it.)
+5. Kalshi key: which site was it created on (demo.kalshi.co or kalshi.com), and do we also have the private key file? (D17)
+Answered: LangSmith cloud tracing, OK (D16). Runtime, Docker Compose (D16).
+
+## 7. Next steps
+- Settle the open topics in section 5, then draft the spec in `docs/specs/` for approval (CLAUDE.md Module 7). Spec should include the question count for the go-live bar and the worker caps.
+- Before any package is added: confirm Python 3.13 support for LangGraph and LangSmith from official docs, then ask for approval.
+- Verify against primary sources before relying on them: Kalshi fee schedule, valuation, share of sports revenue.
+- Read Anthropic's full multi-agent post for citation-agent details.
