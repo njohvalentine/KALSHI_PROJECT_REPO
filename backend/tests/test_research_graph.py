@@ -20,8 +20,9 @@ MARKET = {"ticker": "KX-1", "title": "Will Team A beat Team B?", "subtitle": Non
 
 
 def run(model, **settings):
-    graph = build_graph(model, load_settings({**ENV, **{k: str(v) for k, v in settings.items()}}), MemorySaver())
-    config = {"configurable": {"thread_id": "t"}}
+    loaded = load_settings({**ENV, **{k: str(v) for k, v in settings.items()}})
+    graph = build_graph(model, loaded, MemorySaver())
+    config = {"configurable": {"thread_id": "t"}, "max_concurrency": loaded.max_researchers, "recursion_limit": 10}
     return asyncio.run(graph.ainvoke({"market": MARKET}, config))
 
 
@@ -57,3 +58,62 @@ def test_planner_instructions_are_written_for_the_clients_sports_and_forbid_pred
     for word in ("soccer", "baseball", "tennis", "starting pitchers", "surface", "lineups", "odds"):
         assert word in text
     assert "never state a probability" in text
+
+
+def test_one_researcher_per_angle_running_in_parallel_within_the_cap():
+    model = FakeModel(angle_names=list("ABCDEF"), delay=0.1)
+    state = run(model, MAX_RESEARCHERS=3)
+    assert sorted(model.research_calls) == ["A", "B", "C"]  # only the kept angles
+    assert 1 < model.max_running <= 3  # parallel, but never above the cap
+    assert sorted(f["angle"] for f in state["findings"]) == ["A", "B", "C"]
+
+
+def test_findings_carry_claims_with_real_citations_and_clean_text():
+    model = FakeModel(angle_names=["Form"], lines={"Form": [("Team A won five straight", "https://bbc.test/x"), ("No source here", None)]})
+    f = run(model)["findings"][0]
+    first, second = f["claims"]
+    assert first == {"text": "Team A won five straight", "kind": "sourced",
+                     "sources": [{"url": "https://bbc.test/x", "title": "Page https://bbc.test/x"}]}
+    assert second["kind"] == "uncited" and second["sources"] == []
+
+
+def test_usage_is_collected_from_every_call():
+    state = run(FakeModel(angle_names=["A", "B"]))
+    assert len(state["usages"]) == 3  # planner + 2 researchers
+    assert [u["model"] for u in state["usages"]].count("gpt-5.4") == 2
+    assert sum(u["search_calls"] for u in state["usages"]) == 4
+
+
+def test_one_failing_researcher_does_not_stop_the_others(caplog):
+    caplog.set_level(logging.WARNING, logger="app.research")
+    state = run(FakeModel(angle_names=["A", "B", "C"], fail={"B"}))
+    assert sorted(f["angle"] for f in state["findings"]) == ["A", "C"]
+    assert state["errors"] == [{"angle": "B", "error": "Researcher call failed: boom for B"}]
+    assert "Researcher for angle 'B' failed" in caplog.text
+
+
+def test_every_researcher_failing_leaves_errors_and_no_findings():
+    state = run(FakeModel(angle_names=["A", "B"], fail={"A", "B"}))
+    assert state.get("findings", []) == [] and len(state["errors"]) == 2
+
+
+def test_an_unexpected_crash_is_recorded_and_logged_not_hidden(caplog):
+    class Crashy(FakeModel):
+        async def research(self, market, angle):
+            raise KeyError("oops")
+
+    state = run(Crashy(angle_names=["A"]))
+    assert state["errors"][0]["error"].startswith("KeyError")
+    assert "crashed" in caplog.text
+
+
+def test_an_answer_without_findings_is_an_error_but_still_counted_for_cost():
+    from app.research.schemas import ResearchOutput, TextSegment, Usage
+
+    class Chatty(FakeModel):
+        async def research(self, market, angle):
+            return ResearchOutput(segments=[TextSegment(text="I could not find anything useful.")], usage=Usage("gpt-5.4", 100, 0, 10, 1))
+
+    state = run(Chatty(angle_names=["A"]))
+    assert state["errors"] == [{"angle": "A", "error": "The answer contained no findings"}]
+    assert len(state["usages"]) == 2  # planner and the paid-for researcher call
