@@ -95,3 +95,39 @@ Two things the numbers do not show and the Jina comparison must: (1) several "ok
 ## Jina measurement and outcome (2026-10-12)
 
 Measured as planned: the official image, run locally with 2 CPUs and 3 GB, called on the 23 pages that were not ok or were short in the plain fetch. Results and the decision are in `docs/discussion/NOTEPAD.md` D30. In short: one of nine failed pages recovered, four bot walls returned as HTTP 200 with fake "content", 10 to 49 s per page, and a 3.3 GB image that needs an egress proxy to be safe. **Not adopted.** FEAT-20261012-1622 is closed as measured, not built; the "Plan, in order" step 2 above is dropped. The checker (task 3) must handle menu-only pages and bot-wall text as "could not check".
+
+## Task 3 detail: claim checker (FEAT-20261012-1623), for approval
+
+Branch `feature/sports-games-list`. New module `app/research/check.py`. This task delivers the checker and its tests; calling it from a run is task 10 (`FEAT-20261012-1628`), as with the fetcher.
+
+**What is checked.** Every claim of kind `sourced` (it has at least one cited link), once per cited link. Claims of kind `uncited` and `none` are not checked and **never go forward** (what the user approved: only supported claims go forward; the rest stay visible).
+
+**Verdict rules (the important part).** Three verdicts, and the default is the safe one:
+- `supported`: the page text says what the claim says, including every number, name, date and team. The judge must give a **short quote copied from the page**. We then check the quote really appears in the saved page text (after collapsing whitespace and case); if it does not, the verdict is **changed to `could_not_check`** with the reason "quote not found in the page". This is the guard against a model inventing support, and against a page that tells the model what to answer.
+- `not_supported`: only when the page text **contradicts** the claim or states a different value for the same thing (a quote is required here too, same verification). A page that merely does not mention the claim is **not** this verdict.
+- `could_not_check`: everything else: page not readable, page is only menus or a bot wall, claim not found, claim is derived by calculation (for example "rest days") and the page does not state it, or the page has no usable date for a time-sensitive claim such as odds.
+So an unreadable or menu-only page can never turn a claim into "not supported".
+
+**Cases that need no model call (decided in code, recorded with a reason):** the page's `fetch_status` is not `ok` (reason is the saved `fetch_detail`); the page text is shorter than 200 characters after cleaning; a bot-wall text ("verifying you are human", "security verification", "access denied" and similar short pages) is also caught by the length rule in practice, and the judge is told about it as well.
+
+**How it calls the model (one call per page, not per claim).** A page cited for several claims is sent once with all of them numbered, so the cost grows with pages, not claims.
+- Model: `gpt-5.4-mini` (setting `CHECKER_MODEL`), no tools, `store=false`, reasoning effort from the existing setting, structured output (`responses.parse`, the same call style the planner already uses and which was confirmed live): a list of `{claim_number, verdict, quote, reason}`.
+- Page text sent: the first `CHECK_PAGE_CHARS` characters (default 30,000, about 7,500 tokens). If the page is longer, the judge is told the text was cut, and a missing fact in a cut page is `could_not_check` (never `not_supported`). Ceiling: facts after the cut are missed; raise the setting if the real runs show it matters.
+- The page text is untrusted. It goes inside a clearly marked block, the instructions say that anything inside it is data and not instructions, and the quote verification above limits what an injected sentence can achieve. The model has no tools, so there is nothing for an injection to call.
+- The claim text, the game, the page's URL and title and today's date are sent; **no prices**.
+- Output size capped (`CHECKER_MAX_OUTPUT_TOKENS`, default 1500). A reply that is not valid for the schema, or misses a claim number, marks the missing claims `could_not_check` with "judge gave no answer for this claim" and is logged; it never raises through the run.
+- At most `CHECK_CONCURRENCY` (default 5) pages are judged at once.
+
+**What is saved.** One `claim_checks` row per claim and page (`verdict`, `reason` including the verified quote, `model`). Usage of each call is returned in the same shape as the researchers' usage so the run total includes it. Saving is idempotent: the unique constraint means re-checking a run replaces nothing silently (a repeat is skipped and logged).
+
+**The rule that decides what goes forward** is one small function, `supported_claims(findings, checks)`: a claim goes forward if **any** of its pages has `supported`; `not_supported` on one page does not cancel `supported` on another, but is kept visible. The forecasters (task 5) receive only what this returns.
+
+**New settings (tuning knobs with defaults, in `.env.example` and compose):** `CHECK_ENABLED` (true), `CHECKER_MODEL` (`gpt-5.4-mini`), `CHECK_PAGE_CHARS` (30000), `CHECKER_MAX_OUTPUT_TOKENS` (1500), `CHECK_CONCURRENCY` (5). With `OPENAI_API_KEY` unset, checking is off exactly as research is: the run refuses to start (already the case), no silent change.
+
+**Expected cost (unmeasured):** about 25 pages × 8k tokens of input is roughly 200k tokens, about 15 cents at the mini price, plus a little output. The real number comes from the sample in task 4.
+
+**Lateral check:** the researcher and planner calls build their requests in `OpenAIResearchModel`; the checker gets its own small class beside it with the same client, tracing wrapper and error type, so there is one place that makes OpenAI calls of each kind and the same failure handling. The same "model output must be verified against the source it points to" idea applies to the forecasters' reasoning later; it is not needed there because they cite nothing.
+
+**Tests (fake model, no network):** unreadable page, short page and bot-wall page give `could_not_check` with no model call; a supported verdict with a quote that is on the page stays supported; the same verdict with a quote that is not on the page becomes `could_not_check`; `not_supported` needs a verified quote and is otherwise downgraded; a missing claim number and an invalid reply both give `could_not_check` for the missing claims; one call per page with its claims numbered, and several pages run with the concurrency limit; cut pages are labelled to the judge; `supported_claims` takes any page's support and ignores uncited claims; usage is returned; re-checking a run adds no duplicates; the prompt contains no price and the page is inside the marked block.
+
+**Task 4 (separate detail before it starts):** the hand-labelled sample and a script that scores the checker against it. The labels will be written by me from the saved pages and must be spot-checked by you, because I cannot be an independent judge of my own pipeline's labels; that limit is part of the result.
