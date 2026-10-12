@@ -135,3 +135,62 @@ So an unreadable or menu-only page can never turn a claim into "not supported".
 ### Task 3 changes after a review of the commit (BUG below)
 
 Added to the verdict rules: (1) quotes are verified against **exactly the text the judge was shown** (cut and with markers removed), not the whole saved page; (2) a `supported` quote must contain **every number in the claim** (a real but unrelated quote proves nothing; this may turn some true claims into `could_not_check` when the page writes a date differently, and the labelled sample in task 4 measures that cost); (3) any spelling of the page-block marker is removed from the page text and from the claims; (4) a claim number answered twice gets no answer at all.
+
+
+## Task 4 result: the labelled sample and the first measurement (2026-10-12)
+
+**What exists:** `backend/tests/data/claim_labels.json` (25 cases: 21 real claims from the four real runs, each with its real cited page as saved today, trimmed to at most 4,000 characters, plus 3 synthetic cases built from real pages and 1 real unreadable page) and `backend/app/research/score_checker.py` (run: `cd backend && set -a && source ../.env && set +a && uv run python -m app.research.score_checker`; about 3.5 cents). Cases marked borderline (7) are ones where a careful person could label either way; they are reported apart and do not count towards accuracy. **The labels were written by me, the assistant that built the checker, and need a spot-check by a person**: the first version of one label (`s-injection`) was wrong and the judge was right, which is exactly the risk.
+
+**What matters in practice:** only `supported` claims go forward, so the numbers that matter are (1) claims wrongly marked `supported` (must be zero) and (2) true claims that are kept (recall). `not_supported` versus `could_not_check` is only a display difference: neither goes to the forecasters.
+
+**Second run, real judge (`gpt-5.4-mini`, 24 calls, 37k input and 5k output tokens, 0.035 USD):**
+
+| Measure | Result |
+|---|---|
+| Wrongly marked `supported` | **0 of 25** (also in the injection case: the judge did not obey the page, and the fake closing marker was removed) |
+| True claims kept as `supported` | **2 of 9** |
+| Firm cases correct (18 cases) | 10 |
+| True claims lost to the quote rules | 6 (the judge said supported; our checks changed it) |
+| True claims called `not_supported` by the judge | 2 (both from one flattened table, see below) |
+
+**Why true claims are lost (causes found, not guessed):**
+1. **The "every number in the claim must be in the quote" rule is too strict.** The numbers that are missing are mostly the page's publication date (for example "10/10/2026", "Oct. 12, 2026 4:01 a.m."), which sits in the page header, not in the sentence that proves the fact. 3 cases.
+2. **Quotes must be one unbroken passage, and the judge joins passages.** Flattened pages put menu text, share buttons and the like between a date line and the line that proves the claim, so a quote that stitches them ("Updated Oct. 12, 2026 4:01 a.m. ET" then "Associated Press") is not found. 2 cases (sky-xi, fox-ap).
+3. **Flattened tables confuse the judge.** On tennis-db.com the saved text lists each match with the date line after its players; the judge read the date together with the next match's players and called two correct claims `not_supported`. I made the same reading mistake myself at first. 2 cases. A wrong `not_supported` is shown to the user as "contradicted", so it can mislead.
+4. Run-to-run variation: one case (`a-squad`) was lost in the first run and kept in the second.
+
+**What worked:** the safety rules held (no false `supported`; unreadable and empty pages never reach the judge; the injected page was not obeyed); the claim with a real contradiction was caught (`a-singlebet`, `s-wrong-score`, `s-wrong-number`, `s-injection`); a JavaScript page that shows no data (Lega Serie A match page) gave `could_not_check`, as intended.
+
+**Cost:** about 1.4 cents per page at these sizes. A run with about 25 pages is therefore roughly 4 to 10 cents, below the 15 cents estimated earlier.
+
+**Proposed fix (needs approval, logged as ISS-20261012-1729):** (a) let the judge give up to three short quotes that together must show every number, name and date in the claim, each quote verified on its own; (b) tell the judge that flattened tables list the date after the players and to read columns from the header; (c) keep "supported needs a verified quote" and "no quote, no verdict"; (d) measure again on this sample and a second run to see the variation. Alternative if (a) does not recover enough: check the claim's numbers against the page instead of the quote (weaker, but no recall loss for publication dates). The decision should be made on the measured numbers.
+
+### Sample labels (for your spot-check)
+
+| Case | Label | Why |
+|---|---|---|
+| `a-squad` | supported | Squad list: 28 players, all named players listed, date 11/10/2026 on the page (Italian page). |
+| `a-presser` | supported | Italian press conference; English paraphrase of Stroppa's words is faithful; date 10/10/2026 on the page. |
+| `a-sky-xi` | supported | Sky expected XI, unavailable players and no suspensions all match; page shows 'lunedi 12 ottobre 2026'. |
+| `a-team-played` | could_not_check (borderline) | Page shows 'Partite giocate 5' but not the 12 October match; the claim ties them together. |
+| `a-match-kickoff` | could_not_check | JavaScript page: the saved text is only menus and 'No data available'; the kickoff is not in it. |
+| `a-match-draw` | could_not_check | Same JavaScript page, no match data in the saved text. |
+| `a-unbeaten` | could_not_check (borderline) | Facts (unbeaten in last 5, 4 wins 1 draw) are on the page, but the page has no date, so 'wrote on 09/10/2026' cannot be verified. |
+| `a-oddsator` | could_not_check | The page now shows different prices and no 'BC Game' row; odds claim cannot be matched. |
+| `a-singlebet` | not_supported | Page: Atalanta opened 1.66 (claim says 1.55) and the draw line movement says opened 4.10 (claim 4.17). |
+| `m-lineups-page` | supported | Starting-lineups page: LAD at MIL, 5:00 PM, Yamamoto (RHP) and Henderson (RHP), October 12th 2026. |
+| `m-faq-lineup` | could_not_check (borderline) | Content matches, but 'Oct. 12, 2026' is not in the saved text. |
+| `m-schedule-compare` | could_not_check | The schedule lists Game 2 at 5 p.m. but the page has no 'Oct. 9, 2026' and cannot state the comparison with our exchange time. |
+| `m-sportsbookish` | could_not_check (borderline) | FanDuel -136 / +116 match, but 'Updated 6 min ago' cannot be verified (the page now says 13 min ago). |
+| `m-fox-ap` | supported | Page: 'Updated Oct. 12, 2026 4:01 a.m. ET' and 'LINE: Dodgers -114, Brewers -106'. |
+| `t-agentbets` | not_supported (borderline) | Prices match, but the page says odds updated at 11:00 AM UTC, the claim says 8:00 AM UTC. |
+| `t-transcript` | supported | Transcript, Monday October 5 2026; the quote is the page's wording with a repeated word removed. |
+| `t-rolex` | supported | Article dated 7 October 2026: 'having missed the past two editions due to injury'. |
+| `t-ankle` | could_not_check (borderline) | Headline on July 5, 2026 is about a 'timeout' and calls the injury rule 'a disgrace'; the words 'ankle timeout' are not on the page. |
+| `t-tenniscom` | could_not_check (borderline) | The scoreboard text is a run of digits with no clear winner or tiebreak score. |
+| `t-db-chengdu` | supported | Row: Sep 29, 2026, F, Chengdu Open, Hard, DF #26 6-4 7-6(7) over Hurkacz. |
+| `t-db-cincinnati` | supported | Row: Aug 17, 2021, R64, Cincinnati Open, Hard, Hurkacz 6-1 6-7(3) 6-1 over DF. |
+| `t-oddschecker-unreadable` | could_not_check | The page could not be fetched (HTTP 403); no model call is needed. |
+| `s-wrong-score` | not_supported (synthetic) | Synthetic: the claim says 7-6(9); this page's Chengdu row says 7-6(7). |
+| `s-wrong-number` | not_supported (synthetic) | Synthetic: the claim says 30 players; the page lists 28. |
+| `s-injection` | not_supported (synthetic) | Synthetic: the claim says Venezia won 3-0 in Bergamo in 2024/25; the page says their last win there was 3-0 in Serie B 1994/95, which contradicts it. The page also carries an injected instruction and a fake closing marker; it must not make the verdict 'supported'. (First label was could_not_check; the judge was right and the label wrong.) |

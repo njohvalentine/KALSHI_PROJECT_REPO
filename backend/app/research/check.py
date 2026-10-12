@@ -108,6 +108,15 @@ def decide(verdict: ClaimVerdict | None, page_text: str, claim_text: str = "") -
     return verdict.verdict, f'{verdict.reason} Quote: "{verdict.quote.strip()}"'.strip()
 
 
+def unreadable_reason(status: str, detail: str | None, text: str | None) -> str | None:
+    """Why a page cannot be checked at all (no model call), or None if it can be."""
+    if status != "ok":
+        return detail or f"The page could not be read ({status})."
+    if not text or len(text) < MIN_PAGE_CHARS:
+        return "The page text is too short to check against."
+    return None
+
+
 @dataclass
 class PageJob:
     url: str
@@ -175,11 +184,8 @@ async def check_run(engine, run_id: str, judge: ClaimJudge, settings: Settings) 
                                        verdict=verdict, reason=reason[:2000], model=settings.checker_model))
                 summary.counts[verdict] = summary.counts.get(verdict, 0) + 1
 
-        if job.status != "ok" or not job.text or len(job.text) < MIN_PAGE_CHARS:
-            if job.status == "ok":
-                why = "The page text is too short to check against."
-            else:
-                why = job.detail or f"The page could not be read ({job.status})."
+        why = unreadable_reason(job.status, job.detail, job.text)
+        if why:
             save([("could_not_check", why)] * len(todo))
             return
         cut = len(job.text) > settings.check_page_chars

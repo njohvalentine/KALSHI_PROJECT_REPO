@@ -448,6 +448,15 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Revisit when:** the claim-check results show too many lost claims on pages that matter, or PDFs turn up often (none in the 46 sampled). Then reconsider a reader service, with the egress proxy.
 - **Where:** `docs/specs/FEAT-20261012-1620-milestone-3-prediction.md`; raw comparison kept only in this note (the data was read from the local database, nothing was written to it).
 
+### D31. Claim checker measured on a labelled sample: safe, but loses most true claims (2026-10-12)
+
+- **What was built:** the checker (`app/research/check.py`: one call per page, verdict kept only with a quote verified on the page the judge saw, safe default `could_not_check`) and a labelled sample of 25 cases with a scoring command (`app.research.score_checker`, about 3.5 cents).
+- **Result with the real judge (`gpt-5.4-mini`):** 0 of 25 wrongly marked `supported` (including a page that tried to give the judge instructions); only 2 of 9 true claims kept as `supported`. Causes: the "all numbers of the claim in the quote" rule drops publication dates (3 cases); quotes the judge stitched from separate passages are not found on flattened pages (2); the judge misread a flattened table and called two correct claims `not_supported` (2); plus run-to-run variation. Cost about 1.4 cents per page.
+- **What matters:** only `supported` goes forward, so false `supported` must stay at zero and recall is what we tune; `not_supported` against `could_not_check` is a display difference.
+- **Caveat:** the labels were written by the assistant and need a person's spot-check (one of my labels was wrong and the judge right).
+- **Next:** ISS-20261012-1729 (multi-quote, table hint, re-measure). The alternative is to check the claim's numbers against the page instead of the quote.
+- **Where:** `docs/specs/FEAT-20261012-1620-milestone-3-prediction.md` (task 4 result, label table), `backend/tests/data/claim_labels.json`.
+
 ## 4. Environment
 Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules apply: project-local installs only, ask before adding any dependency, spec and approval before code.
 
