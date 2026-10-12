@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response
 from sqlalchemy import create_engine, text
 
+from app.auth import router as auth_router
 from app.config import Settings, load_settings
 
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +21,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
         app.state.engine.dispose()
 
-    app = FastAPI(title="Valentine backend", lifespan=lifespan)
+    # The interactive API docs are off: they would publish the full endpoint list to anyone.
+    app = FastAPI(title="Valentine backend", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app.include_router(auth_router)
 
     @app.get("/health")
     def health(response: Response):

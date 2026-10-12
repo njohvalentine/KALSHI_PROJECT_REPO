@@ -1,43 +1,13 @@
-import os
-import uuid
-from pathlib import Path
-
 import pytest
 from alembic import command
-from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.engine import make_url
+from sqlalchemy import inspect, text
 
-pytestmark = pytest.mark.skipif(
-    "TEST_DATABASE_URL" not in os.environ, reason="needs a Postgres, see TEST_DATABASE_URL"
-)
+from tests.conftest import alembic_config as _config
+from tests.conftest import needs_db
+
+pytestmark = needs_db
 
 TABLES = {"users", "sessions", "forecasts", "source_pages"}
-ROOT = Path(__file__).resolve().parent.parent
-
-
-@pytest.fixture
-def fresh_db(monkeypatch):
-    """A throwaway empty database, so tests never touch real data."""
-    admin_url = make_url(os.environ["TEST_DATABASE_URL"].replace("postgresql://", "postgresql+psycopg://", 1))
-    name = f"migtest_{uuid.uuid4().hex[:10]}"
-    admin = create_engine(admin_url, isolation_level="AUTOCOMMIT")
-    with admin.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{name}"'))
-    url = admin_url.set(database=name)
-    monkeypatch.setenv("DATABASE_URL", url.render_as_string(hide_password=False).replace("+psycopg", "", 1))
-    engine = create_engine(url)
-    yield engine
-    engine.dispose()
-    with admin.connect() as conn:
-        conn.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
-    admin.dispose()
-
-
-def _config() -> Config:
-    cfg = Config(str(ROOT / "alembic.ini"))
-    cfg.set_main_option("script_location", str(ROOT / "alembic"))
-    return cfg
 
 
 def test_upgrade_creates_tables_and_downgrade_removes_them(fresh_db):
