@@ -173,9 +173,67 @@ def test_parallel_wrong_logins_cannot_beat_the_lockout(make_client, caplog):
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         codes = list(pool.map(attack, clients))
-    assert set(codes) == {401}
+    assert set(codes) <= {401, 429}  # extra simultaneous requests are refused, never let in
     with make_client.engine.connect() as conn:
         failed, locked = conn.execute(text("SELECT failed_attempts, locked_until FROM users")).one()
     assert locked is not None and locked > datetime.now(UTC) + timedelta(minutes=10)
     assert failed == 0
     assert caplog.text.count("Account locked") == 1  # lost updates would lock more than once or never
+
+
+def test_no_row_lock_or_connection_is_held_while_a_password_is_checked(make_client, monkeypatch):
+    import app.auth as auth_module
+    from sqlalchemy import create_engine
+
+    real_verify = auth_module.verify_password
+    seen = {}
+
+    def spying_verify(password, password_hash):
+        engine = client.app.state.engine
+        seen["checked_out"] = engine.pool.checkedout()
+        # Would raise at once if the login still held a lock on the user row.
+        with create_engine(make_client.engine.url).begin() as conn:
+            conn.execute(text("SELECT id FROM users WHERE email = :e FOR UPDATE NOWAIT"), {"e": EMAIL})
+        seen["row_free"] = True
+        return real_verify(password, password_hash)
+
+    monkeypatch.setattr(auth_module, "verify_password", spying_verify)
+    with make_client() as client:
+        assert login(client).status_code == 200
+    assert seen == {"checked_out": 0, "row_free": True}
+
+
+def test_password_changed_during_the_check_is_refused(make_client, monkeypatch):
+    import app.auth as auth_module
+    from sqlalchemy.orm import Session as DbSession
+
+    real_verify = auth_module.verify_password
+
+    def verify_then_change(password, password_hash):
+        ok = real_verify(password, password_hash)
+        with DbSession(make_client.engine) as db:
+            set_password(db, EMAIL, "a brand new password")  # happens after the check, before the lock
+        return ok
+
+    monkeypatch.setattr(auth_module, "verify_password", verify_then_change)
+    with make_client() as client:
+        assert login(client).status_code == 401
+        with make_client.engine.connect() as conn:
+            assert conn.execute(text("SELECT count(*) FROM sessions")).scalar_one() == 0
+
+
+def test_too_many_simultaneous_logins_get_429_and_the_rest_of_the_app_still_answers(make_client):
+    import app.auth as auth_module
+
+    with make_client() as client:
+        taken = [auth_module._login_slots.acquire(blocking=False) for _ in range(auth_module.MAX_CONCURRENT_LOGINS)]
+        try:
+            r = login(client)
+            assert r.status_code == 429 and r.headers["retry-after"] == "1"
+            assert "set-cookie" not in r.headers
+            assert client.get("/health").status_code == 200  # other endpoints are unaffected
+            assert client.get("/auth/me").status_code == 401
+        finally:
+            for _ in filter(None, taken):
+                auth_module._login_slots.release()
+        assert login(client).status_code == 200  # slots are free again

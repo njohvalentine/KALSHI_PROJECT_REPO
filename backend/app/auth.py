@@ -1,6 +1,7 @@
 """Single-user sign-in: login, logout, and the dependency that protects endpoints."""
 
 import logging
+import threading
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
@@ -60,6 +61,13 @@ class LoginBody(BaseModel):
     password: str
 
 
+# At most this many password checks run at once in this process. Hashing is CPU and memory heavy
+# and /auth/login is open to anyone, so extra requests are refused at once (429) instead of
+# queueing. A tuning constant with a safe default (CLAUDE.md Module 4).
+MAX_CONCURRENT_LOGINS = 4
+_login_slots = threading.BoundedSemaphore(MAX_CONCURRENT_LOGINS)
+
+
 @router.post("/login", dependencies=[Depends(require_requested_with)])
 def login(
     body: LoginBody,
@@ -67,18 +75,44 @@ def login(
     db: DbSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
+    if not _login_slots.acquire(blocking=False):
+        log.warning("Sign-in refused: %d password checks already running", MAX_CONCURRENT_LOGINS)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many sign-in attempts at once. Try again in a moment.",
+            headers={"Retry-After": "1"},
+        )
+    try:
+        return _login(body, response, db, settings)
+    finally:
+        _login_slots.release()
+
+
+def _login(body: LoginBody, response: Response, db: DbSession, settings: Settings):
     email = body.email.strip().lower()
-    # FOR UPDATE: parallel logins for one account queue up, so each sees the committed failure
-    # count and lock state. Without it, simultaneous guesses overwrite each other's counts.
-    user = db.scalar(select(User).where(User.email == email).with_for_update())
 
-    # Always do one password check, so timing is the same for unknown emails and locked accounts.
-    password_ok = verify_password(body.password, user.password_hash if user else DUMMY_HASH)
+    # 1. Read what is needed, then end the transaction so no connection is held while hashing.
+    found = db.execute(select(User.id, User.password_hash).where(User.email == email)).first()
+    db.rollback()
+
+    # 2. Check the password with no database lock and no connection held. One check always runs,
+    #    so timing is the same for unknown emails and locked accounts.
+    password_ok = verify_password(body.password, found.password_hash if found else DUMMY_HASH)
+
+    if found is None:
+        raise HTTPException(status_code=401, detail=GENERIC_LOGIN_ERROR)
+
+    # 3. Short critical section. FOR UPDATE makes parallel logins for one account take turns, so
+    #    each sees the committed failure count and lock state (simultaneous guesses cannot
+    #    overwrite each other's counts).
+    user = db.scalar(select(User).where(User.id == found.id).with_for_update())
     current = now()
-    locked = user is not None and user.locked_until is not None and user.locked_until > current
+    locked = user is None or (user.locked_until is not None and user.locked_until > current)
+    # A password changed while we were hashing must not let the old password in.
+    changed = user is not None and user.password_hash != found.password_hash
 
-    if user is None or locked or not password_ok:
-        if user is not None and not locked and not password_ok:
+    if user is None or locked or changed or not password_ok:
+        if user is not None and not locked and not changed and not password_ok:
             user.failed_attempts += 1
             if user.failed_attempts >= settings.login_max_attempts:
                 user.locked_until = current + timedelta(minutes=settings.login_lockout_minutes)
