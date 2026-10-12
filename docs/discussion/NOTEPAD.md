@@ -304,6 +304,16 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Local setup:** `.env` (git-ignored) has local passwords and a generated secret; a demo account `demo@example.com` was created in the local Docker database for testing and should be removed or have its password changed before real use. The stack runs on 127.0.0.1 ports 3000 (web), 8000 (backend), 55432 (database for tests).
 - **Not done / next:** the Milestone 1 key check run by the user with the client's key; first live Kalshi check; Milestone 2 (research stage). Milestone docs (`MILESTONES.md`) still lack the login page and Docker Compose setup as explicit items; update when convenient.
 
+### D21. Client answers: market types and OpenAI credit (2026-10-12)
+- **Market types (client, in chat):** "I mostly do soccer, baseball and tennis." So the client trades **sports** markets. This answers the open market-type question and puts us in the category flagged as legally contested in section 2 (state regulators and appeals courts, as of late Sep 2026). **Client's US state is still unknown** and matters for what they can trade.
+- **OpenAI credit:** the client added credit to the OpenAI key. Not verified by us; no key has been shared with the assistant and none should be (it goes in the local `.env`).
+- **Effects on the plan (my notes, not yet agreed):**
+  - Research angles for these sports are specific: injuries and lineups, recent form, head-to-head, venue or surface (tennis), starting pitchers and weather (baseball), plus the betting odds from sportsbooks as an outside price to compare with Kalshi. The lead agent's planning prompt should be written for these three sports rather than generic.
+  - Sports markets resolve in days and facts change fast (lineups are announced close to the start), so re-checks (D15) matter more than for economics markets, and paper-trading results arrive sooner.
+  - Sports prices are usually efficient (sportsbooks already set sharp lines), so beating the Kalshi price is likely harder than the general research suggested. The three-way comparison in D6 is more important, not less.
+  - Backtests have the leakage problem in D6, especially bad for sports because results are widely published.
+- **Open:** client's state; whether the client trades both match winners and other sports contract types (totals, props); approval of the Milestone 2 task list and the three questions asked (page-saving depth, model choice, web app in this milestone).
+
 ---
 
 ## 4. Environment
@@ -320,7 +330,7 @@ Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules ap
 ---
 
 ## 6. Questions for the client
-1. Which market types? (Not answered yet; stay open.)
+1. Which market types? Answered: soccer, baseball and tennis (D21).
 2. Which US state are they in? (Not answered yet.)
 3. What should "help" cover: finding bets, researching, sizing, or all?
 4. Can the OpenAI key use the web search tool? (D7 depends on it.)
