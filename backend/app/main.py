@@ -7,6 +7,8 @@ from sqlalchemy import create_engine, text
 
 from app.auth import router as auth_router
 from app.config import Settings, load_settings
+from app.kalshi import KalshiClient
+from app.markets import router as markets_router
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("app")
@@ -18,12 +20,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Fails here, before serving anything, if required settings are bad.
         app.state.settings = settings or load_settings(os.environ)
         app.state.engine = create_engine(app.state.settings.sqlalchemy_url, pool_pre_ping=True)
+        app.state.kalshi = KalshiClient(app.state.settings.kalshi_api_base)
         yield
+        app.state.kalshi.close()
         app.state.engine.dispose()
 
     # The interactive API docs are off: they would publish the full endpoint list to anyone.
     app = FastAPI(title="Valentine backend", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.include_router(auth_router)
+    app.include_router(markets_router)
 
     @app.get("/health")
     def health(response: Response):
