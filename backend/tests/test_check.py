@@ -99,6 +99,16 @@ def test_supported_needs_the_claims_numbers_in_the_quote():
     assert decide(v(1, "not_supported", "Newcastle beat Arsenal 2-1 on Saturday"), TEXT_A, "Newcastle lost 3-0")[0] == "not_supported"
 
 
+def test_numbers_just_outside_the_quote_count_but_only_just():
+    from app.research.check import quote_context
+
+    page = "Header: 12 October 2026\n" + "x " * 150 + "Atalanta 2-1 Venezia\n" + "y " * 150
+    context = quote_context("Atalanta 2-1 Venezia", page, radius=50)
+    assert "Atalanta 2-1 Venezia" in context and "12 October" not in context and context.count("x") <= 26  # a window, not the page
+    assert "12 October" in quote_context("Atalanta 2-1 Venezia", "Header: 12 October 2026\nAtalanta 2-1 Venezia", radius=50)
+    assert quote_context("not on the page at all", page) == ""
+
+
 def test_numbers_in_slash_dates_count_only_as_the_year():
     from app.research.check import _numbers
     assert _numbers("Squad published on 11/10/2026: 28 players") == {"2026", "28"}
@@ -109,7 +119,10 @@ def test_several_quotes_together_can_carry_the_claims_numbers_but_each_must_be_o
     claim_text = "Newcastle beat Arsenal 2-1 on 10 October 2026"
     fact, date = "Newcastle beat Arsenal 2-1 on Saturday", "10 October 2026 at St James"
     assert decide(v(1, "supported", fact, "ok", date), TEXT_A, claim_text)[0] == "supported"  # numbers split over two quotes
-    assert decide(v(1, "supported", fact), TEXT_A, claim_text)[0] == "could_not_check"  # the date is missing from the only quote
+    assert decide(v(1, "supported", fact), TEXT_A, claim_text)[0] == "supported"  # the date is right next to the quote on the page
+    far = "Newcastle beat Arsenal 2-1 on Saturday at the ground. " + "Nothing relevant here at all. " * 20 + "Match date: 10 October 2026."
+    assert decide(v(1, "supported", fact), far, claim_text)[0] == "could_not_check"  # the date is far from the quote
+    assert decide(v(1, "supported", fact, "ok", "Match date: 10 October 2026"), far, claim_text)[0] == "supported"  # unless it is quoted
     verdict, reason = decide(v(1, "supported", fact, "ok", "10 October 2026 at Wembley Stadium"), TEXT_A, claim_text)
     assert verdict == "could_not_check" and "not found" in reason  # one invented quote spoils the verdict
     four = v(1, "supported", fact, "ok", date, "Newcastle beat Arsenal", "St James Park on Saturday")

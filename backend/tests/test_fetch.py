@@ -242,6 +242,16 @@ def test_a_table_row_stays_on_one_line_with_its_cells_separated():
     ]
 
 
+def test_hostile_runs_of_bars_and_cells_cannot_make_extraction_slow():
+    import time
+
+    started = time.monotonic()
+    fetch.extract_text("<p>" + "|" * 400_000 + "x</p>")
+    fetch.extract_text("<table><tr>" + "<td></td>" * 100_000 + "<td>end</td></tr></table>")
+    fetch.extract_text("<p>" + "| " * 300_000 + "x</p>")
+    assert time.monotonic() - started < 3  # quadratic matching took minutes on inputs this size
+
+
 def test_text_outside_tables_and_lists_are_unchanged_by_the_table_rule():
     _, text = fetch.extract_text("<h1>Title</h1><ul><li>One</li><li>Two</li></ul><div>A</div><div>B</div>")
     assert text.split("\n") == ["Title", "One", "Two", "A", "B"]

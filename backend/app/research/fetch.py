@@ -170,7 +170,7 @@ def extract_text(html: str) -> tuple[str, str]:
     parser.feed(html)
     parser.close()
     lines = (re.sub(r"[ \t\r\f\v]+", " ", line).strip() for line in "".join(parser.parts).split("\n"))
-    lines = (re.sub(r"(\| ?)+$", "", line).strip() for line in lines)  # a row's last cell leaves no trailing bar
+    lines = (line.rstrip(" |").strip() for line in lines)  # a row's last cell leaves no trailing bar (no regex: page text is hostile input)
     lines = (re.sub(r"(?:\| ){2,}", "| ", re.sub(r"^\| ", "", line)) for line in lines)  # empty cells do not stack bars
     text = "\n".join(line for line in lines if line and line != "|")
     return re.sub(r"\s+", " ", parser.title).strip(), text

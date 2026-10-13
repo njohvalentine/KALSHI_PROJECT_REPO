@@ -94,11 +94,30 @@ def _numbers(text: str) -> set[str]:
     return set(re.findall(r"\d+(?:[.,]\d+)?", text))
 
 
+CONTEXT_CHARS = 200
+
+
+def quote_context(quote: str, page_text: str, radius: int = CONTEXT_CHARS) -> str:
+    """The page text around each piece of a quote (radius characters either side), so a number that sits just
+    outside the quote (a date in a heading, a round in a caption) still counts for the claim."""
+    page = page_text.translate(_QUOTES)
+    around = []
+    for piece in re.split(r"\.\.\.|\u2026", quote.translate(_QUOTES)):
+        words = piece.split()
+        if not words:
+            continue
+        found = re.search(r"\s+".join(re.escape(w) for w in words), page, re.IGNORECASE)
+        if found:
+            around.append(page[max(found.start() - radius, 0): found.end() + radius])
+    return " ".join(around)
+
+
 def decide(verdict: ClaimVerdict | None, page_text: str, claim_text: str = "") -> tuple[str, str]:
     """Turns the judge's answer for one claim into the saved (verdict, reason). Anything unbacked is could_not_check.
 
-    `page_text` must be exactly the text the judge was shown. The quotes of a `supported` verdict must
-    together contain every number in the claim: real but unrelated quotes prove nothing."""
+    `page_text` must be exactly the text the judge was shown. Every number in the claim of a `supported`
+    verdict must be in its quotes or in the page text right around them (CONTEXT_CHARS either side): real
+    but unrelated quotes prove nothing, while a date in a heading just above the quote still counts."""
     if verdict is None:
         return "could_not_check", "The judge gave no answer for this claim."
     if verdict.verdict == "could_not_check":
@@ -108,8 +127,10 @@ def decide(verdict: ClaimVerdict | None, page_text: str, claim_text: str = "") -
         return "could_not_check", f"The judge said {verdict.verdict} without one to {MAX_QUOTES} quotes from the page."
     if not all(quote_is_on_page(q, page_text) for q in quotes):
         return "could_not_check", f"The judge said {verdict.verdict}, but a quote was not found in the page."
-    if verdict.verdict == "supported" and not _numbers(claim_text) <= _numbers(" ".join(quotes)):
-        return "could_not_check", "The judge said supported, but its quotes do not contain all the numbers in the claim."
+    if verdict.verdict == "supported":
+        near = " ".join(quotes) + " " + " ".join(quote_context(q, page_text) for q in quotes)
+        if not _numbers(claim_text) <= _numbers(near):
+            return "could_not_check", "The judge said supported, but the numbers of the claim are not in its quotes or right around them."
     return verdict.verdict, f'{verdict.reason} Quotes: ' + " / ".join(f'"{q}"' for q in quotes)
 
 
