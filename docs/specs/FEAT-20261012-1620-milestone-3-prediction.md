@@ -534,3 +534,38 @@ Built: a number of the claim now counts if it is in the judge's quotes or within
 Claims are now short (average 104 and 89 characters against 232 and 205), more numerous, and the "looked today" phrases fell from 13 of 21 claims to 2 of 35 in the Manchester United game and stayed at 0 in the other. Cost per run stayed about 0.40 USD. Replay of the 55 saved claims with the year rule: supported 15 before and after, one new support (a page date without a year) offset by judge variation; the labelled sample again had 0 wrongly supported (4 to 5 of 9 kept, within the usual variation).
 
 **Limits:** one run per game, and research varies from run to run, so these are signals, not proof; the 1 of 14 start could itself have been unlucky. Unchanged losses: pages that are menus to the plain fetch, PDFs, blocked bookmaker pages. Not changed: forecasters are still given only supported claims; with 7 and 10 supported claims the evidence is no longer "thin" by the placeholder rule of 5.
+
+## More market types than the game winner (FEAT-20261013-0907), for approval
+
+Branch `feature/sports-games-list`. The client asked for probabilities for every outcome and for other Kalshi markets: win, loss, draw, total goals or runs, both teams to score, "over 1.5 goals". This section records what Kalshi offers (read live on 2026-10-13, public calls) and proposes the first set.
+
+### What Kalshi offers per game (companion events share the game's date-and-teams suffix)
+
+| Sport | Companion events found | Shape |
+|---|---|---|
+| Soccer (Premier League and Champions League checked) | `KX<LEAGUE>TOTAL` total goals; `KX<LEAGUE>BTTS` both teams to score; `KX<LEAGUE>SPREAD` team wins by more than 1.5 or 2.5; `KXUCL1H` first-half winner and `KXUCLTCORNERS` team corners (Champions League only) | totals: 2 to 6 lines "Over 0.5 ... 5.5 goals" (not exclusive); BTTS: one yes/no market; spread: 4 markets (each team, 1.5 and 2.5); first half: 3 exclusive outcomes |
+| Baseball (MLB checked) | `KXMLBTOTAL` total runs (11 lines); `KXMLBSPREAD` (6); `KXMLBRFI` first-inning run (1); `KXMLBF5` first five innings (3, with Tie); `KXMLBTEAMTOTAL` team totals (14) | lines, not exclusive |
+| Tennis (ATP checked) | `KXATPEXACTMATCH` exact score 2-0 or 2-1 for each player (4, exclusive); total sets, total games and spreads are series that exist but had no event for the match checked | |
+
+Each market has `strike_type` and `floor_strike` (for example 2.5), so lines can be ordered exactly. Liquidity varies a lot: some lines show 10 contracts at the best price and almost no volume, others tens of thousands. The existing "enough contracts at the price" rule handles that.
+
+### Proposal: first set
+
+**Soccer:** total goals, both teams to score, spread. **Baseball:** total runs, spread. These are the types the client named (win, total, "over 1.5", both teams to score) plus the spread, which the same code handles. **Not in the first set (the same mechanism adds them later, one line each):** first-half and first-five-innings winners, team corners, first-inning run, team totals, tennis exact score and tennis totals.
+
+### How it would work
+
+1. **One run per game covers all of them.** At run start, from the winner event `KX<L>GAME-<SUFFIX>` we try the companion events `KX<L><TYPE>-<SUFFIX>`; one that does not exist is simply not offered (shown as such, never guessed). 3 to 5 extra read calls.
+2. **One research pass, one forecaster call per forecaster for all markets of the game**, so the numbers can be consistent with each other. The prompt lists the markets in groups (winner; total; both teams to score; margin) with numbered lines; the forecaster returns one probability per market. The planner is told that scoring is also being forecast, so some angle should cover goals or runs scored and conceded (and, in baseball, the starting pitchers' recent runs allowed). The research cost does not change.
+3. **Checks in code, beyond the existing ones:** within the totals, the probability of "over" must not rise with a higher line; the same for each team's spread lines; a team's "wins by more than 1.5" cannot exceed its win probability; both-teams-to-score cannot exceed "over 1.5 goals". Small violations (up to 0.03) are fixed by lowering the offending number (the larger of two inconsistent numbers is clipped to the smaller), and the run records that it did; larger ones make that forecaster's answer invalid, as today. Medians of consistent answers stay consistent.
+4. **Comparison, records, scoring:** per market exactly as now (executable ask, fee, worst-case forecaster, flag). The fee is read per series, because companion series carry their own fee type and multiplier. `outcome_records` gets a `market_kind` column (winner, total, btts, spread) and `score-records` prints the scores per kind, because the forecasts may be good for one kind and poor for another.
+5. **Pages:** the result page gets one table per kind with Kalshi's own market names ("Over 2.5 goals scored", "Atletico wins by more than 1.5 goals"); the Games list stays on the winner.
+
+### Cost and limits
+
+Forecaster prompts get longer (up to about 40 markets) but the number of calls does not change: about +1 to 2 cents per run. **The risk is quality, not cost:** a language model's probability for "over 2.5 goals" may be worse than its win probability; the per-kind scoring exists to show that. No sizing, no orders.
+
+### Questions for you before I build
+
+1. Is the first set right (soccer: total, both teams to score, spread; baseball: total, spread), or do you want the first-half, first-five-innings, corners, first-inning run or tennis markets in it too?
+2. The client's "no tie" is not a separate Kalshi market in what I found (the Tie market's "no" side is the same bet). Should I tell him that, or did he mean something else?
