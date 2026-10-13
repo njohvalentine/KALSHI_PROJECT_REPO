@@ -100,6 +100,8 @@ class Settings:
     edge_min: float
     min_supported_claims: int
     min_ask_size: float
+    record_baseline: bool
+    resolve_after_hours: float
 
     @property
     def research_enabled(self) -> bool:
@@ -245,6 +247,9 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     min_supported_claims = _parse_positive_int("MIN_SUPPORTED_CLAIMS", env.get("MIN_SUPPORTED_CLAIMS", "5"), problems)
     min_ask_size = _parse_positive_float("MIN_ASK_SIZE", env.get("MIN_ASK_SIZE", "10"), problems)
 
+    record_baseline = _parse_bool("RECORD_BASELINE", env.get("RECORD_BASELINE", "true"), problems)
+    resolve_after_hours = _parse_positive_float("RESOLVE_AFTER_HOURS", env.get("RESOLVE_AFTER_HOURS", "3"), problems)
+
     if problems:
         raise SettingsError("Invalid settings:\n- " + "\n- ".join(problems))
 
@@ -303,4 +308,6 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         edge_min=edge_min,
         min_supported_claims=min_supported_claims,
         min_ask_size=min_ask_size,
+        record_baseline=record_baseline,
+        resolve_after_hours=resolve_after_hours,
     )

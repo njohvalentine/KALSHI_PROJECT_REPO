@@ -62,6 +62,39 @@ def _read_password(from_stdin: bool) -> str:
     return first
 
 
+def _records_command(args) -> int:
+    from datetime import UTC, datetime
+
+    from app.config import SettingsError, load_settings
+    from app.kalshi import KalshiClient, KalshiError
+    from app.research.records import format_report, resolve_records, score_records
+
+    try:
+        settings = load_settings(os.environ)
+    except SettingsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    engine = create_engine(settings.sqlalchemy_url)
+    if args.command == "score-records":
+        since = None
+        if args.since:
+            try:
+                since = datetime.fromisoformat(args.since).replace(tzinfo=UTC)
+            except ValueError:
+                print("Error: --since must look like 2026-10-13", file=sys.stderr)
+                return 2
+        print(format_report(score_records(engine, since)))
+        return 0
+    client = KalshiClient(settings.kalshi_api_base)
+    try:
+        counts = resolve_records(engine, client, settings)
+    except KalshiError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    print("Resolved: " + ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in counts.items()))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -73,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
         "check-kalshi-key",
         help="Tell whether the Kalshi key works on demo or production (read-only, no orders)",
     )
+    sub.add_parser("resolve-records", help="Fill in the results of recorded forecasts whose games are over (read-only on Kalshi)")
+    score = sub.add_parser("score-records", help="Print how the recorded forecasts did against what happened")
+    score.add_argument("--since", help="Only records made on or after this date (YYYY-MM-DD)")
     args = parser.parse_args(argv)
 
     if args.command == "check-kalshi-key":
@@ -87,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{r.name}: {r.status}" + (f" ({r.detail})" if r.detail else ""))
         print(summarize(results))
         return 0
+
+    if args.command in ("resolve-records", "score-records"):
+        return _records_command(args)
 
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url.startswith("postgresql://"):

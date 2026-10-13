@@ -159,3 +159,20 @@ def save_forecasts(engine, run_id: str, forecast_set: ForecastSet) -> int:
         db.add_all(rows)
         db.commit()
     return len(rows)
+
+
+async def run_baseline(game: GameInfo, model: ForecastModel) -> tuple[dict[str, float] | None, dict | None]:
+    """The plain-AI comparison: one forecaster call with no facts and no research. Returns
+    (probabilities by market ticker, usage) or (None, usage or None) when the call or its answer failed;
+    the failure is logged and never replaced by a guess."""
+    framing = FRAMINGS[0]
+    try:
+        answer, usage = await model.forecast(game, [], framing)
+    except Exception as exc:
+        log.warning("The plain-AI baseline for %s failed: %s", game.event_ticker, exc)
+        return None, None
+    try:
+        return validate(game, answer), asdict(usage)
+    except InvalidForecast as exc:
+        log.warning("The plain-AI baseline for %s was unusable: %s", game.event_ticker, exc)
+        return None, asdict(usage)

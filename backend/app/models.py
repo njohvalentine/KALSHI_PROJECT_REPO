@@ -121,6 +121,59 @@ class ClaimCheck(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class OutcomeRecord(Base):
+    """The frozen record of one forecast for one outcome of a game, made before the game, with the market
+    price at that moment. Only the three result fields are ever changed, once the game has ended."""
+
+    __tablename__ = "outcome_records"
+    __table_args__ = (
+        UniqueConstraint("run_id", "market_ticker", name="uq_outcome_records_run_market"),
+        CheckConstraint("probability >= 0 AND probability <= 1", name="outcome_records_probability_range"),
+        CheckConstraint("baseline_probability IS NULL OR (baseline_probability >= 0 AND baseline_probability <= 1)",
+                        name="outcome_records_baseline_range"),
+        CheckConstraint("side IS NULL OR side IN ('yes', 'no')", name="outcome_records_side_values"),
+        Index("ix_outcome_records_run", "run_id"),
+        Index("ix_outcome_records_open", "resolved_at", "game_start"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64))
+    event_ticker: Mapped[str] = mapped_column(String(128))
+    market_ticker: Mapped[str] = mapped_column(String(128))
+    outcome: Mapped[str] = mapped_column(Text)
+    game_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    before_start: Mapped[bool | None] = mapped_column(Boolean)  # null when the start time is unknown
+    # Our forecast
+    probability: Mapped[Decimal] = mapped_column(Numeric(5, 4))
+    prob_min: Mapped[Decimal] = mapped_column(Numeric(5, 4))
+    prob_max: Mapped[Decimal] = mapped_column(Numeric(5, 4))
+    forecasters_valid: Mapped[int] = mapped_column(Integer)
+    evidence: Mapped[str] = mapped_column(String(10))
+    supported_claims: Mapped[int] = mapped_column(Integer)
+    baseline_probability: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))  # one call, no research
+    # The market at that moment
+    yes_bid: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    yes_ask: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    no_ask: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    yes_ask_size: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    yes_bid_size: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    priced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fee_type: Mapped[str | None] = mapped_column(String(32))
+    fee_multiplier: Mapped[Decimal | None] = mapped_column(Numeric(6, 3))
+    fee_source: Mapped[str | None] = mapped_column(String(64))
+    # What our rule said then
+    side: Mapped[str | None] = mapped_column(String(3))
+    net_edge: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    worst_case_edge: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    meaningful: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    reasons: Mapped[list | None] = mapped_column(JSONB)
+    # The result, filled in once the game has ended
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_yes: Mapped[bool | None] = mapped_column(Boolean)  # null when settled at another value (voided)
+    settlement_value: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+
+
 class Run(Base):
     """One research run for one game (a Kalshi event). The result is kept here so it survives restarts."""
 
