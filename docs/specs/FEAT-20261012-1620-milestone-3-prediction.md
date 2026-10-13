@@ -362,3 +362,47 @@ Built as specified: table `outcome_records` (migration `bcb93ee9b6b9`), `app/res
 **Found while testing:** a record for a flagged outcome (empty list of reasons) was given the reason "no market snapshot", because an empty list was read as missing. Fixed and covered by the first record test. Lateral check: the same "empty list counts as missing" pattern does not occur elsewhere in the new modules (the other `or` fallbacks are on values that cannot be empty when valid).
 
 **Not yet wired:** nothing calls `save_records` yet; that is task 10 (FEAT-20261012-1628). Run the two commands from `backend/` after `set -a; source ../.env; set +a`, as for `check-kalshi-key`: `uv run python -m app.cli resolve-records` and `uv run python -m app.cli score-records [--since 2026-10-13]`.
+
+## Task 10 detail: connecting the steps into one run (FEAT-20261012-1628), for approval
+
+Branch `feature/sports-games-list`. After this task, pressing Research on a game runs the whole pipeline and the API returns every part of its result. The result **pages** are task 1629.
+
+### The run, stage by stage
+
+`research` (planner and researchers, as now) → `fetch` (read the cited pages) → `check` (label each claim) → `forecast` (three forecasters and the plain-AI baseline, at the same time) → `compare` (median, fresh market prices, fees, flag) → record (save the early records) → `done`. The run's `stage` column is set when each stage starts, so the page can show progress. The run is `running` throughout, and counts against `MAX_CONCURRENT_RUNS` as a whole.
+
+### Decision: sequential code after the research graph, not more graph nodes
+
+The new stages run one after another in `execute_run` (`app/research/runner.py`) after the existing LangGraph research graph returns. **Why:** each stage already saves its result in the database (pages, checks, forecasts, prediction, records), a restarted run is marked failed and not resumed, and the stages do not fan out; so graph checkpoints would add moving parts and no recovery we use. **Rejected:** making every stage a graph node (one LangSmith tree and resumable runs, which we do not use). Cost of this choice: LangSmith shows the research graph as one trace and each later OpenAI call as its own trace (the client wrapper already traces them); `docs/agent/GRAPHS.md` is updated to say so.
+
+### Failure rules (visible, never silent)
+
+- **Research fails or finds nothing:** the run fails, as today.
+- **Any later stage fails** (fetching, checking, forecasting, prices): the run stays `done` (the research is still worth reading) and `prediction` says `{"unavailable": "<stage> failed: <reason>"}`, with the details in the log. A stage never turns into a quiet default.
+- **Fetching or checking switched off** (`FETCH_ENABLED=false` or `CHECK_ENABLED=false`): the run stops after research with `prediction.unavailable` = "Source checking is switched off (FETCH_ENABLED, CHECK_ENABLED)". Forecasting without checked evidence would hide that the evidence was not checked.
+- **No supported claims:** the pipeline continues; forecasters run from the base rate and the evidence is marked `none` (as specified for task 5), so the comparer cannot flag.
+- **Fewer than two valid forecasts:** `prediction.unavailable` with the reasons; the baseline and the research are kept; no records are written (nothing to score).
+- **Kalshi prices unreadable:** the prediction is kept, `comparison.unavailable` says why, and the records are still written without a market snapshot (so the forecast can be scored against the result later; the market line of the score leaves them out).
+
+### Cost, limits, time
+
+- All model calls count in the run's token and cost totals and in the `RUN_COST_WARN_USD` flag: planner, researchers, checker, forecasters and baseline. The run also stores a **cost per stage** (`result.costs`: research, check, forecast, baseline) so the page can show where the money went. A model missing from the price table still gives "no price known", as now.
+- Page limit: `FETCH_MAX_PAGES_PER_RUN` (25) as built; pages beyond it stay `not_fetched` and their claims `could_not_check`, and the run says how many were left out.
+- Expected time: research 30 to 50 s (measured) plus fetching 10 to 30 s, checking 15 to 30 s, forecasting 30 to 60 s, so roughly one and a half to three minutes per game (unmeasured; to be measured on the first full run).
+- Expected cost: about 40 cents for research (measured 26 to 33 cents), about 8 cents checking, about 2 to 3 cents for the forecasters and 1 cent for the baseline (unmeasured as a whole).
+
+### What the API returns (`GET /api/runs/{id}`)
+
+Adds to what exists: `stage`; `pages` (each cited link with `fetch_status`, `fetch_detail`, `fetch_method`, `http_status`, `fetched_at`; no page text); `claim_checks` (per claim and page: verdict and reason with its quotes); `prediction` (task 6's record with the comparison under `comparison`); `forecasts` (per forecaster: framing, reasoning, probability per outcome); `costs`. The list endpoint gets `stage` and a short summary (flagged outcomes count). Page text stays in the database and is not sent to the browser (size, and it is a copy of third-party pages).
+
+### Code changes
+
+`execute_run` gets the judge, the forecaster model, the Kalshi client and the fetch options as inputs (so tests use fakes); `create_app` builds the real judge and forecaster next to the research model; `app/runs.py` passes them through. `summarize` sums usages from all stages. No change to how a run is started or limited.
+
+### Tests (all with fakes, no network, no key)
+
+A full run from start to `done` with a fake research model, fake fetch transport, fake judge, fake forecaster and fake Kalshi: pages saved, checks saved, forecasts saved, prediction and comparison stored, records written, costs summed across all stages and per stage, `stage` seen in order (observed through a hook); each stage failing alone gives `unavailable` with the stage named while earlier results stay; switched-off fetch or check stops after research with the reason; no supported claims continues with evidence none; fewer than two forecasts; Kalshi down gives records without a snapshot; baseline failure leaves the baseline empty and the rest intact; the cost warning fires on the total; a stale run is still marked failed at startup; the API returns the new fields and no page text; existing run tests keep passing.
+
+### Not in this task
+
+Result pages (1629), more market types (0907), the opportunities screen (0908), monitoring (0909). Cached or repeated research of the same game is not added.
