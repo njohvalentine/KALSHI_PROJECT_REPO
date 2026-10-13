@@ -305,3 +305,23 @@ def test_scores_are_also_shown_per_kind_of_market(fresh_db):
     assert s["by_kind"]["total"]["paper_all"]["bets"] == 1 and s["by_kind"]["total"]["same_records"]["n"] == 1
     report = format_report(s)
     assert "  total: 1 outcomes in 1 games, Brier ours 0.0900" in report and "  winner: 1 outcomes" in report
+
+
+@needs_db
+def test_several_forecasts_of_one_market_score_as_the_latest_before_the_start_and_the_first_is_compared(fresh_db):
+    command.upgrade(alembic_config(), "head")
+    first = scored_record("E1", 0.20, True, 0.5, 0.50, 0.54, "yes")
+    first.created_at = NOW - timedelta(hours=5)
+    latest = scored_record("E1", 0.90, True, 0.5, 0.50, 0.54, "yes")
+    latest.run_id, latest.created_at = "run-E1-again", NOW - timedelta(hours=1)
+    after_start = scored_record("E1", 0.99, True, 0.5, 0.50, 0.54, "yes", before=False)  # made after the start: never used
+    after_start.run_id, after_start.created_at = "run-E1-late", NOW
+    other = scored_record("E2", 0.30, False, 0.5, 0.40, 0.44, "no", no_ask=0.60)  # forecast once
+    with DbSession(fresh_db) as db:
+        db.add_all([first, latest, after_start, other])
+        db.commit()
+    s = score_records(fresh_db)
+    assert s["used"] == 2 and s["games"] == 2  # one per market
+    assert s["brier_ours"] == pytest.approx(((0.9 - 1) ** 2 + 0.3 ** 2) / 2)  # the latest of E1 (0.90), not 0.20 or 0.99
+    assert s["updated"]["markets"] == 1 and s["updated"]["brier_first"] == pytest.approx(0.64) and s["updated"]["brier_latest"] == pytest.approx(0.01)
+    assert "1 markets were forecast more than once: Brier of the first forecast 0.6400, of the latest 0.0100" in format_report(s)

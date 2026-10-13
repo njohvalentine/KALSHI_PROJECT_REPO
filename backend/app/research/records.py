@@ -181,12 +181,26 @@ def score_records(engine, since: datetime | None = None) -> dict:
     voided = [r for r in records if r.resolved_at is not None and r.resolved_yes is None]
     scored_pool = [r for r in records if r.resolved_yes is not None]
     late = [r for r in scored_pool if r.before_start is not True]  # made after the start, or start unknown
-    used = [r for r in scored_pool if r.before_start is True]
+    before = [r for r in scored_pool if r.before_start is True]
+    # A market can have several forecasts (the game was researched again). The headline uses the latest one made
+    # before the start, the most informed; the first one is kept to show whether updating helped.
+    by_market: dict[str, list[OutcomeRecord]] = {}
+    for r in before:
+        by_market.setdefault(r.market_ticker, []).append(r)
+    used = [max(group, key=lambda r: (r.created_at, r.id)) for group in by_market.values()]
+    updated = {t: g for t, g in by_market.items() if len(g) > 1}
+    first = [min(g, key=lambda r: (r.created_at, r.id)) for g in updated.values()]
+    latest_of_updated = [max(g, key=lambda r: (r.created_at, r.id)) for g in updated.values()]
 
     ours = [(r.probability, r.resolved_yes) for r in used]
     with_all = [r for r in used if r.baseline_probability is not None and _mid(r) is not None]
     return {
         "records": len(records), "used": len(used), "games": len({r.event_ticker for r in used}),
+        "updated": {
+            "markets": len(updated),
+            "brier_first": _brier([(r.probability, r.resolved_yes) for r in first]),
+            "brier_latest": _brier([(r.probability, r.resolved_yes) for r in latest_of_updated]),
+        },
         "excluded": {"unresolved": len(unresolved), "voided_or_other": len(voided), "after_start_or_unknown": len(late)},
         "brier_ours": _brier(ours),
         "same_records": {
@@ -209,7 +223,7 @@ def format_report(s: dict) -> str:
         return "n/a" if x is None else f"{x:.4f}"
 
     lines = [
-        f"Records: {s['records']}; scored: {s['used']} outcomes in {s['games']} games.",
+        f"Records: {s['records']}; scored: {s['used']} outcomes in {s['games']} games (the latest forecast made before the start for each market).",
         "Left out: " + ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in s["excluded"].items()) + ".",
         f"Brier score of our probability (lower is better), all scored outcomes: {f(s['brier_ours'])}",
         f"On the {s['same_records']['n']} outcomes that have all three: ours {f(s['same_records']['ours'])}, "
@@ -227,6 +241,12 @@ def format_report(s: dict) -> str:
         p = s[key]
         lines.append(
             f"{label}: {p['bets']} bets, {p['won']} won, average result per contract {f(p['average_result'])} dollars, total {f(p['total_result'])}"
+        )
+    if s.get("updated", {}).get("markets"):
+        u = s["updated"]
+        lines.append(
+            f"{u['markets']} markets were forecast more than once: Brier of the first forecast {f(u['brier_first'])}, of the latest {f(u['brier_latest'])} "
+            "(lower is better; a few markets prove nothing)."
         )
     if not s["enough_games"]:
         lines.append(f"Fewer than {MIN_GAMES} games: too few to conclude anything.")

@@ -175,6 +175,27 @@ class OutcomeRecord(Base):
     settlement_value: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
 
 
+class Alert(Base):
+    """Something worth telling the user, recorded in the app whether or not a chat channel exists."""
+
+    __tablename__ = "alerts"
+    __table_args__ = (
+        CheckConstraint("status IN ('recorded', 'sent', 'failed', 'held_back')", name="alerts_status_values"),
+        Index("ix_alerts_created", "created_at"),
+        Index("ix_alerts_kind_event", "kind", "event_ticker"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    kind: Mapped[str] = mapped_column(String(24))  # run_flagged, market_moved, no_longer_flagged, start_soon
+    event_ticker: Mapped[str] = mapped_column(String(128))
+    run_id: Mapped[str | None] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(Text)
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(10))
+    detail: Mapped[str | None] = mapped_column(Text)  # why it was held back, or the kind of error that stopped sending
+
+
 class Run(Base):
     """One research run for one game (a Kalshi event). The result is kept here so it survives restarts."""
 
@@ -203,6 +224,7 @@ class Run(Base):
     status: Mapped[str] = mapped_column(String(10))
     error: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    trigger: Mapped[str] = mapped_column(String(8), default="manual", server_default="manual")  # manual, or auto (the batch rule)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

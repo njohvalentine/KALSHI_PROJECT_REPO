@@ -103,6 +103,15 @@ class Settings:
     min_research_shift: float
     edge_plausible_max: float
     opportunity_max_age_hours: float
+    monitor_enabled: bool
+    monitor_interval_minutes: float
+    alert_move_cents: float
+    alert_start_soon_minutes: float
+    alert_cooldown_minutes: float
+    alert_max_per_hour: int
+    auto_research_max_per_day: int
+    auto_research_hours_ahead: float
+    auto_research_min_gap_hours: float
     record_baseline: bool
     resolve_after_hours: float
 
@@ -259,6 +268,20 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     opportunity_max_age_hours = _parse_positive_float(
         "OPPORTUNITY_MAX_AGE_HOURS", env.get("OPPORTUNITY_MAX_AGE_HOURS", "12"), problems
     )
+    monitor_enabled = _parse_bool("MONITOR_ENABLED", env.get("MONITOR_ENABLED", "false"), problems)
+    monitor_interval = _parse_positive_float("MONITOR_INTERVAL_MINUTES", env.get("MONITOR_INTERVAL_MINUTES", "10"), problems)
+    alert_move_cents = _parse_positive_float("ALERT_MOVE_CENTS", env.get("ALERT_MOVE_CENTS", "8"), problems)
+    alert_start_soon = _parse_positive_float("ALERT_START_SOON_MINUTES", env.get("ALERT_START_SOON_MINUTES", "60"), problems)
+    alert_cooldown = _parse_positive_float("ALERT_COOLDOWN_MINUTES", env.get("ALERT_COOLDOWN_MINUTES", "60"), problems)
+    alert_max_per_hour = _parse_positive_int("ALERT_MAX_PER_HOUR", env.get("ALERT_MAX_PER_HOUR", "6"), problems)
+    raw_auto = env.get("AUTO_RESEARCH_MAX_PER_DAY", "0").strip() or "0"
+    if raw_auto.isdigit():
+        auto_per_day = int(raw_auto)  # 0 is allowed and means off
+    else:
+        auto_per_day = 0
+        problems.append(f"AUTO_RESEARCH_MAX_PER_DAY must be a whole number, 0 or more (0 means off), got {raw_auto!r}")
+    auto_hours_ahead = _parse_positive_float("AUTO_RESEARCH_HOURS_AHEAD", env.get("AUTO_RESEARCH_HOURS_AHEAD", "24"), problems)
+    auto_min_gap = _parse_positive_float("AUTO_RESEARCH_MIN_GAP_HOURS", env.get("AUTO_RESEARCH_MIN_GAP_HOURS", "12"), problems)
     record_baseline = _parse_bool("RECORD_BASELINE", env.get("RECORD_BASELINE", "true"), problems)
     resolve_after_hours = _parse_positive_float("RESOLVE_AFTER_HOURS", env.get("RESOLVE_AFTER_HOURS", "3"), problems)
 
@@ -274,6 +297,14 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         log.info("Research is ON: planner model %s, researcher model %s.", planner_model, researcher_model)
     else:
         log.warning("Research is OFF: OPENAI_API_KEY is not set. Starting a run will be refused.")
+
+    if monitor_enabled:
+        log.info(
+            "The watcher is ON (every %g min). Alerts are recorded in the app; no chat channel is configured. Automatic research: %s.",
+            monitor_interval, f"up to {auto_per_day} games a day" if auto_per_day else "off",
+        )
+    else:
+        log.info("The watcher is off (MONITOR_ENABLED is not 'true'): no alerts are made and nothing is researched automatically.")
 
     log.info(
         "Games list: %d series configured (%s).", len(sports_series),
@@ -323,6 +354,15 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         min_research_shift=min_research_shift,
         edge_plausible_max=edge_plausible_max,
         opportunity_max_age_hours=opportunity_max_age_hours,
+        monitor_enabled=monitor_enabled,
+        monitor_interval_minutes=monitor_interval,
+        alert_move_cents=alert_move_cents,
+        alert_start_soon_minutes=alert_start_soon,
+        alert_cooldown_minutes=alert_cooldown,
+        alert_max_per_hour=alert_max_per_hour,
+        auto_research_max_per_day=auto_per_day,
+        auto_research_hours_ahead=auto_hours_ahead,
+        auto_research_min_gap_hours=auto_min_gap,
         record_baseline=record_baseline,
         resolve_after_hours=resolve_after_hours,
     )

@@ -7,9 +7,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { backendFetch } from "@/lib/backend";
-import { cents, gapCents, pct } from "@/lib/format";
+import { ago, cents, gapCents, pct } from "@/lib/format";
 import { plainReason } from "@/lib/labels";
-import type { OpportunitiesResponse, Opportunity } from "@/lib/types";
+import type { AlertsResponse, OpportunitiesResponse, Opportunity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function buyText(o: Opportunity): string {
@@ -81,6 +81,60 @@ function Row({ o }: { o: Opportunity }) {
         <AnalyzeButton eventTicker={o.event_ticker} latest={{ id: o.run_id, status: "done" }} />
       </div>
     </li>
+  );
+}
+
+const ALERT_KIND: Record<string, string> = {
+  run_flagged: "Worth a look",
+  market_moved: "Market moved",
+  no_longer_flagged: "No longer worth a look",
+  start_soon: "Starting soon",
+};
+const ALERT_STATUS: Record<string, string> = { recorded: "Recorded here", sent: "Sent", failed: "Could not be sent", held_back: "Held back" };
+
+async function Alerts() {
+  const res = await backendFetch("/api/alerts?limit=10");
+  if (!res.ok) return null; // the opportunities above still work without this part
+  const { alerts, monitor } = (await res.json()) as AlertsResponse;
+  return (
+    <section className="mt-8" aria-labelledby="alerts-heading">
+      <h2 id="alerts-heading" className="mb-1 text-xl font-semibold tracking-tight">
+        Recent alerts
+      </h2>
+      <p className="mb-3 text-sm text-muted-foreground">
+        {monitor.enabled
+          ? `The watcher is on (every ${monitor.interval_minutes} minutes${monitor.last_cycle_at ? `, last looked ${ago(monitor.last_cycle_at)}` : ""}). Alerts are ${monitor.channel === "app only" ? "recorded here; no chat channel is connected yet" : "also sent to chat"}.`
+          : "The watcher is off, so no alerts are made. It is switched on with MONITOR_ENABLED=true."}
+        {monitor.last_error ? ` The last check failed (${monitor.last_error}); see the server log.` : ""}
+        {monitor.auto_research_cap > 0
+          ? ` Automatic research: ${monitor.auto_research_started_today} of ${monitor.auto_research_cap} games today.`
+          : " Automatic research is off."}
+      </p>
+      {alerts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No alerts yet.</p>
+      ) : (
+        <ul className="grid gap-2">
+          {alerts.map((a) => (
+            <li key={a.id} className="rounded-xl border bg-card p-3 text-sm">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{ALERT_KIND[a.kind] ?? a.kind}</Badge>
+                <Badge className={a.status === "failed" ? "bg-destructive/10 text-destructive" : a.status === "held_back" ? "bg-warn-soft text-warn" : "bg-secondary text-secondary-foreground"}>
+                  {ALERT_STATUS[a.status] ?? a.status}
+                </Badge>
+                <span className="text-muted-foreground">{ago(a.created_at)}</span>
+                {a.run_id ? (
+                  <Link href={`/prediction/${a.run_id}`} className="text-primary underline underline-offset-4">
+                    Open
+                  </Link>
+                ) : null}
+              </div>
+              <p>{a.text}</p>
+              {a.detail ? <p className="mt-1 text-muted-foreground">Why: {a.detail}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -164,6 +218,9 @@ export default async function OpportunitiesPage({ searchParams }: { searchParams
       />
       <Suspense key={String(all)} fallback={<p className="text-muted-foreground" role="status">Reading today’s prices…</p>}>
         <List all={all} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <Alerts />
       </Suspense>
     </>
   );

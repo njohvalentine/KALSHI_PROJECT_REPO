@@ -55,6 +55,11 @@ def _load(engine, now: datetime) -> list[dict]:
                 "run_id": run.id, "event_ticker": run.event_ticker, "title": run.event_title, "start": start,
                 "finished_at": run.finished_at, "prediction": run.prediction,
                 "baseline": {r.market_ticker: float(r.baseline_probability) for r in records if r.baseline_probability is not None},
+                # the market as it was when the forecast was made, to see how far it has moved since
+                "forecast_mids": {
+                    r.market_ticker: float((r.yes_bid + r.yes_ask) / 2)
+                    for r in records if r.yes_bid is not None and r.yes_ask is not None and 0 < r.yes_bid <= r.yes_ask < 1
+                },
             })
     found.sort(key=lambda g: g["finished_at"] or now, reverse=True)
     return found[:MAX_GAMES]
@@ -113,20 +118,25 @@ def build_row(game: dict, comparison: dict, settings: Settings, now: datetime) -
     return row
 
 
-async def build_opportunities(engine, client: KalshiClient, settings: Settings, fee_cache: dict, show_all: bool, now: datetime | None = None) -> dict:
-    now = now or datetime.now(UTC)
+async def collect(engine, client: KalshiClient, settings: Settings, fee_cache: dict, now: datetime) -> list[tuple[dict, dict, dict]]:
+    """For each game with a forecast that has not started: (stored game data, fresh comparison, row)."""
     games = await asyncio.to_thread(_load, engine, now)
     semaphore = asyncio.Semaphore(settings.sports_fetch_concurrency)
 
-    async def one(game: dict) -> dict:
+    async def one(game: dict) -> tuple[dict, dict, dict]:
         events = {_event_of(o["market_ticker"]): None for o in game["prediction"]["outcomes"]}
         events.pop(game["event_ticker"], None)
         companions = [(event, event.split("-")[0]) for event in events]
         async with semaphore:
             comparison = await compare_run(client, game["event_ticker"], game["prediction"], settings, companions, game["baseline"], fee_cache)
-        return build_row(game, comparison, settings, now)
+        return game, comparison, build_row(game, comparison, settings, now)
 
-    rows = list(await asyncio.gather(*(one(g) for g in games)))
+    return list(await asyncio.gather(*(one(g) for g in games)))
+
+
+async def build_opportunities(engine, client: KalshiClient, settings: Settings, fee_cache: dict, show_all: bool, now: datetime | None = None) -> dict:
+    now = now or datetime.now(UTC)
+    rows = [row for _, _, row in await collect(engine, client, settings, fee_cache, now)]
     rows.sort(key=lambda r: (not r["flagged"], -(r["best"]["gap"] if r["best"] else -1)))
     shown = rows if show_all else [r for r in rows if r["flagged"]]
     reasons = Counter(_normal(x) for r in rows if not r["flagged"] and r["best"] for x in r["best"]["reasons"])

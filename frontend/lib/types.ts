@@ -173,3 +173,27 @@ export type OpportunitiesResponse = {
   generated_at: string;
   max_age_hours: number;
 };
+
+export type AlertItem = {
+  id: number;
+  created_at: string;
+  kind: string;
+  event_ticker: string;
+  run_id: string | null;
+  title: string;
+  text: string;
+  status: "recorded" | "sent" | "failed" | "held_back";
+  detail: string | null;
+};
+export type AlertsResponse = {
+  alerts: AlertItem[];
+  monitor: {
+    enabled: boolean;
+    interval_minutes: number;
+    channel: string;
+    last_cycle_at: string | null;
+    last_error: string | null;
+    auto_research_cap: number;
+    auto_research_started_today: number;
+  };
+};

@@ -10,6 +10,8 @@ from app.auth import router as auth_router
 from app.checkpoint import open_checkpointer
 from app.games import GamesService
 from app.games import router as games_router
+from app.alerts import router as alerts_router
+from app.monitor import Monitor
 from app.opportunities import router as opportunities_router
 from app.config import Settings, load_settings
 from app.kalshi import KalshiClient
@@ -52,10 +54,16 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
         app.state.opportunity_cache = {}
         app.state.opportunity_lock = asyncio.Lock()
         app.state.fee_cache = {}
+        app.state.notifier = None  # no chat channel yet: alerts are recorded in the app (a sender is a separate item)
+        app.state.monitor = Monitor(app)
+        monitor_task = asyncio.create_task(app.state.monitor.run_forever()) if app.state.settings.monitor_enabled else None
         app.state.active_runs = 0
         app.state.tasks = set()
         await asyncio.to_thread(mark_stale_runs_failed, app.state.engine)
         yield
+        if monitor_task:
+            monitor_task.cancel()
+            await asyncio.gather(monitor_task, return_exceptions=True)
         # Shutdown: give running runs a moment to finish, then cancel them (they record themselves as failed).
         pending = list(app.state.tasks)
         if pending:
@@ -74,6 +82,7 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
     app.include_router(games_router)
     app.include_router(runs_router)
     app.include_router(opportunities_router)
+    app.include_router(alerts_router)
 
     @app.get("/health")
     def health(response: Response):

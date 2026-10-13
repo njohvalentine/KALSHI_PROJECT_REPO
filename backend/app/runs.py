@@ -111,11 +111,11 @@ def _kickoff(kalshi, event_ticker: str) -> str | None:
     return None
 
 
-def _insert_run(engine, run_id: str, game: GameInfo, user_id: int) -> None:
+def _insert_run(engine, run_id: str, game: GameInfo, user_id: int | None, trigger: str = "manual") -> None:
     from sqlalchemy.orm import Session
 
     with Session(engine) as db:
-        db.add(Run(id=run_id, event_ticker=game.event_ticker, event_title=game.title, status="queued", created_by=user_id))
+        db.add(Run(id=run_id, event_ticker=game.event_ticker, event_title=game.title, status="queued", created_by=user_id, trigger=trigger))
         db.commit()
 
 
@@ -138,42 +138,46 @@ async def _run_and_release(request_app, run_id: str, game: GameInfo) -> None:
         state.active_runs -= 1
 
 
-@router.post("", status_code=202, dependencies=[Depends(require_requested_with)])
-async def start_run(body: StartBody, request: Request, user: Annotated[User, Depends(require_user)]):
-    state = request.app.state
+class RunStartError(Exception):
+    """A run could not be started. `status_code` and `detail` are what the endpoint answers."""
+
+    def __init__(self, status_code: int, detail: str, headers: dict | None = None, run_id: str | None = None):
+        super().__init__(detail)
+        self.status_code, self.detail, self.headers, self.run_id = status_code, detail, headers, run_id
+
+
+async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: str = "manual") -> dict:
+    """Starts a run for a game in the background and returns {"id", "status"}. Used by the endpoint (a person
+    pressed Research) and by the watcher (the automatic batch rule). Raises RunStartError."""
+    state = app.state
     if state.research_graph is None:
-        raise HTTPException(status_code=503, detail="Research is not configured. Set OPENAI_API_KEY and restart the backend.")
+        raise RunStartError(503, "Research is not configured. Set OPENAI_API_KEY and restart the backend.")
     if state.active_runs >= state.settings.max_concurrent_runs:
-        raise HTTPException(
-            status_code=429, detail="Too many runs in progress. Wait for one to finish.", headers={"Retry-After": "30"}
-        )
+        raise RunStartError(429, "Too many runs in progress. Wait for one to finish.", headers={"Retry-After": "30"})
     state.active_runs += 1  # reserve the slot before any await, so parallel requests cannot overshoot
     task_owns_slot = False
     try:
         try:
-            raw = await run_in_threadpool(state.kalshi.get_event, body.event_ticker)
+            raw = await run_in_threadpool(state.kalshi.get_event, event_ticker)
         except KalshiNotFound as exc:
-            raise HTTPException(status_code=404, detail="Game not found") from exc
+            raise RunStartError(404, "Game not found") from exc
         except KalshiError as exc:
-            raise HTTPException(status_code=502, detail=f"Kalshi request failed: {exc}") from exc
+            raise RunStartError(502, f"Kalshi request failed: {exc}") from exc
         try:
-            starts_at = await run_in_threadpool(_kickoff, state.kalshi, body.event_ticker)
+            starts_at = await run_in_threadpool(_kickoff, state.kalshi, event_ticker)
             game = GameInfo.from_kalshi_event(raw, starts_at=starts_at)  # the server's copy of the game
             series = (raw.get("event") or {}).get("series_ticker")
             sport = next((e.sport for e in state.settings.sports_series if e.ticker == series), None)
             game = await run_in_threadpool(attach_companions, game, raw, sport, state.kalshi)  # total, btts, spread if offered
         except ValueError as exc:
-            raise HTTPException(status_code=502, detail="Kalshi returned game data we cannot use") from exc
+            raise RunStartError(502, "Kalshi returned game data we cannot use") from exc
         run_id = uuid.uuid4().hex
         try:
-            await run_in_threadpool(_insert_run, state.engine, run_id, game, user.id)
+            await run_in_threadpool(_insert_run, state.engine, run_id, game, user_id, trigger)
         except IntegrityError:
             existing = await run_in_threadpool(_active_run_id, state.engine, game.event_ticker)
-            return JSONResponse(
-                status_code=409,
-                content={"detail": "A run for this game is already in progress", "run_id": existing},
-            )
-        task = asyncio.create_task(_run_and_release(request.app, run_id, game))
+            raise RunStartError(409, "A run for this game is already in progress", run_id=existing) from None
+        task = asyncio.create_task(_run_and_release(app, run_id, game))
         task_owns_slot = True  # _run_and_release gives the slot back when the run ends
         state.tasks.add(task)  # keep a reference so the task is not garbage collected
         task.add_done_callback(state.tasks.discard)
@@ -181,6 +185,16 @@ async def start_run(body: StartBody, request: Request, user: Annotated[User, Dep
     finally:
         if not task_owns_slot:
             state.active_runs -= 1
+
+
+@router.post("", status_code=202, dependencies=[Depends(require_requested_with)])
+async def start_run(body: StartBody, request: Request, user: Annotated[User, Depends(require_user)]):
+    try:
+        return await start_game_run(request.app, body.event_ticker, user.id)
+    except RunStartError as exc:
+        if exc.status_code == 409:
+            return JSONResponse(status_code=409, content={"detail": exc.detail, "run_id": exc.run_id})
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail, headers=exc.headers) from exc
 
 
 def _compact_forecast(run: Run) -> dict | None:

@@ -676,3 +676,16 @@ Each alert kind fires once and is not repeated across a restart; cooldown and ho
 
 1. Phase 1 as above (alerts from run results, large moves and start-soon; history in the app; Telegram sender; capped opt-in batch research; latest-before-start scoring), Phase 2 later?
 2. Build the Telegram sender now even though the client has not confirmed Telegram? (It sits behind one small function, so another channel can replace it.)
+
+
+### Monitoring and alerts, phase 1 result (2026-10-13; approved by the user, except the Telegram sender, which waits for the client)
+
+Built: `app/monitor.py` (the watcher), `app/alerts.py` (history and watcher state for the page), tables `alerts` and `runs.trigger` (migration `7849da47b6eb`), `start_game_run` in `app/runs.py` (the endpoint and the watcher start runs the same way), settings, and an alerts section on the Opportunities page. 442 backend tests pass.
+
+**Alerts (recorded in the app; no chat channel is connected):** `run_flagged` (a game has markets worth a look at today's prices under today's rules, the same test as the Opportunities page), `market_moved` (a market moved `ALERT_MOVE_CENTS` or more since the forecast; the text says the market may know something we do not and to consider researching again), `no_longer_flagged` (only for a game we reported as worth a look), `start_soon` (a flagged game starts within `ALERT_START_SOON_MINUTES`). Once per run and kind, also across restarts; a cooldown per game and kind and an hourly limit hold alerts back and the history says so ("held back" with the reason); held-back alerts are not retried. A chat channel plugs in behind `deliver` (`app.state.notifier`); a failing channel is recorded by error kind only. A failing cycle is survived and shown (`last_error` is the error kind; the text is in the log).
+
+**Automatic research** (`AUTO_RESEARCH_MAX_PER_DAY`, default 0 = off): ordinary runs started with `trigger = auto` for games of the configured leagues starting within `AUTO_RESEARCH_HOURS_AHEAD`, not researched in the last `AUTO_RESEARCH_MIN_GAP_HOURS`, soonest start first (ties to the busier market), within the daily cap (counted from the runs table, UTC day) and `MAX_CONCURRENT_RUNS`; games without a start time are skipped.
+
+**Scoring:** `score-records` uses the latest forecast made before the start for each market and prints, for markets forecast more than once, the Brier score of the first and of the latest forecast.
+
+**Live check (watcher switched on for a minute through a command-line override, no `.env` change):** it recorded alerts for the two real runs that were flagged and, because one of them had been flagged under the older rule, a "no longer worth a look" that exposed that the first version used the flag stored with the run; the watcher now tests today's prices under today's rules and only reports "no longer" for a game it had reported. The watcher is back off in the running stack.
