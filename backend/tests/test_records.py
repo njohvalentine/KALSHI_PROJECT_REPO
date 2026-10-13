@@ -154,7 +154,7 @@ LATER = START + timedelta(hours=4)  # past the 3 hours after the start
 def test_resolve_fills_in_yes_no_and_leaves_open_and_missing_markets(fresh_db):
     stored(fresh_db)
     kalshi = FakeKalshiMarkets([finished("KX-A", "yes", "1.0000"), {"ticker": "KX-B", "status": "active", "result": "", "settlement_value_dollars": None}])
-    assert resolve_records(fresh_db, kalshi, S, now=LATER) == {"resolved": 1, "voided_or_other": 0, "still_open": 1, "not_found": 0}
+    assert resolve_records(fresh_db, kalshi, S, now=LATER) == {"resolved": 1, "voided_or_other": 0, "still_open": 1, "not_found": 0, "orders_settled": 0}
     rows = fetch_all(fresh_db)
     assert rows["KX-A"].resolved_yes is True and rows["KX-A"].settlement_value == Decimal("1.0000") and rows["KX-A"].resolved_at == LATER
     assert rows["KX-B"].resolved_at is None
@@ -162,7 +162,7 @@ def test_resolve_fills_in_yes_no_and_leaves_open_and_missing_markets(fresh_db):
     kalshi2 = FakeKalshiMarkets([finished("KX-B", "no", "0.0000")])
     assert resolve_records(fresh_db, kalshi2, S, now=LATER + timedelta(hours=1))["resolved"] == 1
     assert fetch_all(fresh_db)["KX-B"].resolved_yes is False
-    assert resolve_records(fresh_db, FakeKalshiMarkets([]), S, now=LATER + timedelta(hours=2)) == {"resolved": 0, "voided_or_other": 0, "still_open": 0, "not_found": 0}
+    assert resolve_records(fresh_db, FakeKalshiMarkets([]), S, now=LATER + timedelta(hours=2)) == {"resolved": 0, "voided_or_other": 0, "still_open": 0, "not_found": 0, "orders_settled": 0}
 
 
 @needs_db
@@ -170,7 +170,7 @@ def test_voided_and_missing_markets_are_counted_and_not_given_a_winner(fresh_db)
     stored(fresh_db)
     kalshi = FakeKalshiMarkets([finished("KX-A", "scalar", "0.5000", status="determined")])  # settled at another value
     counts = resolve_records(fresh_db, kalshi, S, now=LATER)
-    assert counts == {"resolved": 0, "voided_or_other": 1, "still_open": 0, "not_found": 1}
+    assert counts == {"resolved": 0, "voided_or_other": 1, "still_open": 0, "not_found": 1, "orders_settled": 0}
     row = fetch_all(fresh_db)["KX-A"]
     assert row.resolved_at == LATER and row.resolved_yes is None and row.settlement_value == Decimal("0.5000")
 
@@ -179,7 +179,7 @@ def test_voided_and_missing_markets_are_counted_and_not_given_a_winner(fresh_db)
 def test_games_that_started_less_than_the_wait_ago_are_not_asked_about(fresh_db):
     stored(fresh_db)
     kalshi = FakeKalshiMarkets([finished("KX-A", "yes", "1.0000")])
-    assert resolve_records(fresh_db, kalshi, S, now=START + timedelta(hours=2)) == {"resolved": 0, "voided_or_other": 0, "still_open": 0, "not_found": 0}
+    assert resolve_records(fresh_db, kalshi, S, now=START + timedelta(hours=2)) == {"resolved": 0, "voided_or_other": 0, "still_open": 0, "not_found": 0, "orders_settled": 0}
     assert kalshi.calls == []
 
 

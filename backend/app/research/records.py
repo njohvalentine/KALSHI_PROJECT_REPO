@@ -116,6 +116,9 @@ def resolve_records(engine, client: KalshiClient, settings: Settings, now: datet
                         r.resolved_yes = None
                         counts["voided_or_other"] += 1
             db.commit()  # batch by batch, so a Kalshi failure later does not lose what was learned
+    from app.orders import settle_orders  # simulated orders whose game has ended are settled with the same results
+
+    counts["orders_settled"] = settle_orders(engine, now)
     log.info("Resolved records: %s", counts)
     return counts
 

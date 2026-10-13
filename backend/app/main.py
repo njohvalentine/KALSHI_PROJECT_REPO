@@ -13,6 +13,7 @@ from app.games import router as games_router
 from app.alerts import router as alerts_router
 from app.monitor import Monitor
 from app.opportunities import router as opportunities_router
+from app.orders import router as orders_router
 from app.config import Settings, load_settings
 from app.kalshi import KalshiClient
 from app.research.graph import build_graph
@@ -81,6 +82,7 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
     app.include_router(runs_router)
     app.include_router(opportunities_router)
     app.include_router(alerts_router)
+    app.include_router(orders_router)
 
     @app.get("/health")
     def health(response: Response):

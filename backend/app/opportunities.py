@@ -36,6 +36,31 @@ def _event_of(market_ticker: str) -> str:
     return market_ticker.rsplit("-", 1)[0]
 
 
+def _game_inputs(db: DbSession, run: Run) -> dict:
+    """What the comparison needs from a stored run: its forecast, the plain-AI baseline and the market as it was."""
+    records = db.scalars(select(OutcomeRecord).where(OutcomeRecord.run_id == run.id)).all()
+    return {
+        "run_id": run.id, "event_ticker": run.event_ticker, "title": run.event_title,
+        "start": next((r.game_start for r in records if r.game_start), None),
+        "finished_at": run.finished_at, "prediction": run.prediction,
+        "baseline": {r.market_ticker: float(r.baseline_probability) for r in records if r.baseline_probability is not None},
+        # the market as it was when the forecast was made, to see how far it has moved since
+        "forecast_mids": {
+            r.market_ticker: float((r.yes_bid + r.yes_ask) / 2)
+            for r in records if r.yes_bid is not None and r.yes_ask is not None and 0 < r.yes_bid <= r.yes_ask < 1
+        },
+    }
+
+
+def load_game(engine, run_id: str) -> dict | None:
+    """One stored run with a forecast, started or not (the caller decides what that means), or None."""
+    with DbSession(engine) as db:
+        run = db.get(Run, run_id)
+        if run is None or run.status != "done" or "outcomes" not in (run.prediction or {}):
+            return None
+        return _game_inputs(db, run)
+
+
 def _load(engine, now: datetime) -> list[dict]:
     """The latest finished run with a prediction of each game that has not started, newest forecast first."""
     with DbSession(engine) as db:
@@ -47,22 +72,20 @@ def _load(engine, now: datetime) -> list[dict]:
         for run in runs:
             if "outcomes" not in (run.prediction or {}):
                 continue  # this game's latest run has no forecast
-            records = db.scalars(select(OutcomeRecord).where(OutcomeRecord.run_id == run.id)).all()
-            start = next((r.game_start for r in records if r.game_start), None)
-            if start is not None and start <= now:
+            game = _game_inputs(db, run)
+            if game["start"] is not None and game["start"] <= now:
                 continue  # started: nothing to bet on
-            found.append({
-                "run_id": run.id, "event_ticker": run.event_ticker, "title": run.event_title, "start": start,
-                "finished_at": run.finished_at, "prediction": run.prediction,
-                "baseline": {r.market_ticker: float(r.baseline_probability) for r in records if r.baseline_probability is not None},
-                # the market as it was when the forecast was made, to see how far it has moved since
-                "forecast_mids": {
-                    r.market_ticker: float((r.yes_bid + r.yes_ask) / 2)
-                    for r in records if r.yes_bid is not None and r.yes_ask is not None and 0 < r.yes_bid <= r.yes_ask < 1
-                },
-            })
+            found.append(game)
     found.sort(key=lambda g: g["finished_at"] or now, reverse=True)
     return found[:MAX_GAMES]
+
+
+async def evaluate_game(client: KalshiClient, settings: Settings, fee_cache: dict, game: dict) -> dict:
+    """The fresh comparison of a stored game: today's prices, today's fees, the stored forecast."""
+    events = {_event_of(o["market_ticker"]): None for o in game["prediction"]["outcomes"]}
+    events.pop(game["event_ticker"], None)
+    companions = [(event, event.split("-")[0]) for event in events]
+    return await compare_run(client, game["event_ticker"], game["prediction"], settings, companions, game["baseline"], fee_cache)
 
 
 def _normal(reason: str) -> str:
@@ -124,11 +147,8 @@ async def collect(engine, client: KalshiClient, settings: Settings, fee_cache: d
     semaphore = asyncio.Semaphore(settings.sports_fetch_concurrency)
 
     async def one(game: dict) -> tuple[dict, dict, dict]:
-        events = {_event_of(o["market_ticker"]): None for o in game["prediction"]["outcomes"]}
-        events.pop(game["event_ticker"], None)
-        companions = [(event, event.split("-")[0]) for event in events]
         async with semaphore:
-            comparison = await compare_run(client, game["event_ticker"], game["prediction"], settings, companions, game["baseline"], fee_cache)
+            comparison = await evaluate_game(client, settings, fee_cache, game)
         return game, comparison, build_row(game, comparison, settings, now)
 
     return list(await asyncio.gather(*(one(g) for g in games)))

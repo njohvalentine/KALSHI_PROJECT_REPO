@@ -175,6 +175,68 @@ class OutcomeRecord(Base):
     settlement_value: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
 
 
+class Order(Base):
+    """A simulated order: proposed, approved by a person, then placed in the simulation. Nothing is ever sent to Kalshi."""
+
+    __tablename__ = "orders"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('proposed', 'approved', 'rejected', 'expired', 'placed', 'simulated_rejected', 'settled')", name="orders_state_values"
+        ),
+        CheckConstraint("side IN ('yes', 'no')", name="orders_side_values"),
+        CheckConstraint("contracts > 0", name="orders_contracts_positive"),
+        CheckConstraint("price > 0 AND price < 1", name="orders_price_range"),
+        # One open order per market: two people (or two clicks) cannot both have one waiting.
+        Index("uq_orders_one_open_per_market", "market_ticker", unique=True, postgresql_where=text("state IN ('proposed', 'approved')")),
+        Index("ix_orders_state_created", "state", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    client_order_id: Mapped[str] = mapped_column(String(64), unique=True)
+    run_id: Mapped[str] = mapped_column(String(64))
+    event_ticker: Mapped[str] = mapped_column(String(128))
+    market_ticker: Mapped[str] = mapped_column(String(128))
+    outcome: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text)
+    game_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    side: Mapped[str] = mapped_column(String(3))
+    price: Mapped[Decimal] = mapped_column(Numeric(7, 4))  # dollars per contract: the executable ask when it was prepared
+    contracts: Mapped[int] = mapped_column(Integer)
+    max_cost: Mapped[Decimal] = mapped_column(Numeric(12, 4))  # price times contracts plus the estimated fee
+    fee_estimate: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    our_probability: Mapped[Decimal] = mapped_column(Numeric(5, 4))  # for the side we would buy
+    gap: Mapped[Decimal] = mapped_column(Numeric(8, 4))  # net gap per contract after fees when prepared
+    forecast_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    state: Mapped[str] = mapped_column(String(20))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    approved_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reason: Mapped[str | None] = mapped_column(Text)  # why it was rejected, or why the simulation rejected it
+    placed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fill_contracts: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    fill_price: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    fill_fee: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    won: Mapped[bool | None] = mapped_column(Boolean)
+    paper_result: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))  # dollars, for the contracts filled
+
+
+class OrderEvent(Base):
+    """Append-only history of an order: every state change, who made it and why."""
+
+    __tablename__ = "order_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    from_state: Mapped[str | None] = mapped_column(String(20))
+    to_state: Mapped[str] = mapped_column(String(20))
+    actor: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    detail: Mapped[str | None] = mapped_column(Text)
+
+
 class Alert(Base):
     """Something worth telling the user, recorded in the app whether or not a chat channel exists."""
 

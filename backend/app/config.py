@@ -112,6 +112,11 @@ class Settings:
     auto_research_max_per_day: int
     auto_research_hours_ahead: float
     auto_research_min_gap_hours: float
+    order_max_contracts: int
+    order_max_cost_usd: float
+    order_max_day_cost_usd: float
+    order_expiry_minutes: float
+    order_max_slippage_cents: float
     record_baseline: bool
     resolve_after_hours: float
 
@@ -282,6 +287,13 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         problems.append(f"AUTO_RESEARCH_MAX_PER_DAY must be a whole number, 0 or more (0 means off), got {raw_auto!r}")
     auto_hours_ahead = _parse_positive_float("AUTO_RESEARCH_HOURS_AHEAD", env.get("AUTO_RESEARCH_HOURS_AHEAD", "24"), problems)
     auto_min_gap = _parse_positive_float("AUTO_RESEARCH_MIN_GAP_HOURS", env.get("AUTO_RESEARCH_MIN_GAP_HOURS", "12"), problems)
+    order_max_contracts = _parse_positive_int("ORDER_MAX_CONTRACTS", env.get("ORDER_MAX_CONTRACTS", "10"), problems)
+    order_max_cost = _parse_positive_float("ORDER_MAX_COST_USD", env.get("ORDER_MAX_COST_USD", "5.00"), problems)
+    order_max_day_cost = _parse_positive_float("ORDER_MAX_DAY_COST_USD", env.get("ORDER_MAX_DAY_COST_USD", "20.00"), problems)
+    order_expiry = _parse_positive_float("ORDER_EXPIRY_MINUTES", env.get("ORDER_EXPIRY_MINUTES", "10"), problems)
+    order_slippage = _parse_positive_float("ORDER_MAX_SLIPPAGE_CENTS", env.get("ORDER_MAX_SLIPPAGE_CENTS", "2"), problems)
+    if order_max_day_cost < order_max_cost:
+        problems.append("ORDER_MAX_DAY_COST_USD must not be smaller than ORDER_MAX_COST_USD")
     record_baseline = _parse_bool("RECORD_BASELINE", env.get("RECORD_BASELINE", "true"), problems)
     resolve_after_hours = _parse_positive_float("RESOLVE_AFTER_HOURS", env.get("RESOLVE_AFTER_HOURS", "3"), problems)
 
@@ -363,6 +375,11 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         auto_research_max_per_day=auto_per_day,
         auto_research_hours_ahead=auto_hours_ahead,
         auto_research_min_gap_hours=auto_min_gap,
+        order_max_contracts=order_max_contracts,
+        order_max_cost_usd=order_max_cost,
+        order_max_day_cost_usd=order_max_day_cost,
+        order_expiry_minutes=order_expiry,
+        order_max_slippage_cents=order_slippage,
         record_baseline=record_baseline,
         resolve_after_hours=resolve_after_hours,
     )
