@@ -261,3 +261,44 @@ Built as specified: `app/research/forecast.py`, framings and prompt in `app/rese
 **Live check with the real model (one game, three forecasters, `gpt-5.4`, medium effort):** the request was accepted, 1,649 input and 1,209 output tokens, **2.2 cents for the three forecasters**, all three answers valid. Atalanta vs Venezia with four real supported claims gave Atalanta 0.69, 0.67 and 0.68, draw 0.19 to 0.20, Venezia 0.12 to 0.13. **The three framings barely differ** on this one game, so the spread will be small; whether three framings add anything over one call is for Milestone 4 to measure (no conclusion from one game).
 
 **Verified live on 2026-10-13 (VPN on, public read calls only, one call per configured series):** all open events of all 15 configured series are `mutually_exclusive: true`; every soccer winner event has exactly three markets (home team, away team, Tie), every baseball and tennis event exactly two. So their outcomes are exclusive and cover every result. Because Kalshi's flag only says "at most one outcome", the rule is now `GameInfo.sums_to_one`: exclusive **and** two outcomes, or three outcomes with one named Tie or Draw. Anything else (for example a futures market added to `SPORTS_SERIES`) is not scaled and not told to add up to 100%. Limit: a game that is postponed or voided is outside this rule (Kalshi settles those its own way).
+
+## Tasks 6 and 7 detail: median and market comparison (FEAT-20261012-1626, FEAT-20261012-1627), for approval
+
+Branch `feature/sports-games-list`. New module `app/research/predict.py` (median and spread) and `app/research/compare.py` (market comparison). As before, wiring into a run is task 10 (`FEAT-20261012-1628`); the early record (`FEAT-20261013-0906`) saves what these produce.
+
+### Task 6: median and spread
+
+- **Per outcome:** the median of the valid forecasters' probabilities; with exactly two valid forecasts the median is their mean. Also saved: `min`, `max`, `spread` (max minus min, in probability points), and each forecaster's own number with its framing.
+- **Where the outcomes must add up to 100%** (`GameInfo.sums_to_one`), the medians are scaled to add up to exactly 100% (medians of separate vectors can add up to slightly more or less). The unscaled medians are kept next to the scaled ones.
+- **Output:** a plain dict stored in `runs.prediction`: per outcome `{market_ticker, outcome, probability, median_raw, spread, min, max, forecasts: [{variant, probability}]}`, plus `forecasters_valid`, `dropped` (with reasons), `evidence` (`supported` or `none`), `supported_claims` (count). With no prediction (fewer than two valid forecasts) it stores `{"unavailable": reason}`; there is no quiet substitute.
+
+### Task 7: market comparison
+
+**What the market gives us (verified live on 2026-10-13, public read calls):** each outcome's market has `yes_bid_dollars`, `yes_ask_dollars`, `no_bid_dollars`, `no_ask_dollars` and the contract counts at the best bid and ask (`yes_ask_size_fp`, `yes_bid_size_fp`). `last_price_dollars` is not used (often stale or zero). Prices are in steps of one cent for the series checked.
+
+**Executable price (what a bet could really be placed at):**
+- Buy YES at the **YES ask**; buy NO at the **NO ask** (which is 1 minus the YES bid). A missing side (no ask, or an ask of 0 or 1 dollar meaning an empty book) means **no executable price** for that side; it is shown as such and never compared.
+- The prices are fetched at comparison time with one `get_event` call (the same call the run start already uses), and the time is saved as `priced_at`. The forecasters never see them.
+
+**Fees.** Kalshi's market data has no fee field; the fee type and a multiplier are on the **series** (`GET /series/{ticker}`): `fee_type` is `quadratic` or `quadratic_with_maker_fees` and `fee_multiplier` is 1 for 14 of our 15 series and **0.5 for MLB** (read live today). The formula for these types, from several third-party sources and **not yet confirmed from Kalshi's own fee schedule** (the page answered HTTP 429 and could not be read today): fee for one contract at price P = 0.07 × multiplier × P × (1 − P), rounded up to the next cent per order. We take the **taker** fee because buying at the ask is a taker trade (the maker rate, a quarter of it according to some sources, applies only to resting orders and is not assumed). The fee is computed for one contract and is not rounded (rounding applies per order, which depends on size). If the series call fails, the comparer uses `quadratic` with multiplier 1 **and says so** (`fee_source: "assumed"`, logged), never silently.
+
+**Per outcome, both sides are compared:**
+- YES: `net edge = probability − yes_ask − fee(yes_ask)`.
+- NO: `net edge = (1 − probability) − no_ask − fee(no_ask)`.
+- The side with the larger net edge is the candidate; the other side's number is kept for display. The edge is per contract in dollars (0.05 = five cents of expected profit per contract, before any other cost).
+- Saved with it: the bid, ask and sizes, `priced_at`, `fee_type`, `fee_multiplier`, `fee_source`.
+
+**"Meaningful gap" (a flag, never an instruction).** All of these must hold for the candidate side:
+1. net edge of the **median** is at least `EDGE_MIN` (default **0.05**, a placeholder);
+2. the **worst-case forecaster** still shows a positive net edge on the same side (for YES the lowest forecast, for NO the highest). This is what "the forecasters agree" means, and it replaces a separate spread limit; the spread is still shown;
+3. the evidence is not thin: `evidence` is `supported` and at least `MIN_SUPPORTED_CLAIMS` supported claims (default **5**, placeholder);
+4. the best ask has at least `MIN_ASK_SIZE` contracts (default **10**, placeholder), so the price is not for one contract.
+Any failed condition is listed by name next to the flag ("worst-case forecaster shows no edge", "only 3 supported claims"), so the page can say why. **The three thresholds are placeholders**: Milestone 4 replaces them with values chosen from scored forecasts. Until then a flag means "worth a person's look", nothing more.
+
+**Not in this task:** sizing (how much to bet), orders, comparison for non-winner market types (FEAT-20261013-0907), alerts.
+
+**Settings (defaults, in `.env.example` and compose):** `EDGE_MIN` 0.05, `MIN_SUPPORTED_CLAIMS` 5, `MIN_ASK_SIZE` 10.
+
+**Tests (no network):** median of three and of two; unscaled and scaled medians; spread, min and max; no-prediction record carries the reason; NO ask equals 1 minus the YES bid; empty-book sides give no executable price; fee for sample prices (P 0.50 gives 1.75 cents at multiplier 1 and 0.875 at 0.5; P 0.10 and 0.90 give 0.63 cents); YES and NO edges and choice of side; each flag condition failing on its own with its named reason, and all passing; assumed-fee fallback is marked and logged; the comparer never receives forecaster text and the forecasters' prompt never receives prices (already tested for the prompt).
+
+**Limits to state to the client:** the fee formula is from secondary sources until Kalshi's schedule can be read; the thresholds are placeholders; edge per contract ignores that large orders move the price (only the best level is used).
