@@ -29,7 +29,7 @@ def claim(text, urls, kind="sourced"):
 FINDINGS = [
     {"angle": "Form", "claims": [claim("Newcastle beat Arsenal 2-1", ["https://a.test"]), claim("Arsenal had 3 days of rest", ["https://a.test"]),
                                   claim("Uncited line", [], "uncited")]},
-    {"angle": "Odds", "claims": [claim("Arsenal 2.10 to win", ["https://b.test", "https://down.test"])]},
+    {"angle": "Lineups", "claims": [claim("Arsenal 2.10 to win", ["https://b.test", "https://down.test"])]},
 ]
 
 
@@ -249,6 +249,17 @@ def test_a_claim_goes_forward_if_any_page_supports_it():
     assert [(c["finding_index"], c["claim_index"], c["supported_by"]) for c in out] == [(0, 0, ["https://a.test"]), (1, 0, ["https://down.test"])]
     assert out[0]["angle"] == "Form" and out[0]["text"] == "Newcastle beat Arsenal 2-1"
     assert supported_claims(FINDINGS, []) == []
+
+
+def test_odds_findings_never_go_forward_by_kind_or_by_name():
+    findings = [
+        {"angle": "Prices", "kind": "market_odds", "claims": [claim("Arsenal 2.10 to win", ["https://a.test"])]},
+        {"angle": "Current odds", "kind": "evidence", "claims": [claim("Draw 3.40", ["https://a.test"])]},  # mislabelled by the planner
+        {"angle": "Form", "kind": "evidence", "claims": [claim("Arsenal won 4 of 5", ["https://a.test"])]},
+        {"angle": "Form (old run)", "claims": [claim("A finding saved before kinds existed", ["https://a.test"])]},
+    ]
+    checks = [check(i, 0, "https://a.test", "supported") for i in range(4)]
+    assert [c["text"] for c in supported_claims(findings, checks)] == ["Arsenal won 4 of 5", "A finding saved before kinds existed"]
 
 
 def test_not_supported_on_one_page_does_not_cancel_support_on_another():

@@ -136,3 +136,13 @@ def test_researcher_instructions_are_the_contract_for_plain_sourced_facts():
         "No relevant information found", "Never write a probability",
     ):
         assert rule in text, rule
+
+
+def test_findings_carry_the_kind_of_their_angle_and_the_planner_is_asked_for_it():
+    from app.research.prompts import PLANNER_INSTRUCTIONS
+    from app.research.schemas import Angle, is_market_angle
+
+    assert 'kind "market_odds"' in PLANNER_INSTRUCTIONS
+    assert Angle(name="Form", question="q").kind == "evidence" and Angle(name="Odds", question="q", kind="market_odds").kind == "market_odds"
+    assert is_market_angle("market_odds", "Prices") and is_market_angle("evidence", "Current odds") and is_market_angle(None, "Odds and lines")
+    assert not is_market_angle("evidence", "Form") and not is_market_angle(None, None)

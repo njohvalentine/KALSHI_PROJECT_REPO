@@ -80,9 +80,9 @@ class FakeForecaster:
                               reasoning=f"{framing[0]} reasoning"), Usage("gpt-5.4", 2000, 0, 1000)
 
 
-def signed_in(make_client, judge=None, forecaster=None, kalshi=None, model=None, **env):
+def signed_in(make_client, judge=None, forecaster=None, kalshi=None, model=None, fetch_options=None, **env):
     client = make_client(research_model=model or FakeModel(angle_names=["Form"], lines=LINES), judge=judge or FakeJudge(),
-                         forecaster=forecaster or FakeForecaster(), fetch_options=FETCH, **env)
+                         forecaster=forecaster or FakeForecaster(), fetch_options=fetch_options or FETCH, **env)
     client.__enter__()
     client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
     client.app.state.kalshi = kalshi or kalshi_mock()
@@ -144,6 +144,30 @@ def test_a_run_goes_through_every_stage_and_stores_everything(make_client, monke
                 "forecast": 3 * cost_usd(forecast), "baseline": cost_usd(baseline)}
     assert {k: Decimal(v) for k, v in run["costs"].items()} == expected
     assert Decimal(run["cost_usd"]) == sum(expected.values()) and run["input_tokens"] == 1000 + 5000 + 2 * 3000 + 3 * 2000 + 2000
+
+
+def test_supported_odds_claims_are_never_given_to_the_forecasters(make_client):
+    lines = {"Form": [(FACTS[0], "https://form.test/a")], "Prices": [("Arsenal 2.10, Draw 3.40, Lille 3.60 at one bookmaker", "https://book.test/a")]}
+    model = FakeModel(angle_names=["Form", "Prices"], lines=lines)
+    forecaster = FakeForecaster()
+    odds_page = PAGE.replace("</body>", "<p>Arsenal 2.10, Draw 3.40, Lille 3.60 at one bookmaker. " * 12 + "</p></body>")
+    fetch = FETCH | {"transport": httpx2.MockTransport(lambda r: httpx2.Response(200, content=odds_page.encode(), headers={"content-type": "text/html"}))}
+    client = signed_in(make_client, model=model, forecaster=forecaster, judge=FakeJudge(), fetch_options=fetch)
+    # the fake planner returns plain angles; mark the second one as market information the way the real planner does
+    real_plan = model.plan
+
+    async def plan(game, max_angles):
+        plan_, usage = await real_plan(game, max_angles)
+        plan_.angles[1].kind = "market_odds"
+        return plan_, usage
+    model.plan = plan
+    try:
+        run = run_game(client)
+    finally:
+        client.__exit__(None, None, None)
+    assert [c["verdict"] for c in run["claim_checks"]] == ["supported", "supported"]  # both were checked and are shown, and the odds claim IS supported
+    assert run["prediction"]["supported_claims"] == 1  # but only the form claim goes forward
+    assert {n for _, n in forecaster.calls if n} == {1}  # three forecasters saw one fact each (the baseline saw none)
 
 
 def test_the_run_list_shows_the_stage_and_how_many_outcomes_were_flagged(make_client):

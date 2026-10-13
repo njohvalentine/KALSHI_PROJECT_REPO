@@ -1,6 +1,7 @@
 """Data shapes shared by the research code."""
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -54,6 +55,16 @@ class GameInfo:
 class Angle(BaseModel):
     name: str = Field(description="Short label for this line of research, a few words")
     question: str = Field(description="The specific question the researcher should answer by searching the web")
+    kind: Literal["evidence", "market_odds"] = Field(
+        default="evidence",
+        description="market_odds for the angle about bookmaker odds or market prices, evidence for every other angle",
+    )
+
+
+def is_market_angle(kind: str | None, name: str | None) -> bool:
+    """True for findings about odds or market prices. Those are market information: the forecasters must not
+    see them. The planner sets the kind; a name containing "odds" counts too, in case it mislabels."""
+    return kind == "market_odds" or "odds" in (name or "").lower()
 
 
 class Plan(BaseModel):

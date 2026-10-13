@@ -413,3 +413,17 @@ Result pages (1629), more market types (0907), the opportunities screen (0908), 
 Built as specified: `app/research/pipeline.py` (stages, failure rules), `execute_run` restructured (`summarize` now sums every stage and stores a cost per stage; the run stays `running` until the last stage), `create_app` builds the real judge and forecaster next to the research model, `GET /api/runs/{id}` returns `stage`, `pages` (no page text), `claim_checks`, `forecasts`, `prediction`, `costs`, and the list returns `stage` and `flagged_outcomes`. 377 backend tests pass, including 12 whole-run tests with fakes for every outside service.
 
 **Not yet done:** a run with the real OpenAI and Kalshi services. Until then the time (estimated one and a half to three minutes) and the total cost (estimated about 50 cents) are unmeasured. The running Docker stack is still the old build; rebuild with `docker compose up -d --build` to use this (a migration runs at start).
+
+## Odds are market information, not forecaster evidence (BUG in TODO.md, approved by the user on 2026-10-13)
+
+**Verified cause (first real run, notes D32):** the planner always plans an odds angle ("Current odds"); its claims are bookmaker prices. The checker treats them like any claim, and `supported_claims` passes every supported claim to the forecasters. So supported odds would reach the forecasters, although they must not see the market. (In that run the odds pages were all unreadable, which hid the problem.)
+
+**Fix:**
+1. `Angle` gets `kind`: `evidence` (default) or `market_odds`. The planner instructions say that the betting-odds angle must be `market_odds`; the kind travels with each finding in `runs.result`.
+2. Code-side guard in case the planner mislabels: an angle whose name contains "odds" counts as `market_odds` too (explicit rule, one function).
+3. `supported_claims` leaves out findings of that kind, so the forecasters never receive them. The claims are still fetched, checked and shown (their labels tell whether the odds pages could be read).
+4. A rule in the forecaster instructions: if a fact states betting odds or a market price, ignore it as evidence. This covers odds that appear inside other angles' claims (the only protection for those; a regex for odds formats would be fragile and is not added).
+
+**Not built here (logged as a separate deferred item):** using the odds as a benchmark (bookmaker prices with the margin removed) in the accuracy test.
+
+**Tests:** planner prompt asks for the kind; findings carry it; `supported_claims` excludes `market_odds` and an angle named with "odds"; a whole run in which the odds claims are supported gives the forecasters only the other claims (and the supported count excludes them); the forecaster instructions carry the rule.

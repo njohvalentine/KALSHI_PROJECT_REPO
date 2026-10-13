@@ -23,7 +23,7 @@ from app.config import Settings
 from app.models import ClaimCheck, Run, SourcePage
 from app.research.model import ResearchModelError, _today, openai_client, usage_from
 from app.research.prompts import CHECKER_INSTRUCTIONS, PAGE_TAG, checker_input
-from app.research.schemas import Usage
+from app.research.schemas import Usage, is_market_angle
 
 log = logging.getLogger("app.research.check")
 
@@ -224,6 +224,7 @@ async def check_run(engine, run_id: str, judge: ClaimJudge, settings: Settings) 
 
 def supported_claims(findings: list[dict], checks) -> list[dict]:
     """The claims that go forward to the forecasters: those with at least one page that supports them.
+    Findings about odds or market prices (see is_market_angle) never go forward.
 
     `checks` is any iterable of objects with finding_index, claim_index, source_url and verdict."""
     supporting: dict[tuple[int, int], list[str]] = {}
@@ -232,6 +233,8 @@ def supported_claims(findings: list[dict], checks) -> list[dict]:
             supporting.setdefault((c.finding_index, c.claim_index), []).append(c.source_url)
     out = []
     for fi, finding in enumerate(findings):
+        if is_market_angle(finding.get("kind"), finding.get("angle")):
+            continue  # odds are market information, never evidence for the forecasters
         for ci, claim in enumerate(finding.get("claims", [])):
             if claim.get("kind") == "sourced" and (fi, ci) in supporting:
                 out.append({"finding_index": fi, "claim_index": ci, "angle": finding.get("angle"),

@@ -73,6 +73,7 @@ def build_graph(model: ResearchModel, settings: Settings, checkpointer=None):
             "findings": [{
                 "angle": angle.name,
                 "question": angle.question,
+                "kind": angle.kind,
                 "claims": [c.as_dict() for c in claims],
                 "ignored_citations": bad,
             }],
