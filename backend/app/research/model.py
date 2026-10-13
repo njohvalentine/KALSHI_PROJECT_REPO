@@ -26,6 +26,18 @@ class ResearchModel(Protocol):
     async def research(self, game: GameInfo, angle: Angle) -> ResearchOutput: ...
 
 
+NO_CREDIT_CODES = ("insufficient_quota", "credit_balance_exhausted")
+
+
+def error_kind(exc: Exception) -> str:
+    """The kind of a failed OpenAI call for people to read: the error class, and a plain reason for the one case
+    that needs an action (no credit left). The message of the error itself is never included."""
+    cause = exc.__cause__ if isinstance(exc, ResearchModelError) and exc.__cause__ is not None else exc  # the wrapped OpenAI error
+    if getattr(cause, "code", None) in NO_CREDIT_CODES:
+        return f"{type(cause).__name__}: the OpenAI account has no credit left"
+    return type(exc).__name__
+
+
 def _today() -> str:
     return datetime.now(UTC).date().isoformat()
 
@@ -93,7 +105,7 @@ class OpenAIResearchModel:
             )
         except Exception as exc:
             log.warning("Planner call failed: %s: %s", type(exc).__name__, exc)  # the full text stays in the log
-            raise ResearchModelError(f"Planner call failed: {type(exc).__name__}") from exc
+            raise ResearchModelError(f"Planner call failed: {error_kind(exc)}") from exc
         if response.output_parsed is None:
             raise ResearchModelError("The planner returned no usable plan")
         return response.output_parsed, usage_from(response, self._s.planner_model)
@@ -114,6 +126,6 @@ class OpenAIResearchModel:
             )
         except Exception as exc:
             log.warning("Researcher call failed: %s: %s", type(exc).__name__, exc)
-            raise ResearchModelError(f"Researcher call failed: {type(exc).__name__}") from exc
+            raise ResearchModelError(f"Researcher call failed: {error_kind(exc)}") from exc
         segments, searches = segments_and_searches(response)
         return ResearchOutput(segments=segments, usage=usage_from(response, self._s.researcher_model, searches))

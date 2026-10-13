@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.config import Settings
 from app.models import Forecast as ForecastRow
-from app.research.model import ResearchModelError, _today, openai_client, usage_from
+from app.research.model import ResearchModelError, _today, error_kind, openai_client, usage_from
 from app.research.prompts import EXCLUSIVE_RULE, FORECASTER_INSTRUCTIONS, FRAMINGS, GROUP_RULE, forecaster_input
 from app.research.schemas import GameInfo, Usage
 
@@ -183,7 +183,7 @@ async def run_forecasters(game: GameInfo, claims: list[dict], model: ForecastMod
             answer, usage = await model.forecast(game, claims, framing)
         except Exception as exc:  # one failed forecaster must not lose the others; it is logged and counted
             log.warning("Forecaster %d (%s) failed: %s", index + 1, framing[0], exc)
-            result.dropped.append({"index": index, "variant": framing[0], "reason": f"call failed: {type(exc).__name__}"})
+            result.dropped.append({"index": index, "variant": framing[0], "reason": f"call failed: {error_kind(exc)}"})
             return
         result.usages.append(asdict(usage))  # the call was paid for even if its answer is unusable
         try:

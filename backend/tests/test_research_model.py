@@ -180,3 +180,40 @@ def test_game_from_a_kalshi_event_response():
     for bad in ({"event": {}, "markets": [{"ticker": "x"}]}, {"event": {"event_ticker": "E"}, "markets": []}, {}):
         with pytest.raises(ValueError):
             GameInfo.from_kalshi_event(bad)
+
+
+def test_an_account_without_credit_is_named_in_plain_words_and_other_errors_by_their_kind_only():
+    from app.research.model import error_kind
+
+    class NoCredit(Exception):
+        code = "insufficient_quota"
+
+    class Other(Exception):
+        code = "something_else"
+
+    assert error_kind(NoCredit("You have no credits remaining. sk-proj-secret")) == "NoCredit: the OpenAI account has no credit left"
+    assert error_kind(Other("detail with sk-proj-secret")) == "Other"
+    try:
+        try:
+            raise NoCredit("x")
+        except NoCredit as inner:
+            raise ResearchModelError("Forecaster call failed") from inner
+    except ResearchModelError as wrapped:
+        assert error_kind(wrapped) == "NoCredit: the OpenAI account has no credit left"  # the reason sits on the wrapped error
+    assert "sk-proj" not in error_kind(NoCredit("sk-proj-secret"))
+
+
+def test_a_run_with_no_credit_says_so_in_its_error(caplog):
+    class NoCredit(Exception):
+        code = "credit_balance_exhausted"
+
+    class Boom:
+        async def create(self, **kw):
+            raise NoCredit("You have no credits remaining")
+
+        async def parse(self, **kw):
+            raise NoCredit("You have no credits remaining")
+
+    model = OpenAIResearchModel(SETTINGS, client=SimpleNamespace(responses=Boom()))
+    with pytest.raises(ResearchModelError, match="Planner call failed: NoCredit: the OpenAI account has no credit left"):
+        asyncio.run(model.plan(MARKET, 3))

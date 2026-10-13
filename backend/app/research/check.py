@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.config import Settings
 from app.models import ClaimCheck, Run, SourcePage
-from app.research.model import ResearchModelError, _today, openai_client, usage_from
+from app.research.model import ResearchModelError, _today, error_kind, openai_client, usage_from
 from app.research.prompts import CHECKER_INSTRUCTIONS, PAGE_TAG, checker_input
 from app.research.schemas import Usage, is_market_angle
 
@@ -223,7 +223,7 @@ async def check_run(engine, run_id: str, judge: ClaimJudge, settings: Settings) 
                 )
             except Exception as exc:  # one failed page must not lose the others; logged, and saved as could_not_check
                 log.warning("Checking %s failed: %s", job.url, exc)
-                save([("could_not_check", f"The check could not be run: {type(exc).__name__}")] * len(todo))
+                save([("could_not_check", f"The check could not be run: {error_kind(exc)}")] * len(todo))
                 return
         summary.usages.append(asdict(usage))
         numbers = [v.claim_number for v in verdicts]
