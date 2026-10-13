@@ -226,6 +226,27 @@ def test_extraction_drops_scripts_styles_and_keeps_the_text():
     assert text.startswith("Newcastle beat Arsenal")
 
 
+def test_a_table_row_stays_on_one_line_with_its_cells_separated():
+    html = (
+        "<p>Head to head</p><table><tr><th>Date</th><th>Round</th><th>Winner</th><th>Score</th></tr>"
+        "<tr><td>Sep 29, 2026</td><td>F</td><td><div>Davidovich Fokina</div><div>#26</div></td><td>6-4 7-6(7)</td></tr>"
+        "<tr><td>Jun 29, 2022</td><td>R128</td><td>Hurkacz</td><td></td><td>7-6(4)</td></tr></table><p>After the table</p>"
+    )
+    _, text = fetch.extract_text(html)
+    assert text.split("\n") == [
+        "Head to head",
+        "Date | Round | Winner | Score",
+        "Sep 29, 2026 | F | Davidovich Fokina #26 | 6-4 7-6(7)",
+        "Jun 29, 2022 | R128 | Hurkacz | 7-6(4)",  # an empty cell does not leave a pile of bars
+        "After the table",
+    ]
+
+
+def test_text_outside_tables_and_lists_are_unchanged_by_the_table_rule():
+    _, text = fetch.extract_text("<h1>Title</h1><ul><li>One</li><li>Two</li></ul><div>A</div><div>B</div>")
+    assert text.split("\n") == ["Title", "One", "Two", "A", "B"]
+
+
 def test_javascript_shell_and_tiny_pages_are_marked_empty_js():
     shell = "<html><head><title>App</title></head><body><div id='root'></div><script src='/app.js'></script><noscript>Please enable JavaScript to run this app.</noscript></body></html>"
     result, _ = run("https://example.test/", lambda r: html_response(shell))

@@ -117,8 +117,12 @@ def public_addresses(host: str, port: int, resolver: Resolver) -> list[str]:
 
 
 class _Text(HTMLParser):
+    """Visible text. A table row stays on one line with its cells joined by " | ": a table flattened one
+    cell per line lets a reader (or the judge) pair a date with the wrong row."""
+
     SKIP = {"script", "style", "noscript", "template", "svg", "head"}
-    BLOCK = {"p", "div", "br", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article", "table", "ul", "ol"}
+    BLOCK = {"p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "section", "article", "table", "ul", "ol"}
+    CELL = {"td", "th"}
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -126,22 +130,32 @@ class _Text(HTMLParser):
         self.title = ""
         self._skip = 0
         self._in_title = False
+        self._cell_depth = 0  # inside a table cell, block tags must not break the row
 
     def handle_starttag(self, tag, attrs):
         if tag == "title":
             self._in_title = True
         elif tag in self.SKIP:
             self._skip += 1
-        elif tag in self.BLOCK:
+        elif tag in self.CELL:
+            self._cell_depth += 1
+        elif tag == "tr":
             self.parts.append("\n")
+        elif tag in self.BLOCK:
+            self.parts.append(" " if self._cell_depth else "\n")
 
     def handle_endtag(self, tag):
         if tag == "title":
             self._in_title = False
         elif tag in self.SKIP and self._skip:
             self._skip -= 1
-        elif tag in self.BLOCK:
+        elif tag in self.CELL:
+            self._cell_depth = max(self._cell_depth - 1, 0)
+            self.parts.append(" | ")
+        elif tag == "tr":
             self.parts.append("\n")
+        elif tag in self.BLOCK:
+            self.parts.append(" " if self._cell_depth else "\n")
 
     def handle_data(self, data):
         if self._in_title:
@@ -156,7 +170,9 @@ def extract_text(html: str) -> tuple[str, str]:
     parser.feed(html)
     parser.close()
     lines = (re.sub(r"[ \t\r\f\v]+", " ", line).strip() for line in "".join(parser.parts).split("\n"))
-    text = "\n".join(line for line in lines if line)
+    lines = (re.sub(r"(\| ?)+$", "", line).strip() for line in lines)  # a row's last cell leaves no trailing bar
+    lines = (re.sub(r"(?:\| ){2,}", "| ", re.sub(r"^\| ", "", line)) for line in lines)  # empty cells do not stack bars
+    text = "\n".join(line for line in lines if line and line != "|")
     return re.sub(r"\s+", " ", parser.title).strip(), text
 
 

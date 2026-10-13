@@ -502,3 +502,8 @@ Built as specified: `components/prediction-table.tsx`, `forecasters.tsx`, `evide
 4. **The number rule** still dropped two verdicts the judge called supported (task 3).
 5. **Real errors caught:** the judge marked as contradicted "Inter lost 3-2 at home to Napoli" (the page says Inter won 3-2) and "Club Brugge lost 3-2 at home to Aston Villa" (the page says 2-3): the research made mistakes and the checker caught them.
 Task 1 is kept (single facts are easier to check and easier to read); it is not the fix that raises recall. Cost per run did not rise (0.35 and 0.36 USD).
+
+
+### Evidence recall, task 2 result (2026-10-13)
+
+Text extraction now keeps each real HTML table row on one line, cells separated by " | " (header row too; nested blocks inside a cell become spaces; empty cells do not pile up bars). Tests cover rows, nested cells, empty cells and unchanged text outside tables. **Limit found on the real page:** tennis-db.com does not use table rows for its match list (only the header is a table); each match is a grid of `div` elements, which extraction still prints one cell per line, so the two tennis-db cases of the labelled sample are **not** helped. A general rule for div grids would be guessing at page layout, so none is added; pages built from real tables (many results and statistics pages) benefit.
