@@ -2,29 +2,29 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { EvidenceSection, PagesSection } from "@/components/evidence";
+import { ForecastersSection } from "@/components/forecasters";
+import { PredictionSection } from "@/components/prediction-table";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { dateTime, duration, host, money } from "@/lib/format";
-import { isActive, type Claim, type Run } from "@/lib/types";
+import { dateTime, duration, money } from "@/lib/format";
+import { COST_LABEL, STAGES } from "@/lib/labels";
+import { isActive, type Run } from "@/lib/types";
 
 const POLL_MS = 3000;
 
-function ClaimItem({ claim }: { claim: Claim }) {
+function Progress({ stage }: { stage: string | null }) {
+  const current = Math.max(STAGES.findIndex((s) => s.key === stage), 0);
   return (
-    <li className="border-b py-4 last:border-b-0">
-      <p className="mb-1.5 font-medium">{claim.text}</p>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-        {claim.kind === "sourced" ? <Badge className="bg-secondary text-secondary-foreground">Cited</Badge> : null}
-        {claim.kind === "uncited" ? <Badge className="bg-warn-soft text-warn">No source given</Badge> : null}
-        {claim.kind === "none" ? <Badge variant="outline">Nothing found</Badge> : null}
-        {claim.sources.map((s) => (
-          <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4">
-            {s.title || host(s.url)} <span className="text-muted-foreground">({host(s.url)})</span>
-          </a>
-        ))}
-      </div>
-    </li>
+    <ol className="mt-2 grid gap-1 text-sm" aria-label="Progress">
+      {STAGES.map((s, i) => (
+        <li key={s.key} className={i === current ? "font-medium text-foreground" : i < current ? "text-good" : "text-muted-foreground"}>
+          {i < current ? "✓ " : i === current ? "→ " : "○ "}
+          {s.label}
+          {i === current ? " (now)" : ""}
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -49,19 +49,23 @@ export function RunView({ initial }: { initial: Run }) {
     return () => clearInterval(timer);
   }, [run.id, run.status, router]);
 
-  const findings = run.result?.findings ?? [];
   const errors = run.result?.errors ?? [];
   const angles = run.plan?.angles ?? [];
 
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <>
+      {/* The forecast and the comparison use the full width: the table has six columns. */}
+      {!isActive(run.status) ? <PredictionSection run={run} /> : null}
+      {!isActive(run.status) ? <ForecastersSection run={run} /> : null}
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div>
         {isActive(run.status) ? (
           <Alert className="mb-6">
-            <AlertTitle>{run.status === "queued" ? "Waiting to start" : "Researching this game"}</AlertTitle>
+            <AlertTitle>{run.status === "queued" ? "Waiting to start" : "Working on this game"}</AlertTitle>
             <AlertDescription>
               This page updates by itself. You can leave it; the run keeps going and the result stays here.
               {pollError ? " The latest update could not be loaded; trying again." : ""}
+              {run.status === "running" ? <Progress stage={run.stage} /> : null}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -71,6 +75,9 @@ export function RunView({ initial }: { initial: Run }) {
             <AlertDescription>{run.error ?? "No reason was recorded."}</AlertDescription>
           </Alert>
         ) : null}
+
+        <EvidenceSection run={run} />
+        <PagesSection pages={run.pages ?? []} />
 
         {angles.length > 0 ? (
           <section className="mb-8">
@@ -91,18 +98,6 @@ export function RunView({ initial }: { initial: Run }) {
           </section>
         ) : null}
 
-        {findings.map((f) => (
-          <section key={f.angle} className="mb-8">
-            <h2 className="mb-1 text-xl font-semibold tracking-tight">{f.angle}</h2>
-            <p className="mb-2 text-sm text-muted-foreground">{f.question}</p>
-            <ul>
-              {f.claims.map((c, i) => (
-                <ClaimItem key={i} claim={c} />
-              ))}
-            </ul>
-          </section>
-        ))}
-
         {errors.length > 0 ? (
           <section className="mb-8">
             <h2 className="mb-3 text-xl font-semibold tracking-tight">Angles that did not finish</h2>
@@ -116,13 +111,6 @@ export function RunView({ initial }: { initial: Run }) {
             </ul>
           </section>
         ) : null}
-
-        {run.status === "done" ? (
-          <p className="text-sm text-muted-foreground">
-            “Cited” means the search tool attached a source link to the line. The sources have not been checked against the pages yet,
-            and there is no probability yet. Both come in a later milestone.
-          </p>
-        ) : null}
       </div>
 
       <aside className="rounded-xl border bg-card p-6" aria-label="Run details">
@@ -133,6 +121,7 @@ export function RunView({ initial }: { initial: Run }) {
             ["Time taken", duration(run.started_at, run.finished_at)],
             ["Angles", String(angles.length)],
             ["Cited lines", String(run.sourced_claims)],
+            ["Reached", run.status === "done" ? "All steps" : (STAGES.find((x) => x.key === run.stage)?.label ?? "–")],
             ["Searches", String(run.search_calls)],
             ["Tokens in / out", `${run.input_tokens.toLocaleString("en-US")} / ${run.output_tokens.toLocaleString("en-US")}`],
             ["Cost", money(run.cost_usd)],
@@ -143,9 +132,23 @@ export function RunView({ initial }: { initial: Run }) {
             </div>
           ))}
         </dl>
+        {run.costs && Object.keys(run.costs).length > 0 ? (
+          <div className="mt-4">
+            <h3 className="mb-1 text-sm font-medium">Where the cost went</h3>
+            <dl className="text-sm">
+              {Object.entries(run.costs).map(([key, value]) => (
+                <div key={key} className="flex justify-between gap-4 py-0.5">
+                  <dt className="text-muted-foreground">{COST_LABEL[key] ?? key}</dt>
+                  <dd className="tabular-nums">{money(value)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ) : null}
         {run.cost_usd === null && run.cost_note ? <p className="mt-3 text-sm text-muted-foreground">{run.cost_note}</p> : null}
         {run.over_budget ? <p className="mt-3 text-sm text-warn">This run cost more than the warning level set for one run.</p> : null}
       </aside>
-    </div>
+      </div>
+    </>
   );
 }

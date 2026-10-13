@@ -33,3 +33,32 @@ export function bidAsk(bid: string | null, ask: string | null): string {
   if (!Number.isFinite(b) || !Number.isFinite(a)) return "–";
   return `${Math.round(b * 100)}–${Math.round(a * 100)}¢`;
 }
+
+/** 0.57 -> "57%". */
+export function pct(probability: number): string {
+  return `${Math.round(probability * 100)}%`;
+}
+
+/** A price in dollars (0.42) as cents: "42¢". */
+export function cents(dollars: number | null): string {
+  return dollars === null || !Number.isFinite(dollars) ? "–" : `${Math.round(dollars * 100)}¢`;
+}
+
+/** A gap in dollars per contract (0.2188) as "+22¢". */
+export function gapCents(dollars: number | null): string {
+  if (dollars === null || !Number.isFinite(dollars)) return "–";
+  const value = Math.round(dollars * 100);
+  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value)}¢`;
+}
+
+/** "5 min ago", "2 h ago", "3 days ago". */
+export function ago(iso: string | null, now: number = Date.now()): string {
+  const time = iso ? new Date(iso).getTime() : Number.NaN;
+  if (!Number.isFinite(time)) return "";
+  const minutes = Math.max(0, Math.round((now - time) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} days ago`;
+}

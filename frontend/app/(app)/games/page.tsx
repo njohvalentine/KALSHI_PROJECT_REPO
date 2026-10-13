@@ -9,8 +9,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { backendFetch } from "@/lib/backend";
-import { bidAsk } from "@/lib/format";
-import type { GamesResponse, RunSummary } from "@/lib/types";
+import { ago, bidAsk, pct } from "@/lib/format";
+import type { GamesResponse, LatestForecast, LatestRun, RunSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Params = { sport?: string; q?: string; started?: string };
@@ -43,9 +43,11 @@ async function GamesList({ params }: { params: Params }) {
   }
   const data = (await res.json()) as GamesResponse;
   const latest = new Map<string, { id: string; status: RunSummary["status"] }>();
+  const forecasts = new Map<string, LatestForecast>();
   if (latestRes.ok) {
-    for (const r of ((await latestRes.json()) as { runs: { event_ticker: string; id: string; status: RunSummary["status"] }[] }).runs) {
+    for (const r of ((await latestRes.json()) as { runs: LatestRun[] }).runs) {
       latest.set(r.event_ticker, { id: r.id, status: r.status });
+      if (r.forecast) forecasts.set(r.event_ticker, r.forecast);
     }
   }
 
@@ -115,13 +117,29 @@ async function GamesList({ params }: { params: Params }) {
                   </TableCell>
                   <TableCell className="whitespace-normal px-4 py-3.5">
                     <ul className="grid gap-0.5">
-                      {g.outcomes.map((o) => (
-                        <li key={o.market_ticker} className="flex justify-between gap-6 text-sm">
-                          <span>{o.label}</span>
-                          <span className="tabular-nums text-muted-foreground">{bidAsk(o.bid, o.ask)}</span>
-                        </li>
-                      ))}
+                      {g.outcomes.map((o) => {
+                        const ours = forecasts.get(g.event_ticker)?.outcomes.find((x) => x.market_ticker === o.market_ticker);
+                        return (
+                          <li key={o.market_ticker} className="flex flex-wrap justify-between gap-x-6 text-sm">
+                            <span>{o.label}</span>
+                            <span className="tabular-nums text-muted-foreground">
+                              {ours ? (
+                                <span className="mr-3 font-medium text-foreground">
+                                  Our estimate {pct(ours.probability)}
+                                  {ours.flagged ? <Badge className="ml-1.5 bg-good-soft text-good">Worth a look</Badge> : null}
+                                </span>
+                              ) : null}
+                              {bidAsk(o.bid, o.ask)}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
+                    {forecasts.get(g.event_ticker) ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Estimate made {ago(forecasts.get(g.event_ticker)?.forecast_at ?? null)}; the prices are live.
+                      </p>
+                    ) : null}
                     <div className="mt-2 md:hidden">
                       <AnalyzeButton eventTicker={g.event_ticker} latest={latest.get(g.event_ticker) ?? null} />
                     </div>
@@ -181,7 +199,7 @@ export default async function GamesPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title="Games"
-        description="Upcoming soccer, baseball and tennis games on Kalshi, soonest first. Press Research to look into a game. Estimates and the comparison with the market price come in a later milestone."
+        description="Upcoming soccer, baseball and tennis games on Kalshi, soonest first. Press Research to look into a game and get our estimate for each outcome. An estimate is for the moment it was made; prices move."
       />
       <form action="/games" method="get" className="mb-4 flex max-w-md gap-2">
         {params.sport ? <input type="hidden" name="sport" value={params.sport} /> : null}

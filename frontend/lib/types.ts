@@ -1,6 +1,6 @@
 export type Source = { url: string; title?: string };
 export type Claim = { text: string; kind: "sourced" | "uncited" | "none"; sources: Source[] };
-export type Finding = { angle: string; question: string; claims: Claim[]; ignored_citations?: number };
+export type Finding = { angle: string; question: string; kind?: "evidence" | "market_odds"; claims: Claim[]; ignored_citations?: number };
 export type RunError = { angle: string; error: string };
 
 export type RunSummary = {
@@ -19,12 +19,82 @@ export type RunSummary = {
   cost_note: string | null;
   over_budget: boolean;
   sourced_claims: number;
+  stage: string | null;
+  flagged_outcomes: number | null;
+};
+
+export type Verdict = "supported" | "not_supported" | "could_not_check";
+export type ClaimCheck = { finding_index: number; claim_index: number; source_url: string; verdict: Verdict; reason: string };
+export type PageInfo = {
+  url: string;
+  title: string | null;
+  fetch_status: string;
+  fetch_detail: string | null;
+  fetch_method: string | null;
+  http_status: number | null;
+  fetched_at: string | null;
+};
+export type ForecastRow = {
+  forecaster_index: number;
+  variant: string;
+  market_ticker: string;
+  probability: number;
+  reasoning: string;
+  model: string;
+};
+export type PredictionOutcome = {
+  market_ticker: string;
+  outcome: string;
+  probability: number;
+  min: number;
+  max: number;
+  spread: number;
+  forecasts: { variant: string; probability: number }[];
+};
+export type ComparisonOutcome = {
+  market_ticker: string;
+  yes_bid: number | null;
+  yes_ask: number | null;
+  no_ask: number | null;
+  side: "yes" | "no" | null;
+  net_edge: number | null;
+  worst_case_edge: number | null;
+  meaningful: boolean;
+  reasons: string[];
+};
+export type Comparison = {
+  unavailable?: string;
+  priced_at?: string;
+  fee?: { fee_type: string; multiplier: number; source: string };
+  outcomes?: ComparisonOutcome[];
+};
+export type Prediction = {
+  unavailable?: string;
+  outcomes?: PredictionOutcome[];
+  forecasters_valid?: number;
+  dropped?: { index: number; variant: string; reason: string }[];
+  evidence?: "supported" | "none";
+  supported_claims?: number;
+  comparison?: Comparison;
 };
 
 export type Run = RunSummary & {
   plan: { angles: { name: string; question: string }[]; cut_angles: number } | null;
-  result: { findings: Finding[]; errors: RunError[] } | null;
+  result: { findings: Finding[]; errors: RunError[]; costs?: Record<string, string | null> } | null;
+  prediction: Prediction | null;
+  pages: PageInfo[];
+  claim_checks: ClaimCheck[];
+  forecasts: ForecastRow[];
+  baseline: Record<string, number> | null;
+  costs: Record<string, string | null> | null;
 };
+
+/** What the Games list needs from the latest finished run of a game. */
+export type LatestForecast = {
+  forecast_at: string | null;
+  outcomes: { market_ticker: string; probability: number; flagged: boolean }[];
+};
+export type LatestRun = { event_ticker: string; id: string; status: RunSummary["status"]; forecast: LatestForecast | null };
 
 export const isActive = (status: RunSummary["status"]) => status === "queued" || status === "running";
 

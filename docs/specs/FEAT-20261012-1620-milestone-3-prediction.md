@@ -466,3 +466,12 @@ Meaning is never colour alone (labels in words); tables scroll sideways on a pho
 ### Not in this task
 
 Approval buttons, charts, the opportunities screen (FEAT-20261013-0908), monitoring (0909), automated web tests (still a small open item; they would need a new test dependency, which would be asked first).
+
+
+### Task 11 result (2026-10-13)
+
+Built as specified: `components/prediction-table.tsx`, `forecasters.tsx`, `evidence.tsx`, `lib/labels.ts` (plain-English names), `run-view.tsx` reorganised (progress, forecast and comparison at full width, then evidence, pages, side panel with cost per stage), Games list estimates with their age, run list with stage and "Worth a look" count; backend `baseline` on a run and `forecast` in `/api/runs/latest`. Lint and build pass; 385 backend tests pass. Checked with headless-browser screenshots of a real run (Atletico vs Manchester United) on desktop and phone width and of the Games page. A first screenshot showed the six-column table squeezed by the side panel with its Flag column cut off; the forecast and comparison now use the full width.
+
+**Second real run (same day):** 92 seconds, 0.43 USD (research 0.369, checking 0.034, forecasters 0.024, baseline 0.008). The planner marked the odds angle `market_odds` (checked live), so those claims were not given to the forecasters. Of 19 cited claims, 1 was supported, 2 were `not_supported` (correctly: the research had named players that the UEFA page listed differently), 16 could not be checked.
+
+**Why so few were supported (reasons read claim by claim):** pages that are menus with no content (UEFA form guide, Manchester United fixtures); two UEFA match-history PDFs ("content type application/pdf cannot be read yet"); one page where the judge said supported but its quotes lacked a number of the claim (the number rule again); claims that bundle several details where the page shows only some ("does not name Hancko", "does not say Manchester or round of 16"); the odds pages blocked or empty. So real-world recall is far below the 7 of 9 on the hand-labelled sample, and the research's long compound claims make it worse. Candidate remedies, none built: ask the researchers for one fact per line; read PDFs (needs a new package); let a claim be supported in part; a table-aware text extraction. They are to be chosen with the user.

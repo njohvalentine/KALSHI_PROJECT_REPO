@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { backendFetch } from "@/lib/backend";
 import { dateTime, money } from "@/lib/format";
+import { STAGES } from "@/lib/labels";
 import type { RunSummary } from "@/lib/types";
 
 export default async function PredictionPage() {
@@ -14,7 +15,7 @@ export default async function PredictionPage() {
     <>
       <PageHeader
         title="Prediction"
-        description="Research runs, newest first. Start one from the Games page. Probabilities come in a later milestone."
+        description="Research and forecast runs, newest first. Start one from the Games page."
       />
       {!res.ok ? (
         <Alert variant="destructive">
@@ -38,6 +39,7 @@ export default async function PredictionPage() {
                 <TableHead className="px-4 py-3">Status</TableHead>
                 <TableHead className="px-4 py-3">Started</TableHead>
                 <TableHead className="px-4 py-3 text-right">Cited lines</TableHead>
+                <TableHead className="px-4 py-3 text-right">Worth a look</TableHead>
                 <TableHead className="px-4 py-3 text-right">Cost</TableHead>
               </TableRow>
             </TableHeader>
@@ -52,9 +54,13 @@ export default async function PredictionPage() {
                   </TableCell>
                   <TableCell className="px-4 py-3.5">
                     <StatusBadge status={r.status} />
+                    {r.status === "running" && r.stage ? (
+                      <span className="ml-2 text-sm text-muted-foreground">{STAGES.find((x) => x.key === r.stage)?.label ?? r.stage}</span>
+                    ) : null}
                   </TableCell>
                   <TableCell className="px-4 py-3.5">{dateTime(r.started_at ?? r.created_at)}</TableCell>
                   <TableCell className="px-4 py-3.5 text-right tabular-nums">{r.sourced_claims}</TableCell>
+                  <TableCell className="px-4 py-3.5 text-right tabular-nums">{r.flagged_outcomes === null ? "–" : r.flagged_outcomes}</TableCell>
                   <TableCell className="px-4 py-3.5 text-right tabular-nums">{money(r.cost_usd)}</TableCell>
                 </TableRow>
               ))}
