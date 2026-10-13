@@ -20,7 +20,7 @@ from app.research.schemas import GameInfo, Usage
 from tests.conftest import alembic_config, needs_db
 
 BASE = {"DATABASE_URL": "postgresql://x/y", "KALSHI_API_BASE": "https://k.test", "SESSION_SECRET": "s" * 40}
-S = load_settings(BASE)
+S = load_settings(BASE | {"EDGE_PLAUSIBLE_MAX": "0.5"})
 NOW = datetime(2026, 10, 13, 12, 0, tzinfo=UTC)
 START = NOW + timedelta(hours=4)
 GAME = GameInfo(event_ticker="KX-1", title="A vs B", starts_at=START.isoformat(), outcomes=["A wins", "B wins"],
@@ -39,7 +39,7 @@ EVENT = {"event": {"series_ticker": "KXT"}, "markets": [
 
 
 def comparison():
-    return compare(prediction(), EVENT, FeeInfo("quadratic_with_maker_fees", Decimal("0.5"), "series"), S, NOW)
+    return compare(prediction(), EVENT, FeeInfo("quadratic_with_maker_fees", Decimal("0.5"), "series"), S, NOW, baseline={"KX-A": 0.50, "KX-B": 0.50})
 
 
 def make_records(created_at=NOW, baseline=None, **game_kw):

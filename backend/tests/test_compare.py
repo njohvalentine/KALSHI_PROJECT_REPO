@@ -28,8 +28,10 @@ def market(bid="0.40", ask="0.42", no_ask=None, ask_size="100", bid_size="80", t
     return m
 
 
-def run(o, m, fee=FEE, evidence="supported", claims=7, settings=S):
-    return compare_outcome(o, m, fee, evidence, claims, settings)
+def run(o, m, fee=FEE, evidence="supported", claims=7, settings=S, baseline="auto"):
+    if baseline == "auto":  # the plain AI call said 0.10 closer to even than we did, so the research moved us toward the gap
+        baseline = o["probability"] - 0.10 if o["probability"] >= 0.5 else o["probability"] + 0.10
+    return compare_outcome(o, m, fee, evidence, claims, settings, baseline)
 
 
 @pytest.mark.parametrize("price,multiplier,expected", [
@@ -57,7 +59,7 @@ def test_yes_side_net_edge_fee_worst_case_and_a_meaningful_gap():
 
 def test_the_no_side_is_chosen_when_it_has_the_larger_edge_and_uses_the_lowest_forecaster_view():
     # we think A wins only 20% (range 15 to 25%); the market asks 0.42 for yes, so NO costs 0.60 (1 - bid 0.40)
-    r = run(outcome(0.20, 0.15, 0.25), market())
+    r = run(outcome(0.20, 0.15, 0.25), market(), settings=load_settings(BASE | {"EDGE_PLAUSIBLE_MAX": "0.5"}))
     assert r["side"] == "no" and r["no"]["price"] == Decimal("0.60")
     assert r["net_edge"] == Decimal("0.80") - Decimal("0.60") - fee_per_contract(Decimal("0.60"), FEE)
     assert r["worst_case_edge"] == Decimal("0.75") - Decimal("0.60") - fee_per_contract(Decimal("0.60"), FEE)  # 1 - max forecast
@@ -102,10 +104,14 @@ def test_each_condition_can_fail_alone_and_is_named(o, m, kwargs, reason):
 
 
 def test_thresholds_are_settings():
-    strict = load_settings(BASE | {"EDGE_MIN": "0.2"})
-    assert run(outcome(), market(), settings=strict)["meaningful"] is False
+    strict = load_settings(BASE | {"EDGE_MIN": "0.1", "EDGE_PLAUSIBLE_MAX": "0.5", "MIN_RESEARCH_SHIFT": "0.5"})
+    assert run(outcome(), market(), settings=strict)["meaningful"] is False  # the shift of 0.10 is below the 0.5 asked for
     with pytest.raises(Exception, match="EDGE_MIN"):
         load_settings(BASE | {"EDGE_MIN": "1.5"})
+    with pytest.raises(Exception, match="EDGE_PLAUSIBLE_MAX must be larger than EDGE_MIN"):
+        load_settings(BASE | {"EDGE_MIN": "0.2"})  # the default plausibility limit is 0.15
+    with pytest.raises(Exception, match="MIN_RESEARCH_SHIFT"):
+        load_settings(BASE | {"MIN_RESEARCH_SHIFT": "2"})
 
 
 PREDICTION = {"evidence": "supported", "supported_claims": 7, "forecasters_valid": 3, "dropped": [], "outcomes": [outcome()]}
@@ -113,9 +119,9 @@ EVENT = {"event": {"series_ticker": "KXTEST"}, "markets": [market()]}
 
 
 def test_compare_returns_plain_json_with_the_time_the_fee_and_the_thresholds():
-    c = compare(PREDICTION, EVENT, FEE, S, NOW)
+    c = compare(PREDICTION, EVENT, FEE, S, NOW, baseline={"KX-A": 0.45})
     assert c["priced_at"] == NOW.isoformat() and c["fee"] == {"fee_type": "quadratic", "multiplier": 1.0, "source": "series"}
-    assert c["thresholds"] == {"edge_min": 0.05, "min_supported_claims": 5, "min_ask_size": 10.0}
+    assert c["thresholds"] == {"edge_min": 0.05, "min_supported_claims": 5, "min_ask_size": 10.0, "min_research_shift": 0.05, "edge_plausible_max": 0.15}
     o = c["outcomes"][0]
     assert isinstance(o["net_edge"], float) and o["yes"]["price"] == 0.42 and o["meaningful"] is True
     import json
@@ -222,3 +228,28 @@ def test_a_companion_event_that_cannot_be_read_leaves_its_markets_without_a_pric
     k = FakeKalshiMany({"KX-1": EVENT}, {"KXTEST": {"fee_type": "quadratic", "fee_multiplier": 1}}, event_errors=["KXTTOTAL-1"])
     c = asyncio.run(compare_run(k, "KX-1", prediction, S, companions=[("KXTTOTAL-1", "KXTTOTAL")]))
     assert c["outcomes"][0]["side"] == "yes" and c["outcomes"][1]["reasons"] == ["Kalshi returned no market for this outcome"]
+
+
+def test_the_research_must_move_the_forecast_toward_the_gap_on_the_side_we_would_buy():
+    o, m = outcome(0.55, 0.50, 0.60), market()  # buying yes at 0.42
+    assert run(o, m, baseline=0.45)["meaningful"] is True and run(o, m, baseline=0.45)["research_shift"] == Decimal("0.10")
+    moved_toward_the_market = run(o, m, baseline=0.62)  # the plain AI call was even further from the market than us
+    assert moved_toward_the_market["meaningful"] is False and moved_toward_the_market["research_shift"] == Decimal("-0.07")
+    assert any("did not move the forecast toward the gap (shift -0.070, needs 0.05)" in r for r in moved_toward_the_market["reasons"])
+    small = run(o, m, baseline=0.52)
+    assert small["meaningful"] is False and len(small["reasons"]) == 1
+    # buying no: the research must have moved our probability DOWN from the baseline
+    no_side = outcome(0.20, 0.15, 0.25)
+    relaxed = load_settings(BASE | {"EDGE_PLAUSIBLE_MAX": "0.5"})
+    assert run(no_side, m, baseline=0.30, settings=relaxed)["meaningful"] is True
+    assert run(no_side, m, baseline=0.10, settings=relaxed)["meaningful"] is False  # moved up, toward "yes", away from the gap on "no"
+
+
+def test_without_a_plain_ai_call_nothing_is_flagged_and_it_says_why():
+    r = run(outcome(), market(), baseline=None)
+    assert r["meaningful"] is False and r["research_shift"] is None and r["reasons"] == ["no plain AI call to compare with"]
+
+
+def test_a_gap_above_the_plausibility_limit_is_not_flagged_as_an_opportunity():
+    r = run(outcome(0.80, 0.75, 0.85), market(bid="0.40", ask="0.42"))  # net edge about 0.35
+    assert r["meaningful"] is False and r["reasons"] == ["gap above 0.15 is more likely a model error than an opportunity"]

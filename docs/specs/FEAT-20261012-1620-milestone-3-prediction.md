@@ -580,3 +580,24 @@ Built as specified: `app/research/markets.py` (companion events found by ticker 
 - Cleveland vs Tampa Bay (baseball): 19 markets (2 winner, 11 total lines, 6 spread), 0.63 USD. One of three forecasters failed ("returned no usable answer": the answer was cut off at the 4000-token output cap with 19 markets); two valid forecasts still gave a prediction. The cap default is raised to 8000 and the log now records the reason.
 
 **What the first soccer run shows (a warning, not an opportunity list):** 12 of 14 markets were marked "Worth a look", with gaps of 10 to 26 cents. The three forecasters agree almost exactly (Barcelona wins 54% in each; the plain AI call with no research says 55%) and sit far from the market (Barcelona 77 cents to buy yes). The forecasts barely moved with the research, and the market is usually the better informed side, so these gaps are far more likely the model's blind spot than an edge. The flag's tests (gap after fees, worst-case forecaster, enough supported claims, enough contracts) do not catch this, because agreeing forecasters from the same model are not independent evidence. Milestone 4 scoring is what decides; until then the flag over-promotes. Proposed next (not built): flag only when the research moved the forecast away from the plain-AI baseline, and mark a gap above a plausibility limit as "more likely a model error than an edge".
+
+## The flag must not over-promote (ISS in TODO.md, approved by the user on 2026-10-13)
+
+**Verified cause (Galatasaray vs Barcelona):** a flag needed a net gap above 0.05, the least favourable forecaster still showing a gap, enough supported claims and enough contracts. Three forecasters from the same model who saw the same facts agree almost exactly, so the "worst-case forecaster" test adds nothing, and nothing asked whether the research changed the forecast at all. 12 of 14 markets passed.
+
+**Two added conditions (both must hold, together with the four existing ones):**
+1. **The research moved the forecast toward the gap.** Compare our probability with the plain-AI baseline (the same question with no facts, already recorded). For the side we would buy: buying "yes" needs our probability at least `MIN_RESEARCH_SHIFT` above the baseline; buying "no" needs it at least that far below. Default **0.05**, a placeholder. If there is no baseline (switched off or its call failed) the gap cannot be tested and is **not flagged**, with the reason said ("no plain AI call to compare with").
+2. **The gap is plausible.** A net gap above `EDGE_PLAUSIBLE_MAX` (default **0.15**, a placeholder) is not flagged: it is "more likely a model error than an opportunity", because Kalshi's price is usually the better informed side.
+
+Both thresholds are settings and are replaced with values from scored forecasts in Milestone 4. Each comparison outcome also carries the baseline and the signed research shift so the page can show them. The plain-AI baseline already costs about a cent per game.
+
+**Tests:** flagged when the shift is large enough on the yes side and on the no side; not flagged when the research moved toward the market, when the shift is small, when there is no baseline; not flagged above the plausibility limit; each named reason; thresholds are settings and validated; the whole-run test where forecast and baseline agree flags nothing; the existing "all conditions pass" tests now supply a baseline.
+
+
+### Flag fix, result (2026-10-13)
+
+Built as specified: `compare_outcome` takes the plain-AI baseline; new conditions "the research moved our probability at least `MIN_RESEARCH_SHIFT` (0.05) toward the gap on the side we would buy" and "net gap not above `EDGE_PLAUSIBLE_MAX` (0.15)"; both are settings, validated (the plausibility limit must exceed `EDGE_MIN`); each comparison outcome carries `baseline` and `research_shift`; the page explains the flag in plain words. 413 backend tests pass.
+
+**Replay on the two stored real runs (their saved forecasts, baselines and prices; no new model calls):** Galatasaray vs Barcelona 11 flagged markets before, **0** after (4 blocked by the shift rule, 7 by both the shift and the plausibility rule); Cleveland vs Tampa Bay 6 before, **4** after (2 blocked by the shift rule). The 4 that remain are markets where the research moved the forecast at least 5 points toward a gap of at most 15 cents; whether they are real is for Milestone 4 to say.
+
+**Limits:** a flag still only means "worth a look"; both thresholds are placeholders; the baseline comes from the same model, so the shift measures what the facts changed, not whether the facts were right.

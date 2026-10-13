@@ -50,6 +50,9 @@ export function fetchLabel(status: string, detail: string | null): string {
 /** The backend's reasons for not flagging a gap, in plain words. */
 export function plainReason(reason: string): string {
   if (/below EDGE_MIN/.test(reason)) return "the gap after fees is small";
+  if (/more likely a model error/.test(reason)) return "the gap is so large that a model error is more likely than an opportunity";
+  if (/no plain AI call/.test(reason)) return "there is no plain AI call to compare the research with";
+  if (/did not move the forecast/.test(reason)) return "the research did not move our forecast toward the gap";
   if (/least favourable forecaster/.test(reason)) return "the least favourable forecaster sees no gap";
   if (/no supported evidence/.test(reason)) return "no claim was supported by its page";
   const claims = reason.match(/only (\d+) supported claims/);

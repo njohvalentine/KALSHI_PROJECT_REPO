@@ -74,7 +74,9 @@ def _side(win_probability: Decimal, price: Decimal | None, fee: FeeInfo, size: D
     return {"price": price, "size": size, "fee": cost, "net_edge": win_probability - price - cost}
 
 
-def compare_outcome(outcome: dict, market: dict | None, fee: FeeInfo, evidence: str, supported_claims: int, s: Settings) -> dict:
+def compare_outcome(
+    outcome: dict, market: dict | None, fee: FeeInfo, evidence: str, supported_claims: int, s: Settings, baseline: float | None = None,
+) -> dict:
     ticker = outcome["market_ticker"]
     if market is None:
         return {"market_ticker": ticker, "side": None, "meaningful": False, "reasons": ["Kalshi returned no market for this outcome"]}
@@ -102,8 +104,20 @@ def compare_outcome(outcome: dict, market: dict | None, fee: FeeInfo, evidence: 
     result.update(side=side, net_edge=chosen["net_edge"], worst_case_edge=worst)
 
     reasons = result["reasons"]
+    # Did the research move our probability toward the gap, away from what the same model says with no facts?
+    shift = None
+    if baseline is not None:
+        raw_shift = p - Decimal(str(baseline))
+        shift = raw_shift if side == "yes" else -raw_shift  # positive: moved toward the gap on the side we would buy
+    result.update(baseline=None if baseline is None else Decimal(str(baseline)), research_shift=shift)
     if chosen["net_edge"] < Decimal(str(s.edge_min)):
         reasons.append(f"net edge {chosen['net_edge']:.3f} is below EDGE_MIN {s.edge_min}")
+    if chosen["net_edge"] > Decimal(str(s.edge_plausible_max)):
+        reasons.append(f"gap above {s.edge_plausible_max} is more likely a model error than an opportunity")
+    if shift is None:
+        reasons.append("no plain AI call to compare with")
+    elif shift < Decimal(str(s.min_research_shift)):
+        reasons.append(f"the research did not move the forecast toward the gap (shift {shift:+.3f}, needs {s.min_research_shift})")
     if worst <= 0:
         reasons.append("the least favourable forecaster shows no edge on this side")
     if evidence == "none" or supported_claims == 0:
@@ -134,7 +148,7 @@ def _fee_dict(fee: FeeInfo) -> dict:
 
 def compare(
     prediction: dict, event_data: dict, fee: FeeInfo, s: Settings, priced_at: datetime,
-    companions: list[tuple[dict, FeeInfo]] | None = None,
+    companions: list[tuple[dict, FeeInfo]] | None = None, baseline: dict[str, float] | None = None,
 ) -> dict:
     """Compares every market of the prediction. `event_data` and `fee` belong to the winner event; `companions`
     are (event data, fee) pairs of the other events of the game (total, both teams to score, spread)."""
@@ -145,13 +159,19 @@ def compare(
     outcomes = []
     for o in prediction["outcomes"]:
         market, market_fee = markets.get(o["market_ticker"], (None, fee))
-        result = compare_outcome(o, market, market_fee, prediction["evidence"], prediction["supported_claims"], s)
+        result = compare_outcome(
+            o, market, market_fee, prediction["evidence"], prediction["supported_claims"], s,
+            None if baseline is None else baseline.get(o["market_ticker"]),
+        )
         result["fee"] = _fee_dict(market_fee)  # each market carries the fee of its own series
         outcomes.append(result)
     return _plain({
         "priced_at": priced_at.isoformat(),
         "fee": _fee_dict(fee),
-        "thresholds": {"edge_min": s.edge_min, "min_supported_claims": s.min_supported_claims, "min_ask_size": s.min_ask_size},
+        "thresholds": {
+            "edge_min": s.edge_min, "min_supported_claims": s.min_supported_claims, "min_ask_size": s.min_ask_size,
+            "min_research_shift": s.min_research_shift, "edge_plausible_max": s.edge_plausible_max,
+        },
         "outcomes": outcomes,
     })
 
@@ -169,6 +189,7 @@ async def _series_fee(client: KalshiClient, series_ticker: str | None, event_tic
 
 async def compare_run(
     client: KalshiClient, event_ticker: str, prediction: dict, s: Settings, companions: list[tuple[str, str | None]] | None = None,
+    baseline: dict[str, float] | None = None,
 ) -> dict:
     """Reads fresh prices and the series fees, then compares. Never raises for a Kalshi problem: it returns why not.
     `companions` are (event ticker, series ticker) of the game's other market events."""
@@ -194,4 +215,4 @@ async def compare_run(
         if series not in fees:
             fees[series] = await _series_fee(client, series, companion_event)
         extra.append((data, fees[series]))
-    return compare(prediction, event_data, fee, s, priced_at, extra)
+    return compare(prediction, event_data, fee, s, priced_at, extra, baseline)

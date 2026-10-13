@@ -171,6 +171,8 @@ export function PredictionSection({ run }: { run: Run }) {
         ) : null}
         {twoWay ? <p>In a game with two outcomes, buying “yes” on one side is almost the same bet as buying “no” on the other.</p> : null}
         <p>
+          A market is marked “Worth a look” only when the gap after fees is large enough but not suspiciously large, the research moved our probability
+          away from what the same AI says with no facts (toward the gap), the forecasters agree, enough claims were supported, and enough contracts are on offer.
           “Worth a look” is not a recommendation. The limits that decide it are placeholders until we have scored real forecasts, and the fee
           formula is taken from public descriptions of Kalshi’s fees.
         </p>

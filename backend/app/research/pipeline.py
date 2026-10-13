@@ -93,7 +93,7 @@ async def run_later_stages(
         if forecast_set.ok:
             await asyncio.to_thread(save_forecasts, engine, run_id, forecast_set)
             prediction["comparison"] = await _stage("compare", set_stage, compare_run(
-                kalshi, game.event_ticker, prediction, settings, [(g.event_ticker, g.series_ticker) for g in game.groups]))
+                kalshi, game.event_ticker, prediction, settings, [(g.event_ticker, g.series_ticker) for g in game.groups], baseline))
             records = build_records(run_id, game, prediction, prediction["comparison"], baseline, datetime.now(UTC))
             await asyncio.to_thread(save_records, engine, records)
         result.prediction = prediction

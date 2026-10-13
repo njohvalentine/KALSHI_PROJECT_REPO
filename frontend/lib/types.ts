@@ -61,6 +61,8 @@ export type ComparisonOutcome = {
   side: "yes" | "no" | null;
   net_edge: number | null;
   worst_case_edge: number | null;
+  baseline?: number | null;
+  research_shift?: number | null;
   meaningful: boolean;
   reasons: string[];
 };

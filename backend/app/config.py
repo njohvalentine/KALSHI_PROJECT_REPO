@@ -100,6 +100,8 @@ class Settings:
     edge_min: float
     min_supported_claims: int
     min_ask_size: float
+    min_research_shift: float
+    edge_plausible_max: float
     record_baseline: bool
     resolve_after_hours: float
 
@@ -247,6 +249,12 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     min_supported_claims = _parse_positive_int("MIN_SUPPORTED_CLAIMS", env.get("MIN_SUPPORTED_CLAIMS", "5"), problems)
     min_ask_size = _parse_positive_float("MIN_ASK_SIZE", env.get("MIN_ASK_SIZE", "10"), problems)
 
+    min_research_shift = _parse_positive_float("MIN_RESEARCH_SHIFT", env.get("MIN_RESEARCH_SHIFT", "0.05"), problems)
+    edge_plausible_max = _parse_positive_float("EDGE_PLAUSIBLE_MAX", env.get("EDGE_PLAUSIBLE_MAX", "0.15"), problems)
+    if min_research_shift >= 1 or edge_plausible_max >= 1:
+        problems.append("MIN_RESEARCH_SHIFT and EDGE_PLAUSIBLE_MAX are probability gaps and must be below 1")
+    if edge_plausible_max <= edge_min:
+        problems.append("EDGE_PLAUSIBLE_MAX must be larger than EDGE_MIN, or no gap could ever be flagged")
     record_baseline = _parse_bool("RECORD_BASELINE", env.get("RECORD_BASELINE", "true"), problems)
     resolve_after_hours = _parse_positive_float("RESOLVE_AFTER_HOURS", env.get("RESOLVE_AFTER_HOURS", "3"), problems)
 
@@ -308,6 +316,8 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         edge_min=edge_min,
         min_supported_claims=min_supported_claims,
         min_ask_size=min_ask_size,
+        min_research_shift=min_research_shift,
+        edge_plausible_max=edge_plausible_max,
         record_baseline=record_baseline,
         resolve_after_hours=resolve_after_hours,
     )

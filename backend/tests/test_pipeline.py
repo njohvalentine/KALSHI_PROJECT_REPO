@@ -77,14 +77,17 @@ class FakeJudge:
 
 
 class FakeForecaster:
-    def __init__(self, fail_without_claims=False, fail=False):
+    def __init__(self, fail_without_claims=False, fail=False, home_with_facts=None, home_without_facts=None):
         self.fail_without_claims, self.fail, self.calls = fail_without_claims, fail, []
+        self.home_with_facts, self.home_without_facts = home_with_facts, home_without_facts
 
     async def forecast(self, game, claims, framing):
         self.calls.append((framing[0], len(claims)))
         if self.fail or (self.fail_without_claims and not claims):
             raise RuntimeError("model down")
         base = {"evidence_first": 0.62, "base_rate_first": 0.58, "devils_advocate": 0.60}[framing[0]]
+        if self.home_with_facts is not None:  # a forecaster whose answer depends on whether it was given any facts
+            base = self.home_with_facts if claims else self.home_without_facts
         values = [base, 1 - base] + [0.9 - 0.3 * i for i in range(len(game.market_tickers) - 2)]  # the other markets: 0.9, 0.6, 0.3 (consistent)
         return ForecastAnswer(probabilities=[OutcomeProbability(outcome_number=i, probability=p) for i, p in enumerate(values, 1)],
                               reasoning=f"{framing[0]} reasoning"), Usage("gpt-5.4", 2000, 0, 1000)
@@ -201,6 +204,36 @@ def test_a_game_with_total_and_spread_markets_is_forecast_compared_and_recorded_
     with make_client.engine.connect() as conn:
         rows = conn.execute(text("SELECT market_kind, count(*) FROM outcome_records GROUP BY market_kind ORDER BY market_kind")).all()
     assert rows == [("spread", 1), ("total", 2), ("winner", 2)]
+
+
+SIX_FACTS = {"Form": [(f"Home won match number {i} by 2-1", f"https://form.test/{i}") for i in range(1, 7)]}
+_SIX_PAGE = "<html><body>" + "".join(f"<p>{text}. Reported on Monday by our staff.</p>" for text, _ in SIX_FACTS["Form"]) * 3 + "</body></html>"
+SIX_FETCH = FETCH | {"transport": httpx2.MockTransport(lambda r: httpx2.Response(200, content=_SIX_PAGE.encode(), headers={"content-type": "text/html"}))}
+
+
+def test_a_gap_is_flagged_only_when_the_research_moved_the_forecast_away_from_the_plain_ai_call(make_client):
+    moved = FakeForecaster(home_with_facts=0.55, home_without_facts=0.45)  # facts moved the home probability up by 0.10
+    client = signed_in(make_client, model=FakeModel(angle_names=["Form"], lines=SIX_FACTS), forecaster=moved, fetch_options=SIX_FETCH)
+    try:
+        flagged = run_game(client)
+    finally:
+        client.__exit__(None, None, None)
+    outcomes = {o["market_ticker"]: o for o in flagged["prediction"]["comparison"]["outcomes"]}
+    assert flagged["prediction"]["supported_claims"] == 6 and all(o["meaningful"] for o in outcomes.values())
+    assert outcomes["KX-1-H"]["research_shift"] == pytest.approx(0.10, abs=1e-3) and outcomes["KX-1-A"]["research_shift"] == pytest.approx(0.10, abs=1e-3)
+    assert flagged["prediction"]["comparison"]["outcomes"][0]["baseline"] == pytest.approx(0.45)
+
+
+def test_nothing_is_flagged_when_the_forecast_equals_the_plain_ai_call(make_client):
+    same = FakeForecaster(home_with_facts=0.55, home_without_facts=0.55)  # the research changed nothing
+    client = signed_in(make_client, model=FakeModel(angle_names=["Form"], lines=SIX_FACTS), forecaster=same, fetch_options=SIX_FETCH)
+    try:
+        run = run_game(client)
+    finally:
+        client.__exit__(None, None, None)
+    outcomes = run["prediction"]["comparison"]["outcomes"]
+    assert run["prediction"]["supported_claims"] == 6 and not any(o["meaningful"] for o in outcomes)
+    assert all(any("did not move the forecast toward the gap" in r for r in o["reasons"]) for o in outcomes)
 
 
 def test_the_run_returns_the_baseline_and_the_latest_call_a_compact_forecast_without_text(make_client):
