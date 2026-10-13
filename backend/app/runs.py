@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.auth import require_requested_with, require_user
 from app.db import get_db
 from app.kalshi import KalshiError, KalshiNotFound
-from app.models import ClaimCheck, Forecast, Run, SourcePage, User
+from app.models import ClaimCheck, Forecast, OutcomeRecord, Run, SourcePage, User
 from app.research.runner import execute_run
 from dataclasses import asdict
 
@@ -76,6 +76,12 @@ def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None) -> dic
                 for c in db.scalars(select(ClaimCheck).where(ClaimCheck.run_id == run.id).order_by(
                     ClaimCheck.finding_index, ClaimCheck.claim_index, ClaimCheck.source_url))
             ]
+            baseline = {
+                r.market_ticker: float(r.baseline_probability)
+                for r in db.scalars(select(OutcomeRecord).where(OutcomeRecord.run_id == run.id))
+                if r.baseline_probability is not None
+            }
+            summary["baseline"] = baseline or None  # the plain AI call with no research, per outcome
             summary["forecasts"] = [
                 {"forecaster_index": f.forecaster_index, "variant": f.variant, "market_ticker": f.market_ticker,
                  "probability": float(f.probability), "reasoning": f.reasoning, "model": f.model}
@@ -173,12 +179,28 @@ async def start_run(body: StartBody, request: Request, user: Annotated[User, Dep
             state.active_runs -= 1
 
 
+def _compact_forecast(run: Run) -> dict | None:
+    """Our probability per outcome and whether it was flagged, for the Games list. No reasoning, no page text."""
+    prediction = run.prediction or {}
+    if run.status != "done" or "outcomes" not in prediction:
+        return None
+    comparison = prediction.get("comparison") or {}
+    flagged = {o["market_ticker"]: bool(o.get("meaningful")) for o in comparison.get("outcomes", []) if "market_ticker" in o}
+    return {
+        "forecast_at": comparison.get("priced_at") or (run.finished_at.isoformat() if run.finished_at else None),
+        "outcomes": [
+            {"market_ticker": o["market_ticker"], "probability": o["probability"], "flagged": flagged.get(o["market_ticker"], False)}
+            for o in prediction["outcomes"]
+        ],
+    }
+
+
 @router.get("/latest")
 def latest_per_game(db: Annotated[DbSession, Depends(get_db)]):
     rows = db.scalars(
         select(Run).ext(distinct_on(Run.event_ticker)).order_by(Run.event_ticker, Run.created_at.desc())
     ).all()
-    return {"runs": [{"event_ticker": r.event_ticker, "id": r.id, "status": r.status} for r in rows]}
+    return {"runs": [{"event_ticker": r.event_ticker, "id": r.id, "status": r.status, "forecast": _compact_forecast(r)} for r in rows]}
 
 
 @router.get("/{run_id}")

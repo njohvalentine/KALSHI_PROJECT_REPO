@@ -170,6 +170,34 @@ def test_supported_odds_claims_are_never_given_to_the_forecasters(make_client):
     assert {n for _, n in forecaster.calls if n} == {1}  # three forecasters saw one fact each (the baseline saw none)
 
 
+def test_the_run_returns_the_baseline_and_the_latest_call_a_compact_forecast_without_text(make_client):
+    client = signed_in(make_client)
+    try:
+        run = run_game(client)
+        latest = client.get("/api/runs/latest").json()["runs"][0]
+    finally:
+        client.__exit__(None, None, None)
+    assert run["baseline"] == {"KX-1-H": 0.62, "KX-1-A": 0.38}
+    assert latest["event_ticker"] == "KX-1" and latest["status"] == "done"
+    forecast = latest["forecast"]
+    assert [o["market_ticker"] for o in forecast["outcomes"]] == ["KX-1-H", "KX-1-A"] and forecast["outcomes"][0]["probability"] == pytest.approx(0.6, abs=0.001)
+    assert all(o["flagged"] is False for o in forecast["outcomes"]) and forecast["forecast_at"]
+    assert "reasoning" not in str(latest) and "page_text" not in str(latest)
+
+
+def test_no_forecast_and_no_baseline_when_there_is_no_prediction(make_client):
+    client = make_client(research_model=FakeModel(angle_names=["Form"], lines=LINES))  # no judge or forecaster
+    client.__enter__()
+    client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
+    client.app.state.kalshi = kalshi_mock()
+    try:
+        run = run_game(client)
+        latest = client.get("/api/runs/latest").json()["runs"][0]
+    finally:
+        client.__exit__(None, None, None)
+    assert run["baseline"] is None and latest["forecast"] is None
+
+
 def test_the_run_list_shows_the_stage_and_how_many_outcomes_were_flagged(make_client):
     client = signed_in(make_client, model=FakeModel(angle_names=["Form"], lines={"Form": [(f"Fact {i} is 1-0", f"https://form.test/{i}") for i in range(6)]}),
                        judge=FakeJudge())
