@@ -96,6 +96,10 @@ From an Opportunities row (or a flagged row of a run page) a person presses **Pr
 
 The limits are settings in `.env.example` (`ORDER_MAX_CONTRACTS`, `ORDER_MAX_COST_USD`, `ORDER_MAX_DAY_COST_USD`, `ORDER_EXPIRY_MINUTES`, `ORDER_MAX_SLIPPAGE_CENTS`). **They are placeholders until the client has agreed his own.** Nothing here sends anything to Kalshi.
 
+### Tickets of several games
+
+On the Opportunities page, **Add to ticket** on up to `TICKET_MAX_LEGS` (4) games, then **Prepare ticket**. A ticket pays only if every game wins, so one leg per game. Its price and chance are the legs multiplied, and the fee uses the dearest leg's fee type. This is the simulation's price; a real Kalshi combo is quoted on request and is usually worse. The Approval page shows each game with its own checks. A ticket is lost as soon as one game is lost; if a game is voided the stake is returned.
+
 ## 9. Backups
 
 The database holds everything (runs, sources, forecasts, records, alerts, accounts). A backup:

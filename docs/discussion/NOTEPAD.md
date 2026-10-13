@@ -518,3 +518,6 @@ Answered: soccer, baseball and tennis (D21); LangSmith cloud tracing OK; Docker 
 - **Milestones:** 4 accuracy report (needs the scores); 5 approval screen is built (simulated); 6 live paper trading (started); 7 go or no go (the real order step, after the Developer Agreement is read).
 - **Small, anytime:** automated web app tests (needs a new test dependency, ask first); the bookmaker consensus benchmark once an odds source exists.
 - **Before any real order:** read Kalshi's Developer Agreement, rotate the shared key, agree betting limits and the go-live rule; handover checklist in D24; test that the host reaches Kalshi without a VPN.
+
+### D36. Tickets of several games (2026-10-13)
+**Why:** the client bets in combos (D35). **What:** an order is now a ticket of 1..4 legs (`order_legs`), one leg per game, price and probability are products of the legs, fee from the dearest leg's multiplier, per-leg checks, settled by legs. **Rejected:** several markets of one game in a ticket (they move together, the product would be wrong); a separate `tickets` table (the `orders` row already is the ticket); real combo pricing now (Kalshi quotes combos by request, no public price; Milestone 7). **Known gap:** simulated combo price is better than a real quote would be.

@@ -186,8 +186,6 @@ class Order(Base):
         CheckConstraint("side IN ('yes', 'no')", name="orders_side_values"),
         CheckConstraint("contracts > 0", name="orders_contracts_positive"),
         CheckConstraint("price > 0 AND price < 1", name="orders_price_range"),
-        # One open order per market: two people (or two clicks) cannot both have one waiting.
-        Index("uq_orders_one_open_per_market", "market_ticker", unique=True, postgresql_where=text("state IN ('proposed', 'approved')")),
         Index("ix_orders_state_created", "state", "created_at"),
     )
 
@@ -221,6 +219,36 @@ class Order(Base):
     settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     won: Mapped[bool | None] = mapped_column(Boolean)
     paper_result: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))  # dollars, for the contracts filled
+
+
+class OrderLeg(Base):
+    """One market of a ticket. A ticket pays only if every leg wins; a ticket with one leg is a plain order."""
+
+    __tablename__ = "order_legs"
+    __table_args__ = (
+        CheckConstraint("side IN ('yes', 'no')", name="order_legs_side_values"),
+        CheckConstraint("price > 0 AND price < 1", name="order_legs_price_range"),
+        # One open ticket per market: kept in step with the ticket's state (open while it is proposed or approved).
+        Index("uq_order_legs_one_open_per_market", "market_ticker", unique=True, postgresql_where=text("open")),
+        Index("ix_order_legs_order", "order_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
+    position: Mapped[int] = mapped_column(Integer)
+    run_id: Mapped[str] = mapped_column(String(64))
+    event_ticker: Mapped[str] = mapped_column(String(128))
+    market_ticker: Mapped[str] = mapped_column(String(128))
+    outcome: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text)
+    game_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    side: Mapped[str] = mapped_column(String(3))
+    price: Mapped[Decimal] = mapped_column(Numeric(7, 4))  # the executable ask of this leg when the ticket was prepared
+    our_probability: Mapped[Decimal] = mapped_column(Numeric(5, 4))  # for the side bought
+    forecast_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    open: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    fill_price: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    won: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class OrderEvent(Base):

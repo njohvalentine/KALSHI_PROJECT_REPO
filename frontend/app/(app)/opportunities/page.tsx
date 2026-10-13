@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AnalyzeButton } from "@/components/analyze-button";
 import { LocalTime } from "@/components/local-time";
-import { PrepareOrder } from "@/components/prepare-order";
+import { AddToTicket, TicketProvider } from "@/components/ticket";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -67,7 +67,9 @@ function Row({ o }: { o: Opportunity }) {
           </dl>
           {o.flagged && !o.stale ? (
             <div className="mt-2">
-              <PrepareOrder runId={o.run_id} marketTicker={b.market_ticker} />
+              <AddToTicket
+                leg={{ runId: o.run_id, eventTicker: o.event_ticker, marketTicker: b.market_ticker, title: o.title, market: b.market, side: b.side, price: b.price, probability: b.our_probability }}
+              />
             </div>
           ) : null}
           {o.flagged && o.flagged_markets > 1 ? (
@@ -199,11 +201,13 @@ async function List({ all }: { all: boolean }) {
           </AlertDescription>
         </Alert>
       ) : (
-        <ul className="grid gap-3">
-          {data.opportunities.map((o) => (
-            <Row key={o.event_ticker} o={o} />
-          ))}
-        </ul>
+        <TicketProvider maxLegs={data.max_ticket_legs}>
+          <ul className="grid gap-3">
+            {data.opportunities.map((o) => (
+              <Row key={o.event_ticker} o={o} />
+            ))}
+          </ul>
+        </TicketProvider>
       )}
       <p className="mt-4 text-sm text-muted-foreground">
         “Worth a look” is not a recommendation. The limits behind it are placeholders until we have scored real forecasts, and a gap that looks very large is

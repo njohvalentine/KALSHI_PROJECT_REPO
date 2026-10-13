@@ -10,6 +10,9 @@ import { CHECK_NAME, ORDER_STATE } from "@/lib/labels";
 import type { OrdersResponse, SimOrder } from "@/lib/types";
 
 function orderSentence(o: SimOrder): string {
+  if (o.legs.length > 1) {
+    return `Buy ${o.contracts} ticket${o.contracts === 1 ? "" : "s"} of ${o.legs.length} games at ${cents(o.price)} each. It pays only if every game wins. Cost up to $${o.max_cost.toFixed(2)} including a fee of about $${o.fee_estimate.toFixed(2)}.`;
+  }
   return `Buy ${o.contracts} “${o.side}” contract${o.contracts === 1 ? "" : "s"} on ${o.outcome} (${o.title}) at ${cents(o.price)} each. Cost up to $${o.max_cost.toFixed(2)} including a fee of about $${o.fee_estimate.toFixed(2)}.`;
 }
 
@@ -25,6 +28,15 @@ function Waiting({ order }: { order: SimOrder }) {
         <Badge variant="outline">{ORDER_STATE[order.state]}</Badge>
       </div>
       <p className="mt-2 font-medium">{orderSentence(order)}</p>
+      {order.legs.length > 1 ? (
+        <ol className="mt-2 grid gap-1 text-sm" aria-label="Games on the ticket">
+          {order.legs.map((g) => (
+            <li key={g.market_ticker}>
+              {g.position + 1}. <Link href={`/prediction/${g.run_id}`} className="text-primary underline-offset-4 hover:underline">{g.title}</Link>: “{g.side}” on {g.outcome} at {cents(g.price)} (our estimate {pct(g.our_probability)})
+            </li>
+          ))}
+        </ol>
+      ) : null}
       <p className="mt-1 text-sm text-muted-foreground">
         Our probability {pct(order.our_probability)} against the market’s {pct(order.price)}; gap after fees {gapCents(order.gap)} when it was prepared. Expires{" "}
         <LocalTime iso={order.expires_at} />. This is a simulation: nothing is sent to Kalshi.
@@ -32,8 +44,8 @@ function Waiting({ order }: { order: SimOrder }) {
       {checks.length > 0 ? (
         <ul className="mt-3 grid gap-1 text-sm" aria-label="Checks">
           {checks.map((c) => (
-            <li key={c.name} className={c.ok ? "text-good" : c.blocking ? "text-destructive" : "text-warn"}>
-              {c.ok ? "✓" : c.blocking ? "✗" : "!"} {CHECK_NAME[c.name] ?? c.name}
+            <li key={`${c.leg}-${c.name}`} className={c.ok ? "text-good" : c.blocking ? "text-destructive" : "text-warn"}>
+              {c.ok ? "✓" : c.blocking ? "✗" : "!"} {c.leg === null || order.legs.length < 2 ? "" : `Game ${c.leg + 1}: `}{CHECK_NAME[c.name] ?? c.name}
               <span className="text-muted-foreground"> — {c.detail}</span>
             </li>
           ))}

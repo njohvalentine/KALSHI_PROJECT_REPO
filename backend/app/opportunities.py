@@ -163,7 +163,7 @@ async def build_opportunities(engine, client: KalshiClient, settings: Settings, 
     return {
         "opportunities": shown, "games_considered": len(rows), "flagged_games": sum(1 for r in rows if r["flagged"]),
         "top_reasons": [{"reason": reason, "games": n} for reason, n in reasons.most_common(3)],
-        "generated_at": now.isoformat(), "max_age_hours": settings.opportunity_max_age_hours,
+        "generated_at": now.isoformat(), "max_age_hours": settings.opportunity_max_age_hours, "max_ticket_legs": settings.ticket_max_legs,
     }
 
 

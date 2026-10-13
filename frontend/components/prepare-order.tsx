@@ -18,7 +18,7 @@ export function PrepareOrder({ runId, marketTicker }: { runId: string; marketTic
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Requested-With": "web" },
-        body: JSON.stringify({ run_id: runId, market_ticker: marketTicker, contracts: Number.parseInt(contracts, 10) || 0 }),
+        body: JSON.stringify({ legs: [{ run_id: runId, market_ticker: marketTicker }], contracts: Number.parseInt(contracts, 10) || 0 }),
       });
       if (res.status === 201) return router.push("/approval");
       if (res.status === 401) return router.replace("/login");

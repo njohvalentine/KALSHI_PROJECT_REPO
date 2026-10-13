@@ -172,6 +172,7 @@ export type OpportunitiesResponse = {
   top_reasons: { reason: string; games: number }[];
   generated_at: string;
   max_age_hours: number;
+  max_ticket_legs: number;
 };
 
 export type AlertItem = {
@@ -198,7 +199,21 @@ export type AlertsResponse = {
   };
 };
 
-export type OrderCheck = { name: string; ok: boolean; blocking: boolean; detail: string };
+export type OrderCheck = { name: string; leg: number | null; ok: boolean; blocking: boolean; detail: string };
+export type OrderLegInfo = {
+  position: number;
+  run_id: string;
+  event_ticker: string;
+  market_ticker: string;
+  outcome: string;
+  title: string;
+  game_start: string | null;
+  side: "yes" | "no";
+  price: number;
+  our_probability: number;
+  fill_price: number | null;
+  won: boolean | null;
+};
 export type OrderState = "proposed" | "approved" | "rejected" | "expired" | "placed" | "simulated_rejected" | "settled";
 export type SimOrder = {
   id: number;
@@ -228,6 +243,7 @@ export type SimOrder = {
   settled_at: string | null;
   won: boolean | null;
   paper_result: number | null;
+  legs: OrderLegInfo[];
   checks?: OrderCheck[];
 };
 export type OrdersResponse = { orders: SimOrder[]; totals: { settled: number; won: number; paper_result: number } };

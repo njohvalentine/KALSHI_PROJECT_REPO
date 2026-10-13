@@ -127,7 +127,7 @@ def test_a_stale_forecast_and_unreadable_prices_are_refused(make_client):
         client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
         add_run(make_client.engine, "KX-1", "Home vs Away", GOOD, baseline=GOOD_BASELINE, finished_hours_ago=20)
         client.app.state.kalshi = kalshi_for_good()
-        with pytest.raises(OrderError, match="forecast is too old"):
+        with pytest.raises(OrderError, match="is too old"):
             prepare(client, make_client.engine)
         with DbSession(make_client.engine) as db:
             db.execute(text("UPDATE runs SET finished_at = now() - interval '1 hour', created_at = now() - interval '1 hour'"))
@@ -148,7 +148,7 @@ def test_checks_show_each_result_and_a_failed_blocking_check_stops_approval(clie
         from app.orders import order_with_checks
         shown = asyncio.run(order_with_checks(client.app, order["id"], NOW))
         names = {c["name"]: c for c in shown["checks"]}
-        assert set(names) == {"not_expired", "game_not_started", "forecast_fresh", "within_limits", "price_ok", "enough_contracts", "still_worth_a_look"}
+        assert set(names) == {"not_expired", "game_not_started", "forecast_fresh", "within_limits", "legs_ok", "price_ok", "enough_contracts", "still_worth_a_look"}
         assert all(c["ok"] for c in shown["checks"]) and names["still_worth_a_look"]["blocking"] is False
         # the price moved 5 cents against us: approval is blocked, the order stays
         client.app.state.kalshi = FakeKalshi({
@@ -333,8 +333,8 @@ def test_the_endpoints_need_login_and_the_header_and_work_end_to_end(client_fact
         anonymous = make_client()
         with anonymous:
             assert anonymous.get("/api/orders").status_code == 401
-            assert anonymous.post("/api/orders", json={"run_id": RUN, "market_ticker": HOME, "contracts": 1}, headers=H).status_code == 401
-        body = {"run_id": RUN, "market_ticker": HOME, "contracts": 2}
+            assert anonymous.post("/api/orders", json={"legs": [{"run_id": RUN, "market_ticker": HOME}], "contracts": 1}, headers=H).status_code == 401
+        body = {"legs": [{"run_id": RUN, "market_ticker": HOME}], "contracts": 2}
         assert client.post("/api/orders", json=body).status_code in (400, 403)  # no X-Requested-With header
         created = client.post("/api/orders", json=body, headers=H)
         assert created.status_code == 201 and created.json()["state"] == "proposed"

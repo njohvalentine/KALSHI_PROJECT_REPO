@@ -70,6 +70,7 @@ The web pages: Games, Opportunities, Prediction (runs and results), Approval and
 ## Milestone 5: Approval screen (built, simulated)
 - A person prepares an order from an opportunity: the market, whether to buy "yes" or "no", the price at that moment, the number of contracts and the most it can cost. It expires after 10 minutes.
 - The Approval page shows the exact order in words and the checks before approving: not expired, game not started, forecast recent, within the betting limits, price has not moved against us, enough contracts offered, still worth a look. A failed check blocks approving.
+- A ticket may hold several games (a combo, up to 4, one bet per game): it pays only if every game wins. Its price in the simulation is the games' prices multiplied; a real combo price on Kalshi is quoted on request and will differ. Each game gets its own checks.
 - A person presses Approve or Reject. An approved order is placed in a **simulation** by a separate press, which rechecks the price and the limits and records what a bet at that moment would have been; pressing twice, or two people at once, cannot place it twice. When the game ends the order is settled and the Results page shows what it would have paid.
 - Every change of an order is kept in a history (who, when, why). **No order is ever sent to Kalshi:** there is no trading code at all.
 - **Betting limits (to be agreed with you):** the most you want to risk on one bet and in one day. They are settings; the values in use now are placeholders (10 contracts, 5 dollars per order, 20 dollars per day).

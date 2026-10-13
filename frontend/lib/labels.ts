@@ -96,6 +96,7 @@ export const CHECK_NAME: Record<string, string> = {
   game_not_started: "The game has not started",
   forecast_fresh: "The forecast is recent enough",
   within_limits: "Within the betting limits",
+  legs_ok: "The legs are allowed (not too many, one per game)",
   price_ok: "The price has not moved against us",
   enough_contracts: "Enough contracts are offered at that price",
   still_worth_a_look: "Still worth a look at today’s prices",

@@ -53,7 +53,7 @@ function Orders({ data }: { data: OrdersResponse }) {
             <li key={o.id} className="rounded-xl border bg-card p-3 text-sm">
               <div className="mb-1 flex flex-wrap items-center gap-2">
                 <Badge variant="outline">{ORDER_STATE[o.state]}</Badge>
-                {o.state === "settled" ? <Badge className={o.won ? "bg-good-soft text-good" : "bg-destructive/10 text-destructive"}>{o.won ? "Won" : "Lost"}</Badge> : null}
+                {o.state === "settled" ? <Badge className={o.won === null ? "bg-secondary text-secondary-foreground" : o.won ? "bg-good-soft text-good" : "bg-destructive/10 text-destructive"}>{o.won === null ? "Returned" : o.won ? "Won" : "Lost"}</Badge> : null}
                 <span className="text-muted-foreground">
                   placed <LocalTime iso={o.placed_at} />
                 </span>
@@ -61,8 +61,17 @@ function Orders({ data }: { data: OrdersResponse }) {
                   Open
                 </Link>
               </div>
+              {o.legs.length > 1 ? (
+                <ul className="mb-1 grid gap-0.5">
+                  {o.legs.map((g) => (
+                    <li key={g.market_ticker}>
+                      {g.title}: “{g.side}” on {g.outcome} at {cents(g.fill_price)} {g.won === null ? "(not known yet)" : g.won ? "(won)" : "(lost)"}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
               <p>
-                {o.title}: {o.fill_contracts} “{o.side}” on {o.outcome} at {cents(o.fill_price)}, fee ${o.fill_fee?.toFixed(2)}. {o.paper_result === null ? "The result is known when the game ends." : `Paper result ${dollars(o.paper_result)}.`}
+                {o.legs.length > 1 ? `Ticket of ${o.legs.length} games` : o.title}: {o.fill_contracts} {o.legs.length > 1 ? "tickets" : `“${o.side}” on ${o.outcome}`} at {cents(o.fill_price)}, fee ${o.fill_fee?.toFixed(2)}. {o.paper_result === null ? "The result is known when the game ends." : `Paper result ${dollars(o.paper_result)}.`}
               </p>
             </li>
           ))}

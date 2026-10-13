@@ -55,3 +55,9 @@ A real Kalshi combo (collections lookup, RFQ, websocket quotes, confirmation wit
 **Draft question for the client:**
 -> How many games do you usually put in one combo?
 -> Do you ever put two bets on the same game in one combo, for example the winner and total goals?
+
+## Result (2026-10-13)
+
+Built as specified: `order_legs` table (existing orders copied in as one-leg tickets by the migration, checked on the live data), `prepare_ticket` with combined price and probability, per-leg checks, settlement by legs (lost at once when a leg loses, won only if all won, voided leg returns the stake), API body `{"contracts", "legs": [...]}`, Opportunities "Add to ticket" and ticket panel, Approval and Results show legs. `TICKET_MAX_LEGS` (4) is a placeholder. 486 backend tests pass (9 new in `tests/test_tickets.py`); web app checked by lint and build only.
+
+Checks done: lateral spread (every place that read `orders.market_ticker` as the one market: prepare, checks, place, settle, lists, monitor; the monitor and the run page still use one leg and work); causal depth (the client's wish also needs a warning that legs multiply the model's errors and that real Kalshi combo prices are quoted by request: both are on the ticket panel). Not done: the real combo order (Milestone 7).
