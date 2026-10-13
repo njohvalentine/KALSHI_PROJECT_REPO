@@ -601,3 +601,30 @@ Built as specified: `compare_outcome` takes the plain-AI baseline; new condition
 **Replay on the two stored real runs (their saved forecasts, baselines and prices; no new model calls):** Galatasaray vs Barcelona 11 flagged markets before, **0** after (4 blocked by the shift rule, 7 by both the shift and the plausibility rule); Cleveland vs Tampa Bay 6 before, **4** after (2 blocked by the shift rule). The 4 that remain are markets where the research moved the forecast at least 5 points toward a gap of at most 15 cents; whether they are real is for Milestone 4 to say.
 
 **Limits:** a flag still only means "worth a look"; both thresholds are placeholders; the baseline comes from the same model, so the shift measures what the facts changed, not whether the facts were right.
+
+## Opportunities screen (FEAT-20261013-0908), for approval
+
+Branch `feature/sports-games-list`. The client's priority is to find genuine opportunities, not to read research. This screen answers "what is worth a look right now" from the forecasts we already have, with prices read live.
+
+### What it shows
+
+A new page **Opportunities** (in the top navigation between Games and Prediction). One row per **game**, ranked by the gap after fees at **today's prices**, best first. Only games that have not started and whose latest finished run has a forecast. A row shows: the game and start time; the best market ("Buy “no” on Over 2.5 goals at 19¢"); our probability against the market's; the **gap now** after fees (recomputed with fresh prices, not the prices of the forecast); how many other markets of the same game are also worth a look; the **spread** of the forecasts; **supported claims**; the **age of the forecast**; and the **risks** in plain words (the reasons it is or is not flagged, a fee that was assumed, few contracts at the price, an old forecast). Each row links to the run page and has Research again.
+
+Two switches: **Worth a look only** (default) and **All researched games** (each with its best gap and why it is not flagged). When nothing is flagged the page says so and shows the three most common reasons, instead of an empty table.
+
+**One row per game.** In a two-outcome game "yes" on one side and "no" on the other are almost the same bet, and a game has several markets; the row shows the single best and counts the rest.
+
+### How it works
+
+- `GET /api/opportunities` (login required). It takes the latest finished run with a prediction for each game, drops games whose start has passed (the start time is in `outcome_records`), and for each reads the current prices of the game's events (the winner and any total, both-teams-to-score and spread events; their tickers come from the market tickers already stored) and the fee of each series (kept in memory for an hour), then runs the **same comparison code as a run** with the stored probabilities, spreads and plain-AI baseline. **No model call, no research, no cost beyond a few Kalshi reads.** At most 50 games, most recent forecasts first; the answer is cached for 60 seconds.
+- A game whose prices cannot be read is listed as such and is never flagged.
+- A forecast older than `OPPORTUNITY_MAX_AGE_HOURS` (default 12, a setting) is shown greyed with "forecast is old, lineups may have changed" and is **not flagged** (the facts it rests on may be out of date).
+- The ranking uses only fields the comparison already has; nothing new is invented.
+
+### What is deliberately not in it
+
+**No "cheap first screen" that picks which games to research.** The item as first logged proposed one. I recommend dropping it: the only cheap signal we have, the model's view with no research, was far from the market on every market in the first soccer run, which showed the model's blind spot and not an edge, so a screen built on it would send the money to the games where the model knows least. We have no validated rule for which games hold an edge. What the client needs first is a dataset, and that comes from researching upcoming games on a plain, explicit rule (soonest start, in the configured leagues, up to a daily cap that is switched off by default). That belongs with scheduling and monitoring (FEAT-20261013-0909); it is not part of this screen. **Decision for you:** agree to move it there?
+
+### Tests (fakes only)
+
+Ranking by the live gap; one row per game with the count of other flagged markets; mirror outcomes of a two-outcome game do not count twice; started games, games without a forecast and failed runs are left out; a stale forecast is greyed and unflagged; live prices change the gap compared with the stored comparison; a game whose prices cannot be read is listed and unflagged; no model object is called; login is required; the 50-game limit; the page shows the empty state with reasons.
