@@ -131,7 +131,7 @@ def test_researcher_instructions_are_the_contract_for_plain_sourced_facts():
 
     text = RESEARCHER_INSTRUCTIONS.format(today="2026-10-12")
     for rule in (
-        "at most 6 findings", "Plain text only", "Do not calculate or infer", "more than 3 days old",
+        "at most 10 findings", "Plain text only", "Do not calculate or infer", "more than 3 days old",
         "different start time", "Do not write lines about what a page did not show",
         "No relevant information found", "Never write a probability",
     ):
@@ -146,3 +146,11 @@ def test_findings_carry_the_kind_of_their_angle_and_the_planner_is_asked_for_it(
     assert Angle(name="Form", question="q").kind == "evidence" and Angle(name="Odds", question="q", kind="market_odds").kind == "market_odds"
     assert is_market_angle("market_odds", "Prices") and is_market_angle("evidence", "Current odds") and is_market_angle(None, "Odds and lines")
     assert not is_market_angle("evidence", "Form") and not is_market_angle(None, None)
+
+
+def test_researchers_are_asked_for_one_fact_per_line_with_its_date_and_for_article_pages():
+    from app.research.prompts import RESEARCHER_INSTRUCTIONS
+
+    text = RESEARCHER_INSTRUCTIONS.format(today="2026-10-13")
+    assert "ONE fact per line" in text and "Put the date of the match, the update or the page in the line itself." in text
+    assert "whose text is in the article itself" in text and "at most 10 findings" in text

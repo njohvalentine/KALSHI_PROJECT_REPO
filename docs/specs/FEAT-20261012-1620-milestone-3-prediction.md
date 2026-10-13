@@ -487,3 +487,18 @@ Built as specified: `components/prediction-table.tsx`, `forecasters.tsx`, `evide
 **Task 3, numbers near the quote:** the numbers of a claim must appear in the quotes or in the 200 characters of page text on each side of a quote's position. Still a real check against an unrelated quote; it no longer drops a date that sits just outside the quote. **Measure:** the labelled sample twice and the 19 saved claims of the second real run; wrongly supported must stay at 0.
 
 **Not proposed:** reading PDFs (needs a new package, `pypdf`; two PDFs in 60 pages seen so far) and a "partly supported" label (task 1 lowers the need). After the three tasks the supported share is reported on two real games next to the sample numbers.
+
+### Evidence recall, task 1 result (2026-10-13, real runs, old instructions against new)
+
+| Game | Claims (not odds) | Average claim length | Supported before | Supported after |
+|---|---|---|---|---|
+| Atletico vs Manchester United | 14 → 15 | 232 → 141 characters | 1 | **0** |
+| Inter vs Club Brugge | 14 → 18 | 205 → 132 characters | 5 | **6** |
+
+**Reading:** the claims are now single facts and much shorter, but the supported share did not rise in a way two games can show (1 of 14 became 0 of 15; 5 of 14 became 6 of 18). Reading every verdict explains why, and it is not the claim size:
+1. **Pages with only menus.** All ten Manchester United team-news claims cite the club's team-news page, which our plain fetch reads as menus (the article is built by scripts); the judge correctly says "the page text does not include ...". The researchers see such pages through OpenAI's own search tool, which we cannot reproduce (Jina was measured and not adopted, notes D30).
+2. **The date the researcher looked.** Many lines start "On 2026-10-13, the team-news page said ...": the day the page was read, which the page cannot show, so the judge refuses it. (New item.)
+3. **A year the page leaves out.** "Tuesday 13 October" against a claim "13 October 2026". (New item.)
+4. **The number rule** still dropped two verdicts the judge called supported (task 3).
+5. **Real errors caught:** the judge marked as contradicted "Inter lost 3-2 at home to Napoli" (the page says Inter won 3-2) and "Club Brugge lost 3-2 at home to Aston Villa" (the page says 2-3): the research made mistakes and the checker caught them.
+Task 1 is kept (single facts are easier to check and easier to read); it is not the fix that raises recall. Cost per run did not rise (0.35 and 0.36 USD).
