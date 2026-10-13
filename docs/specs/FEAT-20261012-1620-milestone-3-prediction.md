@@ -213,3 +213,43 @@ Added to the verdict rules: (1) quotes are verified against **exactly the text t
 **What still fails:** the two flattened-table cases from tennis-db.com (correct claims called `not_supported` in about two of three runs; the same table confused me too); run-to-run variation of two or three cases; `a-sky-xi` and `a-presser` in one run each. A wrong `not_supported` is shown as "contradicted" and never goes forward, so it costs recall and could mislead a reader, but it cannot raise a probability. **Not done:** a table-aware text extraction (keep each table row on one line) in the fetcher would remove the table confusion at its source; logged as an idea, not built.
 
 **Reading the result:** the safety property holds in every run (nothing wrongly supported), recall went from 2/9 to roughly 7/9 on average. The sample is small (25 cases, 9 supported), so these numbers say "much better and safe so far", not "proven". More labelled cases should be added as real runs accumulate.
+
+## Client scope added on 2026-10-13 (approved by the user)
+
+The client's priority is to find out whether the system can **consistently identify genuine opportunities**, not only research games. He asked for probabilities for every outcome and other Kalshi market types (total goals or runs, both teams to score, over 1.5 goals, no tie), comparison with executable prices, automatic ranking with evidence, uncertainty and risks, and monitoring with alerts. Four items were added to `TODO.md` (FEAT-20261013-0906 to 0909) and the build order is: forecasters (1625), median (1626), market comparer (1627), **early record of forecasts (0906)**, run wiring and limits (1628), result pages (1629), more market types (0907), opportunities screen (0908), monitoring and alerts (0909). Each new item gets its own spec section before it is built.
+
+## Task 5 detail: the forecasters (FEAT-20261012-1625), for approval
+
+Branch `feature/sports-games-list`. New module `app/research/forecast.py`. As with the checker, this task delivers the forecasters and their tests; calling them from a run is task 10.
+
+**What a forecaster receives:** the game (title, start time, rules), the outcomes **with their Kalshi market tickers**, today's date, and the **supported claims only**, grouped by angle (text only, no source links, no page text). Never a price, never a link to Kalshi. A test checks the prompt text for any price.
+
+**What it returns (structured output):** for each outcome, a probability between 0 and 1, and one short reasoning text (at most about 120 words) naming the evidence it weighed and what it was unsure about. Probabilities are for the outcome as written ("Newcastle wins", "Tie").
+
+**Three framings (the count is a setting, `FORECASTER_COUNT`, default 3; framings repeat if the count is larger):**
+1. **Evidence first:** weigh each supported claim, then settle on probabilities.
+2. **Base rate first:** start from how often such a team, home side or favourite wins in this sport, then adjust only as far as the claims justify.
+3. **Devil's advocate:** form a first view, argue the strongest case for the outcome it rates least likely, then give the final probabilities.
+The three differ only in the instruction; the output shape is the same. Different framings are what makes the three estimates independent enough for a median and a spread to mean something. Whether they really differ is measured in Milestone 4.
+
+**Rules in every prompt:** the supported claims are the only evidence about this game; general knowledge of the sport is allowed, but say so; do not use any knowledge of how this specific game ended; if the evidence is thin, say so and stay closer to the base rate; the outcomes may be exclusive, then the probabilities must add up to 100%.
+
+**Checks on the answer (code, not trust):**
+- Every listed outcome gets exactly one probability, and no unknown outcome appears; otherwise the forecast is dropped (logged with the reason).
+- If the event's outcomes are mutually exclusive **and** cover every result (to be verified live per game type before building: soccer winner has three outcomes, baseball and tennis two), the probabilities must add up to between 0.97 and 1.03 and are then scaled to exactly 1; outside that range the forecast is dropped. Where Kalshi's outcomes are not known to be exhaustive, no scaling is done.
+- At least **two** valid forecasts are needed; with fewer, the run has **no prediction**, and says why. No quiet substitute.
+- Probabilities are kept as given (not pushed to 0 or 1); a probability of exactly 0 or 1 is dropped as invalid, because a single run cannot know that.
+
+**With no supported claims:** the forecasters still run, from the base rate, and the prediction is marked `evidence: none`, so the comparer cannot call a gap meaningful and the result page says "no supported evidence". This also gives the plain-AI baseline that Milestone 4 needs.
+
+**Model and settings (defaults, in `.env.example` and compose):** `FORECASTER_MODEL` (`gpt-5.4`, no tools, `store=false`), `FORECASTER_REASONING_EFFORT` (`medium`), `FORECASTER_MAX_OUTPUT_TOKENS` (4000, reasoning counts against it), `FORECASTER_COUNT` (3). One shared OpenAI client with the checker and researchers; the same error handling; the three calls run at the same time.
+
+**What is saved:** one `forecasts` row per forecaster and outcome (probability, framing name, reasoning, model); usage of each call is returned so the run total includes it. A failed or invalid forecaster is saved nowhere but logged and counted in the run's prediction record.
+
+**Code changes this needs:** `GameInfo` gets the outcome tickers and the exclusive flag (from Kalshi's event data); the games list and run start already read the event, so no new Kalshi call.
+
+**Expected cost (unmeasured):** about 3,000 input and 1,500 output tokens per forecaster, so roughly 3 to 5 cents for three at `gpt-5.4`. The real figure comes from the first real run.
+
+**Tests (fake model, no network):** the prompt holds no price, no link and only supported claims; each framing gets its own instruction; the answer checks above (missing outcome, unknown outcome, sum out of range, scaling to 1, probability 0 or 1); fewer than two valid forecasts gives no prediction with a reason; one failed call does not stop the others; no supported claims gives `evidence: none`; usage is returned; rows are saved per outcome and forecaster; the request to the real model class has the right model, effort, output cap and no tools.
+
+**Not in this task:** the median and spread (task 6), the comparison with the market (task 7), market types other than the winner (FEAT-20261013-0907).
