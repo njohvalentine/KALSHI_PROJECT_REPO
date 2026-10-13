@@ -130,10 +130,27 @@ def test_api_errors_become_clear_model_errors_without_secrets():
             return SimpleNamespace(output_parsed=None, usage=usage())
 
     model = OpenAIResearchModel(SETTINGS, client=SimpleNamespace(responses=Boom()))
-    with pytest.raises(ResearchModelError, match="Researcher call failed: RuntimeError: rate limit hit"):
+    with pytest.raises(ResearchModelError, match="Researcher call failed: RuntimeError$") as caught:
         asyncio.run(model.research(MARKET, Angle(name="n", question="q")))
     with pytest.raises(ResearchModelError, match="no usable plan"):
         asyncio.run(model.plan(MARKET, 3))
+
+
+def test_provider_error_text_is_logged_not_put_in_the_error_that_reaches_the_run(caplog):
+    class Boom:
+        async def create(self, **kw):
+            raise RuntimeError("Incorrect API key provided: sk-proj-****abcd")
+
+        async def parse(self, **kw):
+            raise RuntimeError("Incorrect API key provided: sk-proj-****abcd")
+
+    model = OpenAIResearchModel(SETTINGS, client=SimpleNamespace(responses=Boom()))
+    for call in (lambda: model.research(MARKET, Angle(name="n", question="q")), lambda: model.plan(MARKET, 3)):
+        with caplog.at_level("WARNING"):
+            with pytest.raises(ResearchModelError) as caught:
+                asyncio.run(call())
+        assert "sk-proj" not in str(caught.value) and "RuntimeError" in str(caught.value)
+    assert "sk-proj-****abcd" in caplog.text
 
 
 def test_the_start_line_is_left_out_when_the_start_is_unknown():

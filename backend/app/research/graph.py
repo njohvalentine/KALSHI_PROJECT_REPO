@@ -63,7 +63,7 @@ def build_graph(model: ResearchModel, settings: Settings, checkpointer=None):
             return {"errors": [{"angle": angle.name, "error": str(exc)}]}
         except Exception as exc:  # a bug in one researcher must not lose the others; it is logged in full
             log.exception("Researcher for angle %r crashed", angle.name)
-            return {"errors": [{"angle": angle.name, "error": f"{type(exc).__name__}: {exc}"}]}
+            return {"errors": [{"angle": angle.name, "error": type(exc).__name__}]}
         usages = [asdict(output.usage)]  # the call was paid for even if its answer is unusable
         claims, bad = build_claims(output.segments)
         if not claims:

@@ -47,7 +47,9 @@ async def _stage(name: str, set_stage: Callable[[str], Awaitable[None]], work):
         return await work
     except Exception as exc:  # recorded in the run, logged in full; never a silent default
         log.exception("Stage %s failed", name)
-        raise StageFailed(name, f"{type(exc).__name__}: {exc}"[:400]) from exc
+        # Only the kind of error goes into the run (and so to the browser): the message can hold
+        # database text, paths or fragments of a key. The full text is in the server log above.
+        raise StageFailed(name, type(exc).__name__) from exc
 
 
 def _supported(engine, run_id: str, findings: list[dict]) -> list[dict]:

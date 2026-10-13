@@ -104,7 +104,8 @@ async def execute_run(
     except Exception as exc:
         log.exception("Run %s failed", run_id)
         await asyncio.to_thread(
-            _update, engine, run_id, status="failed", error=f"{type(exc).__name__}: {exc}"[:1000],
+            _update, engine, run_id, status="failed",
+            error=f"{type(exc).__name__} (details are in the server log)",
             finished_at=datetime.now(UTC))
 
 

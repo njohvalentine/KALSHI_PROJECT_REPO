@@ -3,6 +3,7 @@
 Parameters were checked against the installed openai SDK (3.29.0). They have not been exercised
 against the live service yet (no key in the build environment); see the spec, section 9."""
 
+import logging
 from datetime import UTC, datetime
 from typing import Protocol
 
@@ -11,6 +12,8 @@ from openai import AsyncOpenAI
 from app.config import Settings
 from app.research.prompts import PLANNER_INSTRUCTIONS, RESEARCHER_INSTRUCTIONS, planner_input, researcher_input
 from app.research.schemas import Angle, Citation, GameInfo, Plan, ResearchOutput, TextSegment, Usage
+
+log = logging.getLogger("app.research")
 
 
 class ResearchModelError(Exception):
@@ -89,7 +92,8 @@ class OpenAIResearchModel:
                 store=False,
             )
         except Exception as exc:
-            raise ResearchModelError(f"Planner call failed: {type(exc).__name__}: {exc}") from exc
+            log.warning("Planner call failed: %s: %s", type(exc).__name__, exc)  # the full text stays in the log
+            raise ResearchModelError(f"Planner call failed: {type(exc).__name__}") from exc
         if response.output_parsed is None:
             raise ResearchModelError("The planner returned no usable plan")
         return response.output_parsed, usage_from(response, self._s.planner_model)
@@ -109,6 +113,7 @@ class OpenAIResearchModel:
                 store=False,
             )
         except Exception as exc:
-            raise ResearchModelError(f"Researcher call failed: {type(exc).__name__}: {exc}") from exc
+            log.warning("Researcher call failed: %s: %s", type(exc).__name__, exc)
+            raise ResearchModelError(f"Researcher call failed: {type(exc).__name__}") from exc
         segments, searches = segments_and_searches(response)
         return ResearchOutput(segments=segments, usage=usage_from(response, self._s.researcher_model, searches))

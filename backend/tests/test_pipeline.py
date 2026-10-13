@@ -166,8 +166,40 @@ def test_fetch_failing_keeps_the_research_and_says_which_stage_failed(make_clien
         run = run_game(client)
     finally:
         client.__exit__(None, None, None)
-    assert run["status"] == "done" and run["prediction"] == {"unavailable": "fetch failed: OSError: disk full"}
+    assert run["status"] == "done" and run["prediction"] == {"unavailable": "fetch failed: OSError"}
     assert len(run["result"]["findings"]) == 1 and count(make_client, "outcome_records", run["id"]) == 0 and count(make_client, "forecasts", run["id"]) == 0
+
+
+def test_error_text_stays_in_the_log_and_out_of_the_run(make_client, monkeypatch, caplog):
+    secret = "password=hunter2 host=10.0.0.5 sk-proj-abc123"
+
+    def boom(*a, **k):
+        raise OSError(secret)
+    monkeypatch.setattr(pipeline, "fetch_run_sources", boom)
+    client = signed_in(make_client)
+    try:
+        with caplog.at_level("ERROR"):
+            run = run_game(client)
+    finally:
+        client.__exit__(None, None, None)
+    assert secret not in str(run) and run["prediction"] == {"unavailable": "fetch failed: OSError"}
+    assert secret in caplog.text  # the operator can still see it
+
+
+def test_an_unexpected_failure_of_the_whole_run_shows_only_the_error_kind(make_client, monkeypatch, caplog):
+    secret = "connection to server at 10.0.0.5 failed, password=hunter2"
+
+    def boom(*a, **k):
+        raise RuntimeError(secret)
+    monkeypatch.setattr(runner, "summarize", boom)
+    client = signed_in(make_client)
+    try:
+        with caplog.at_level("ERROR"):
+            run = run_game(client)
+    finally:
+        client.__exit__(None, None, None)
+    assert run["status"] == "failed" and run["error"] == "RuntimeError (details are in the server log)"
+    assert secret not in str(run) and secret in caplog.text
 
 
 def test_the_check_stage_failing_is_named(make_client, monkeypatch):
@@ -179,7 +211,7 @@ def test_the_check_stage_failing_is_named(make_client, monkeypatch):
         run = run_game(client)
     finally:
         client.__exit__(None, None, None)
-    assert run["status"] == "done" and run["prediction"] == {"unavailable": "check failed: RuntimeError: bug"}
+    assert run["status"] == "done" and run["prediction"] == {"unavailable": "check failed: RuntimeError"}
 
 
 def test_all_forecasters_failing_gives_no_prediction_and_no_records(make_client):
