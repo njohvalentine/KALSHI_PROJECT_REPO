@@ -457,6 +457,14 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Fix done (ISS-20261012-1729):** multi-quote verdicts, table hint in the prompt, dd/mm/yyyy dates compared by year, `CHECKER_REASONING_EFFORT=medium`, output cap 4000. Measured 3 runs: 0 wrongly supported each time; true claims kept 5, 8 and 7 of 9 (was 2); cost about 8 cents for 25 pages. Still failing: flattened tables (tennis-db) are misread by the judge. Idea, not built: keep table rows on one line when extracting text.
 - **Where:** `docs/specs/FEAT-20261012-1620-milestone-3-prediction.md` (task 4 result, label table), `backend/tests/data/claim_labels.json`.
 
+### D32. First full run with the real services (2026-10-13, Arsenal vs Lille, Champions League; stack rebuilt, migrations ran)
+
+- **Result:** the whole pipeline worked end to end in **58 seconds** for **0.32 USD** (research 0.290, checking 0.008, three forecasters 0.019, plain-AI baseline 0.006); estimates were 1.5 to 3 minutes and about 0.50 USD. Records were saved (3 outcomes, before the start), and `score-records` runs inside the container.
+- **What the run showed:** only 6 cited claims came out of research; 4 of the 6 cited pages could not be read (oddschecker twice HTTP 403, betmgm 403, racingpost 406: all bookmaker pages); the two readable pages (LOSC match report, UEFA head-to-head) gave claims the checker labelled could not check, correctly cautious ("does not explicitly state it was the most recent match", "no earlier meetings" is an inference). So **zero supported claims, evidence "none"**: the three forecasters worked from the base rate and gave Arsenal 0.57 (0.55 to 0.64), Tie 0.25, Lille 0.18, close to the plain baseline (0.61 / 0.23 / 0.16); Kalshi's ask for Arsenal was 0.81. The comparer showed a large gap but flagged nothing, because the rule needs supported evidence.
+- **Design flaw found:** the "Current odds" research angle produces bookmaker prices. If such claims were supported, they would go to the forecasters as facts, which is market information and contradicts "forecasters never see the market". Proposed (not yet approved): mark odds angles as market information, keep them out of the forecasters' input, and keep them as a separate benchmark for Milestone 4 (a de-vigged bookmaker consensus next to Kalshi's price and the baseline).
+- **Also seen:** pages that block automated readers were all bookmaker pages here, which we do not want as forecaster evidence anyway; "team news" was empty the day before the game (lineups not out), which is what monitoring (FEAT-20261013-0909) is for.
+- **Limit:** one game. It shows the wiring works and the checker is strict; it says nothing about forecast quality.
+
 ## 4. Environment
 Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules apply: project-local installs only, ask before adding any dependency, spec and approval before code.
 
