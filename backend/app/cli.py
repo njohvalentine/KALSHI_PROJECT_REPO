@@ -107,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Tell whether the Kalshi key works on demo or production (read-only, no orders)",
     )
     sub.add_parser("resolve-records", help="Fill in the results of recorded forecasts whose games are over (read-only on Kalshi)")
+    sub.add_parser("telegram-chat-id", help="Print the chat id of the people who pressed Start on the Telegram bot (needs TELEGRAM_BOT_TOKEN)")
     score = sub.add_parser("score-records", help="Print how the recorded forecasts did against what happened")
     score.add_argument("--since", help="Only records made on or after this date (YYYY-MM-DD)")
     args = parser.parse_args(argv)
@@ -122,6 +123,25 @@ def main(argv: list[str] | None = None) -> int:
         for r in results:
             print(f"{r.name}: {r.status}" + (f" ({r.detail})" if r.detail else ""))
         print(summarize(results))
+        return 0
+
+    if args.command == "telegram-chat-id":
+        from app.telegram import TelegramError, find_chat_ids
+
+        token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        if not token:
+            print("Error: TELEGRAM_BOT_TOKEN is not set (put it in .env, then run this inside the backend container)", file=sys.stderr)
+            return 2
+        try:
+            chats = find_chat_ids(token)
+        except TelegramError as exc:
+            print(f"Error: {type(exc).__name__}", file=sys.stderr)  # never the text: it could hold the token
+            return 1
+        if not chats:
+            print("No chat has written to the bot yet. Open the bot in Telegram, press Start, then run this again.")
+            return 1
+        for chat_id, name in chats:
+            print(f"TELEGRAM_CHAT_ID={chat_id}   ({name})")
         return 0
 
     if args.command in ("resolve-records", "score-records"):

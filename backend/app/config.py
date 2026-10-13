@@ -117,6 +117,9 @@ class Settings:
     order_max_day_cost_usd: float
     order_expiry_minutes: float
     order_max_slippage_cents: float
+    alerts_enabled: bool
+    telegram_bot_token: str | None
+    telegram_chat_id: str | None
     record_baseline: bool
     resolve_after_hours: float
 
@@ -294,6 +297,16 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     order_slippage = _parse_positive_float("ORDER_MAX_SLIPPAGE_CENTS", env.get("ORDER_MAX_SLIPPAGE_CENTS", "2"), problems)
     if order_max_day_cost < order_max_cost:
         problems.append("ORDER_MAX_DAY_COST_USD must not be smaller than ORDER_MAX_COST_USD")
+    alerts_enabled = _parse_bool("ALERTS_ENABLED", env.get("ALERTS_ENABLED", "false"), problems)
+    telegram_token = env.get("TELEGRAM_BOT_TOKEN", "").strip() or None
+    telegram_chat = env.get("TELEGRAM_CHAT_ID", "").strip() or None
+    if alerts_enabled:
+        if not telegram_token or not telegram_chat:
+            problems.append("ALERTS_ENABLED=true needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
+        if telegram_token and not re.fullmatch(r"\d+:[A-Za-z0-9_-]{20,}", telegram_token):
+            problems.append("TELEGRAM_BOT_TOKEN does not look like a Telegram bot token (digits, a colon, then letters and digits)")
+        if telegram_chat and not re.fullmatch(r"-?\d+", telegram_chat):
+            problems.append("TELEGRAM_CHAT_ID must be a number (the chat id printed by the telegram-chat-id command)")
     record_baseline = _parse_bool("RECORD_BASELINE", env.get("RECORD_BASELINE", "true"), problems)
     resolve_after_hours = _parse_positive_float("RESOLVE_AFTER_HOURS", env.get("RESOLVE_AFTER_HOURS", "3"), problems)
 
@@ -310,6 +323,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     else:
         log.warning("Research is OFF: OPENAI_API_KEY is not set. Starting a run will be refused.")
 
+    log.info("Alerts are %s." % ("sent to a Telegram chat" if alerts_enabled else "only recorded in the app (ALERTS_ENABLED is not 'true')"))
     if monitor_enabled:
         log.info(
             "The watcher is ON (every %g min). Alerts are recorded in the app; no chat channel is configured. Automatic research: %s.",
@@ -380,6 +394,9 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         order_max_day_cost_usd=order_max_day_cost,
         order_expiry_minutes=order_expiry,
         order_max_slippage_cents=order_slippage,
+        alerts_enabled=alerts_enabled,
+        telegram_bot_token=telegram_token,
+        telegram_chat_id=telegram_chat,
         record_baseline=record_baseline,
         resolve_after_hours=resolve_after_hours,
     )

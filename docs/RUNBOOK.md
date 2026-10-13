@@ -61,7 +61,16 @@ Limits that protect you: at most 2 runs at the same time (`MAX_CONCURRENT_RUNS`)
 
 ## 6. The watcher and alerts
 
-The watcher is off unless `MONITOR_ENABLED=true`. When on, it looks every `MONITOR_INTERVAL_MINUTES` (10) at the games that were researched and have not started, with today's prices, and records alerts in the app (the Opportunities page, "Recent alerts"). No chat channel is connected yet; an alert only appears there. The Opportunities page shows whether the watcher is on, when it last looked and the kind of error if its last look failed (the full text is in the backend log).
+The watcher is off unless `MONITOR_ENABLED=true`. When on, it looks every `MONITOR_INTERVAL_MINUTES` (10) at the games that were researched and have not started, with today's prices, and records alerts in the app (the Opportunities page, "Recent alerts"). Alerts are also sent to Telegram when `ALERTS_ENABLED=true` (see below); otherwise an alert only appears there. The Opportunities page shows whether the watcher is on, when it last looked and the kind of error if its last look failed (the full text is in the backend log).
+
+### Telegram alerts (set up once)
+
+1. In Telegram, open **@BotFather**, send `/newbot`, pick a name; it gives you a **token**. The token is a secret: it goes only into `.env`, never into chat, e-mail or the code.
+2. Open your new bot in Telegram and press **Start** (a bot cannot message a person who has not).
+3. Put `TELEGRAM_BOT_TOKEN=<the token>` in `.env`, then run `docker compose up -d` and `docker compose exec backend uv run --no-sync python -m app.cli telegram-chat-id`. It prints `TELEGRAM_CHAT_ID=<number>`.
+4. Put that line in `.env` too, add `ALERTS_ENABLED=true` and `MONITOR_ENABLED=true`, and run `docker compose up -d` again. If a value is missing or wrong the backend refuses to start and says which.
+
+The Opportunities page then shows "Alerts are also sent to Telegram" and each alert in the history is marked Sent, or "Could not be sent" with the kind of error (`TelegramUnauthorized`: wrong token; `TelegramChatNotFound`: wrong chat id or Start not pressed; `TelegramBotBlocked`; `TelegramRateLimited`; `TelegramNetworkError`). The token is hidden from the logs and never shown on a page.
 
 ## 7. Looking at results
 

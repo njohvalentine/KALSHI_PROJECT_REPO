@@ -13,6 +13,7 @@ from app.games import router as games_router
 from app.alerts import router as alerts_router
 from app.monitor import Monitor
 from app.opportunities import router as opportunities_router
+from app.telegram import TelegramNotifier, hide_token_in_logs
 from app.orders import router as orders_router
 from app.config import Settings, load_settings
 from app.kalshi import KalshiClient
@@ -27,7 +28,7 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("app")
 
 
-def create_app(settings: Settings | None = None, research_model=None, judge=None, forecaster=None, fetch_options=None) -> FastAPI:
+def create_app(settings: Settings | None = None, research_model=None, judge=None, forecaster=None, fetch_options=None, notifier=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Fails here, before serving anything, if required settings are bad.
@@ -54,7 +55,11 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
         app.state.opportunity_cache = {}
         app.state.opportunity_lock = asyncio.Lock()
         app.state.fee_cache = {}
-        app.state.notifier = None  # no chat channel yet: alerts are recorded in the app (a sender is a separate item)
+        hide_token_in_logs()
+        cfg = app.state.settings
+        # With ALERTS_ENABLED the settings were already checked to hold the Telegram token and chat id; without it
+        # alerts are only recorded in the app.
+        app.state.notifier = notifier or (TelegramNotifier(cfg.telegram_bot_token, cfg.telegram_chat_id).send if cfg.alerts_enabled else None)
         app.state.monitor = Monitor(app)
         monitor_task = asyncio.create_task(app.state.monitor.run_forever()) if app.state.settings.monitor_enabled else None
         app.state.active_runs = 0

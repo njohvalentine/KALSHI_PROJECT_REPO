@@ -358,6 +358,9 @@ def test_the_code_has_no_way_to_send_an_order_to_kalshi():
     source = Path(__file__).resolve().parent.parent / "app"
     for path in source.rglob("*.py"):
         text_ = "\n".join(line for line in path.read_text().splitlines() if not line.lstrip().startswith("@router.post("))  # our own endpoints
+        if path.name == "telegram.py":  # the one sender: it posts to Telegram's own API and nowhere else
+            assert "api.telegram.org" in text_ and "kalshi" not in text_.lower()
+            continue
         assert ".post(" not in text_, f"{path.name} makes an outgoing POST"
         assert "portfolio/orders" not in text_ and "portfolio/events/orders" not in text_, f"{path.name} names Kalshi's order endpoint"
     assert not [n for n in dir(KalshiClient) if any(w in n.lower() for w in ("order", "place", "create", "post", "trade", "buy", "sell"))]
