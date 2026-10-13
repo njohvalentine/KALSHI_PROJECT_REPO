@@ -10,6 +10,7 @@ from app.auth import router as auth_router
 from app.checkpoint import open_checkpointer
 from app.games import GamesService
 from app.games import router as games_router
+from app.opportunities import router as opportunities_router
 from app.config import Settings, load_settings
 from app.kalshi import KalshiClient
 from app.markets import router as markets_router
@@ -48,6 +49,9 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
         app.state.judge = judge or (OpenAIClaimJudge(app.state.settings) if key else None)
         app.state.forecaster = forecaster or (OpenAIForecastModel(app.state.settings) if key else None)
         app.state.fetch_options = fetch_options or {}
+        app.state.opportunity_cache = {}
+        app.state.opportunity_lock = asyncio.Lock()
+        app.state.fee_cache = {}
         app.state.active_runs = 0
         app.state.tasks = set()
         await asyncio.to_thread(mark_stale_runs_failed, app.state.engine)
@@ -69,6 +73,7 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
     app.include_router(markets_router)
     app.include_router(games_router)
     app.include_router(runs_router)
+    app.include_router(opportunities_router)
 
     @app.get("/health")
     def health(response: Response):

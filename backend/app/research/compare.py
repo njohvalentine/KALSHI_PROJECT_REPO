@@ -12,6 +12,7 @@ Milestone 4 has scored real forecasts."""
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -176,7 +177,24 @@ def compare(
     })
 
 
-async def _series_fee(client: KalshiClient, series_ticker: str | None, event_ticker: str) -> FeeInfo:
+FEE_CACHE_SECONDS = 3600
+
+
+async def _series_fee(
+    client: KalshiClient, series_ticker: str | None, event_ticker: str, cache: dict | None = None
+) -> FeeInfo:
+    """The fee of a series. `cache` (series ticker -> (time, FeeInfo)) is for callers that ask for many games at once;
+    only fees really read from Kalshi are kept, never an assumed one."""
+    now = time.monotonic()
+    if cache is not None and series_ticker in cache and now - cache[series_ticker][0] < FEE_CACHE_SECONDS:
+        return cache[series_ticker][1]
+    fee = await _read_series_fee(client, series_ticker, event_ticker)
+    if cache is not None and series_ticker and fee.source == "series":
+        cache[series_ticker] = (now, fee)
+    return fee
+
+
+async def _read_series_fee(client: KalshiClient, series_ticker: str | None, event_ticker: str) -> FeeInfo:
     if not series_ticker:
         log.warning("Event %s has no series ticker; assuming quadratic fee, multiplier 1", event_ticker)
         return FeeInfo(ASSUMED_FEE.fee_type, ASSUMED_FEE.multiplier, "assumed: the event has no series ticker")
@@ -189,7 +207,7 @@ async def _series_fee(client: KalshiClient, series_ticker: str | None, event_tic
 
 async def compare_run(
     client: KalshiClient, event_ticker: str, prediction: dict, s: Settings, companions: list[tuple[str, str | None]] | None = None,
-    baseline: dict[str, float] | None = None,
+    baseline: dict[str, float] | None = None, fee_cache: dict | None = None,
 ) -> dict:
     """Reads fresh prices and the series fees, then compares. Never raises for a Kalshi problem: it returns why not.
     `companions` are (event ticker, series ticker) of the game's other market events."""
@@ -201,7 +219,7 @@ async def compare_run(
         log.warning("Prices for %s could not be read: %s", event_ticker, exc)
         return {"unavailable": f"Kalshi prices could not be read: {exc}"}
     priced_at = datetime.now(UTC)
-    fee = await _series_fee(client, (event_data.get("event") or {}).get("series_ticker"), event_ticker)
+    fee = await _series_fee(client, (event_data.get("event") or {}).get("series_ticker"), event_ticker, fee_cache)
     if fee.source != "series":
         log.warning("Fee for %s is assumed: %s", event_ticker, fee.source)
     fees: dict[str | None, FeeInfo] = {(event_data.get("event") or {}).get("series_ticker"): fee}
@@ -213,6 +231,6 @@ async def compare_run(
             log.warning("Prices for %s could not be read: %s", companion_event, exc)
             continue  # its markets are reported as having no market price
         if series not in fees:
-            fees[series] = await _series_fee(client, series, companion_event)
+            fees[series] = await _series_fee(client, series, companion_event, fee_cache)
         extra.append((data, fees[series]))
     return compare(prediction, event_data, fee, s, priced_at, extra, baseline)

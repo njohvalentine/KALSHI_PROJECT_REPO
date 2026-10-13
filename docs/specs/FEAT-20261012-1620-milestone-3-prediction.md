@@ -628,3 +628,12 @@ Two switches: **Worth a look only** (default) and **All researched games** (each
 ### Tests (fakes only)
 
 Ranking by the live gap; one row per game with the count of other flagged markets; mirror outcomes of a two-outcome game do not count twice; started games, games without a forecast and failed runs are left out; a stale forecast is greyed and unflagged; live prices change the gap compared with the stored comparison; a game whose prices cannot be read is listed and unflagged; no model object is called; login is required; the 50-game limit; the page shows the empty state with reasons.
+
+
+### Opportunities screen, result (2026-10-13)
+
+Built as specified: `app/opportunities.py` (`GET /api/opportunities`, `?all=true`; latest finished run with a forecast per game that has not started; fresh prices and series fees through the same comparison code as a run; one row per game with the best market and a count of the other flagged markets, mirror outcomes of a two-outcome game counted once; forecasts older than `OPPORTUNITY_MAX_AGE_HOURS` greyed and never flagged; unreadable prices listed, never flagged; at most 50 games; cached 60 seconds; series fees kept in memory for an hour), the Opportunities page and navigation entry. 422 backend tests pass; the page was checked with screenshots against the real stored forecasts.
+
+**First look (five real games, prices of the moment):** 1 of 5 flagged (Cleveland vs Tampa Bay: "Buy no on Over 9.5 runs at 76 cents", gap 7 cents, with 2 more markets of the game also worth a look); the others were not flagged because the research did not move the forecast toward the gap (4 games), the gap was above the plausibility limit (2) or small (2). The first uncached read took about 8 seconds for five games; a few Kalshi reads per game, no model call.
+
+**Decision recorded:** the "cheap first screen" is not built; moved to FEAT-20261013-0909.

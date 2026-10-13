@@ -135,3 +135,41 @@ export type GamesResponse = {
   notes: string[];
   fetched_at: string;
 };
+
+export type OpportunityBest = {
+  market_ticker: string;
+  kind: string;
+  market: string;
+  side: "yes" | "no";
+  price: number;
+  our_probability: number;
+  market_probability: number;
+  gap: number;
+  spread: number;
+  reasons: string[];
+  fee_source: string | null;
+};
+export type Opportunity = {
+  run_id: string;
+  event_ticker: string;
+  title: string;
+  starts_at: string | null;
+  forecast_at: string | null;
+  age_hours: number | null;
+  stale: boolean;
+  supported_claims: number;
+  evidence: string | null;
+  flagged: boolean;
+  flagged_markets: number;
+  best: OpportunityBest | null;
+  unavailable: string | null;
+  risks: string[];
+};
+export type OpportunitiesResponse = {
+  opportunities: Opportunity[];
+  games_considered: number;
+  flagged_games: number;
+  top_reasons: { reason: string; games: number }[];
+  generated_at: string;
+  max_age_hours: number;
+};
