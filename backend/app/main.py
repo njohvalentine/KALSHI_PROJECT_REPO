@@ -15,7 +15,6 @@ from app.monitor import Monitor
 from app.opportunities import router as opportunities_router
 from app.config import Settings, load_settings
 from app.kalshi import KalshiClient
-from app.markets import router as markets_router
 from app.research.graph import build_graph
 from app.research.check import OpenAIClaimJudge
 from app.research.forecast import OpenAIForecastModel
@@ -78,7 +77,6 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
     # The interactive API docs are off: they would publish the full endpoint list to anyone.
     app = FastAPI(title="Valentine backend", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.include_router(auth_router)
-    app.include_router(markets_router)
     app.include_router(games_router)
     app.include_router(runs_router)
     app.include_router(opportunities_router)

@@ -114,29 +114,6 @@ def test_404_and_other_errors_are_not_retried():
     assert len(calls) == 2 and sleeps == []
 
 
-@needs_db
-def test_endpoints_need_login_and_map_errors(make_client):
-    H = {"X-Requested-With": "t"}
-    with make_client() as client:
-        assert client.get("/api/markets").status_code == 401
-        assert client.get("/api/markets/ABC").status_code == 401
-
-        client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
-
-        def handler(request):
-            if request.url.path.endswith("/markets/MISSING"):
-                return httpx2.Response(404)
-            if request.url.path.endswith("/markets/BROKEN"):
-                return httpx2.Response(500)
-            return httpx2.Response(200, json={"markets": [{"ticker": "T1"}], "cursor": ""})
-
-        client.app.state.kalshi = KalshiClient(BASE, client=httpx2.Client(transport=httpx2.MockTransport(handler)))
-        assert client.get("/api/markets").json()["markets"][0]["ticker"] == "T1"
-        assert client.get("/api/markets/MISSING").status_code == 404
-        assert client.get("/api/markets/BROKEN").status_code == 502
-        assert client.get("/api/markets?limit=0").status_code == 422
-
-
 def test_default_client_timeouts_suit_slow_networks_but_still_give_up_in_about_twenty_seconds():
     c = KalshiClient(BASE)
     try:
@@ -151,24 +128,6 @@ def test_each_successful_call_logs_its_path_and_duration(caplog):
     c, _ = make(lambda r: httpx2.Response(200, json={}))
     c.get_market("KX-1")
     assert any("Kalshi GET /markets/KX-1 answered 200 in" in m and m.endswith(" ms") for m in caplog.messages)
-
-
-@needs_db
-def test_markets_endpoint_excludes_combination_markets_by_default(make_client):
-    H = {"X-Requested-With": "t"}
-    seen = []
-
-    def handler(request):
-        seen.append(request.url.params.get("mve_filter"))
-        return httpx2.Response(200, json={"markets": [], "cursor": ""})
-
-    with make_client() as client:
-        client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
-        client.app.state.kalshi = KalshiClient(BASE, client=httpx2.Client(transport=httpx2.MockTransport(handler)))
-        assert client.get("/api/markets").status_code == 200
-        assert client.get("/api/markets?mve_filter=only").status_code == 200
-        assert client.get("/api/markets?mve_filter=whatever").status_code == 422
-    assert seen == ["exclude", "only"]
 
 
 def test_events_calls_use_the_documented_paths_and_parameters():
