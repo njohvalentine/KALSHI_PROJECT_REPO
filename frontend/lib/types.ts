@@ -42,8 +42,10 @@ export type ForecastRow = {
   reasoning: string;
   model: string;
 };
+export type MarketKind = "winner" | "total" | "btts" | "spread";
 export type PredictionOutcome = {
   market_ticker: string;
+  kind?: MarketKind;
   outcome: string;
   probability: number;
   min: number;
@@ -75,6 +77,8 @@ export type Prediction = {
   dropped?: { index: number; variant: string; reason: string }[];
   evidence?: "supported" | "none";
   supported_claims?: number;
+  markets_not_offered?: string[];
+  adjustments?: { forecaster: number; note: string }[];
   comparison?: Comparison;
 };
 

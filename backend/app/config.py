@@ -235,7 +235,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     if forecaster_effort not in EFFORTS:
         problems.append(f"FORECASTER_REASONING_EFFORT must be one of {', '.join(EFFORTS)}, got {forecaster_effort!r}")
     forecaster_max_output = _parse_positive_int(
-        "FORECASTER_MAX_OUTPUT_TOKENS", env.get("FORECASTER_MAX_OUTPUT_TOKENS", "4000"), problems
+        "FORECASTER_MAX_OUTPUT_TOKENS", env.get("FORECASTER_MAX_OUTPUT_TOKENS", "8000"), problems
     )
     forecaster_count = _parse_positive_int("FORECASTER_COUNT", env.get("FORECASTER_COUNT", "3"), problems)
     if forecaster_count < 2:

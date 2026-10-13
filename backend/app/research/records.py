@@ -62,7 +62,8 @@ def build_records(
             yes_ask_size=_dec(yes["size"]) if yes else None,
             yes_bid_size=_dec(no["size"]) if no else None,  # contracts at the best YES bid are the ones at the NO ask
             priced_at=_parse_time(comparison.get("priced_at")),
-            fee_type=fee.get("fee_type"), fee_multiplier=_dec(fee.get("multiplier")), fee_source=fee.get("source"),
+            fee_type=((c or {}).get("fee") or fee).get("fee_type"), fee_multiplier=_dec(((c or {}).get("fee") or fee).get("multiplier")),
+            fee_source=((c or {}).get("fee") or fee).get("source"), market_kind=o.get("kind", "winner"),
             side=(c or {}).get("side"), net_edge=_dec((c or {}).get("net_edge")), worst_case_edge=_dec((c or {}).get("worst_case_edge")),
             meaningful=bool((c or {}).get("meaningful")),
             reasons=c["reasons"] if c is not None else ([f"no market snapshot: {why_no_market}"] if why_no_market else ["no market snapshot"]),
@@ -150,6 +151,26 @@ def _paper(records: list[OutcomeRecord]) -> dict:
     }
 
 
+def _kind_scores(used: list[OutcomeRecord]) -> dict:
+    """The same numbers per kind of market: the forecasts may be good for one kind and poor for another."""
+    out = {}
+    for kind in sorted({r.market_kind for r in used}):
+        rows = [r for r in used if r.market_kind == kind]
+        both = [r for r in rows if r.baseline_probability is not None and _mid(r) is not None]
+        out[kind] = {
+            "outcomes": len(rows), "games": len({r.event_ticker for r in rows}),
+            "brier_ours": _brier([(r.probability, r.resolved_yes) for r in rows]),
+            "same_records": {
+                "n": len(both),
+                "ours": _brier([(r.probability, r.resolved_yes) for r in both]),
+                "baseline": _brier([(r.baseline_probability, r.resolved_yes) for r in both]),
+                "market": _brier([(_mid(r), r.resolved_yes) for r in both]),
+            },
+            "paper_all": _paper(rows),
+        }
+    return out
+
+
 def score_records(engine, since: datetime | None = None) -> dict:
     with DbSession(engine) as db:
         query = select(OutcomeRecord)
@@ -176,6 +197,7 @@ def score_records(engine, since: datetime | None = None) -> dict:
         },
         "without_two_sided_quote": sum(1 for r in used if _mid(r) is None),
         "without_baseline": sum(1 for r in used if r.baseline_probability is None),
+        "by_kind": _kind_scores(used),
         "paper_all": _paper(used),
         "paper_flagged": _paper([r for r in used if r.meaningful]),
         "enough_games": len({r.event_ticker for r in used}) >= MIN_GAMES,
@@ -194,6 +216,13 @@ def format_report(s: dict) -> str:
         f"plain AI call {f(s['same_records']['baseline'])}, Kalshi price (bid-ask middle) {f(s['same_records']['market'])}",
         f"Not in that comparison: {s['without_two_sided_quote']} without a two-sided quote, {s['without_baseline']} without a baseline.",
     ]
+    for kind, k in s.get("by_kind", {}).items():
+        same = k["same_records"]
+        lines.append(
+            f"  {kind}: {k['outcomes']} outcomes in {k['games']} games, Brier ours {f(k['brier_ours'])}; on the {same['n']} with all three: "
+            f"ours {f(same['ours'])}, plain AI {f(same['baseline'])}, Kalshi {f(same['market'])}; chosen side at the ask: "
+            f"{k['paper_all']['bets']} bets, average {f(k['paper_all']['average_result'])} dollars"
+        )
     for key, label in (("paper_all", "Chosen side at the ask, all"), ("paper_flagged", "Chosen side at the ask, flagged as meaningful")):
         p = s[key]
         lines.append(

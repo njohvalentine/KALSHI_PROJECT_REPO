@@ -465,6 +465,13 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **Also seen:** pages that block automated readers were all bookmaker pages here, which we do not want as forecaster evidence anyway; "team news" was empty the day before the game (lineups not out), which is what monitoring (FEAT-20261013-0909) is for.
 - **Limit:** one game. It shows the wiring works and the checker is strict; it says nothing about forecast quality.
 
+### D33. More market types built; first soccer run over-flags (2026-10-13)
+
+- **Built:** total goals or runs, both teams to score and spread, found as companion Kalshi events by the game's ticker suffix, forecast in the same run, checked for consistency between related markets, compared per market with the fee of each series, recorded with a market kind, scored per kind, shown in one table per kind. First set approved by the user. Spec: `docs/specs/FEAT-20261012-1620-milestone-3-prediction.md`.
+- **Kalshi facts (read live, public calls):** Premier League and Champions League: total goals (2 to 6 lines), both teams to score (one market), spread (team wins by more than 1.5 or 2.5), Champions League also first half and team corners; MLB: total runs (11 lines), spread (6), first-inning run, first five innings (with Tie), team totals (14); ATP: exact match score; each market has `strike_type` and `floor_strike`. "No tie" is not a separate market: it is the "no" side of the Tie market.
+- **The result to remember:** in Galatasaray vs Barcelona 12 of 14 markets were flagged "Worth a look", yet the forecasters agreed to the percent and matched the plain-AI call that saw no facts; the gaps to the market (10 to 26 cents) are most likely the model's blind spot. The flag does not protect against that. Proposed, not built: flag only when the research moved the forecast away from the plain-AI baseline, and label very large gaps as more likely an error than an edge.
+- **Run cost with 14 to 19 markets:** 0.53 and 0.63 USD, one forecaster failed on the output cap (raised to 8000 tokens).
+
 ## 4. Environment
 Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules apply: project-local installs only, ask before adding any dependency, spec and approval before code.
 

@@ -7,6 +7,21 @@ from pydantic import BaseModel, Field
 
 
 @dataclass(frozen=True)
+class MarketGroup:
+    """Further markets of the same game from one companion Kalshi event (total goals, both teams to score,
+    spread). Each market is its own yes/no question; they are not exclusive."""
+
+    kind: str  # "total", "btts" or "spread"
+    title: str  # the event title, for example "Atletico vs Manchester United: Total Goals"
+    event_ticker: str
+    series_ticker: str | None
+    tickers: list[str]
+    outcomes: list[str]  # Kalshi's market titles, for example "Over 2.5 goals scored"
+    strikes: list[float | None]  # the line of each market (2.5), None when it has none
+    teams: list[str | None]  # for a spread market the winner outcome name it is about, otherwise None
+
+
+@dataclass(frozen=True)
 class GameInfo:
     """The game (a Kalshi event) a run is about, with the outcomes people can bet on."""
 
@@ -17,8 +32,28 @@ class GameInfo:
     outcomes: list[str] = field(default_factory=list)  # e.g. ["Newcastle wins", "Tie is the result", ...]
     outcome_tickers: list[str] = field(default_factory=list)  # the Kalshi market of each outcome, same order
     exclusive: bool = False  # Kalshi says at most one outcome happens (mutually_exclusive)
+    outcome_names: list[str] = field(default_factory=list)  # short names of the winner outcomes ("Atletico", "Tie")
+    groups: list[MarketGroup] = field(default_factory=list)  # companion markets found for this game
+    group_notes: list[str] = field(default_factory=list)  # companion markets not offered or not readable
     rules: str | None = None
     # Prices are deliberately not part of what the agents are shown (avoids anchoring on the market).
+
+    def __post_init__(self):
+        # Checkpoints and the database keep the game as plain data, so groups come back as dicts.
+        groups = [g if isinstance(g, MarketGroup) else MarketGroup(**g) for g in self.groups]
+        object.__setattr__(self, "groups", groups)
+
+    @property
+    def market_tickers(self) -> list[str]:
+        """Every market we forecast: the winner outcomes first, then each companion group."""
+        return self.outcome_tickers + [t for g in self.groups for t in g.tickers]
+
+    @property
+    def market_labels(self) -> list[str]:
+        return self.outcomes + [o for g in self.groups for o in g.outcomes]
+
+    def kind_of(self, ticker: str) -> str:
+        return next((g.kind for g in self.groups if ticker in g.tickers), "winner")
 
     @property
     def sums_to_one(self) -> bool:
@@ -47,6 +82,7 @@ class GameInfo:
             starts_at=starts_at,
             outcomes=[m.get("title") or m.get("yes_sub_title") or m["ticker"] for m in markets],
             outcome_tickers=[m["ticker"] for m in markets],
+            outcome_names=[m.get("yes_sub_title") or "" for m in markets],
             exclusive=bool(event.get("mutually_exclusive")),
             rules=next((m["rules_primary"] for m in markets if m.get("rules_primary")), None),
         )

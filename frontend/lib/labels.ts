@@ -70,3 +70,10 @@ export function sideText(o: ComparisonOutcome): string {
   if (o.side === "no") return `buying “no” at ${Math.round((o.no_ask ?? 0) * 100)}¢`;
   return "";
 }
+
+export const KIND_HEADING: Record<string, string> = {
+  winner: "Who wins",
+  total: "Total goals or runs",
+  btts: "Both teams to score",
+  spread: "Margin of victory",
+};

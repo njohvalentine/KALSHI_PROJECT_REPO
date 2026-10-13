@@ -128,22 +128,50 @@ def _plain(value):
     return value
 
 
-def compare(prediction: dict, event_data: dict, fee: FeeInfo, s: Settings, priced_at: datetime) -> dict:
-    markets = {m["ticker"]: m for m in (event_data.get("markets") or event_data.get("event", {}).get("markets") or [])}
-    outcomes = [
-        compare_outcome(o, markets.get(o["market_ticker"]), fee, prediction["evidence"], prediction["supported_claims"], s)
-        for o in prediction["outcomes"]
-    ]
+def _fee_dict(fee: FeeInfo) -> dict:
+    return {"fee_type": fee.fee_type, "multiplier": fee.multiplier, "source": fee.source}
+
+
+def compare(
+    prediction: dict, event_data: dict, fee: FeeInfo, s: Settings, priced_at: datetime,
+    companions: list[tuple[dict, FeeInfo]] | None = None,
+) -> dict:
+    """Compares every market of the prediction. `event_data` and `fee` belong to the winner event; `companions`
+    are (event data, fee) pairs of the other events of the game (total, both teams to score, spread)."""
+    markets: dict[str, tuple[dict, FeeInfo]] = {}
+    for data, event_fee in [(event_data, fee)] + list(companions or []):
+        for m in data.get("markets") or data.get("event", {}).get("markets") or []:
+            markets[m["ticker"]] = (m, event_fee)
+    outcomes = []
+    for o in prediction["outcomes"]:
+        market, market_fee = markets.get(o["market_ticker"], (None, fee))
+        result = compare_outcome(o, market, market_fee, prediction["evidence"], prediction["supported_claims"], s)
+        result["fee"] = _fee_dict(market_fee)  # each market carries the fee of its own series
+        outcomes.append(result)
     return _plain({
         "priced_at": priced_at.isoformat(),
-        "fee": {"fee_type": fee.fee_type, "multiplier": fee.multiplier, "source": fee.source},
+        "fee": _fee_dict(fee),
         "thresholds": {"edge_min": s.edge_min, "min_supported_claims": s.min_supported_claims, "min_ask_size": s.min_ask_size},
         "outcomes": outcomes,
     })
 
 
-async def compare_run(client: KalshiClient, event_ticker: str, prediction: dict, s: Settings) -> dict:
-    """Reads fresh prices and the series fee, then compares. Never raises for a Kalshi problem: it returns why not."""
+async def _series_fee(client: KalshiClient, series_ticker: str | None, event_ticker: str) -> FeeInfo:
+    if not series_ticker:
+        log.warning("Event %s has no series ticker; assuming quadratic fee, multiplier 1", event_ticker)
+        return FeeInfo(ASSUMED_FEE.fee_type, ASSUMED_FEE.multiplier, "assumed: the event has no series ticker")
+    try:
+        return fee_info_from_series((await asyncio.to_thread(client.get_series, series_ticker)).get("series") or {})
+    except KalshiError as exc:
+        log.warning("Fee for series %s could not be read (%s); assuming quadratic, multiplier 1", series_ticker, exc)
+        return FeeInfo(ASSUMED_FEE.fee_type, ASSUMED_FEE.multiplier, "assumed: the series could not be read")
+
+
+async def compare_run(
+    client: KalshiClient, event_ticker: str, prediction: dict, s: Settings, companions: list[tuple[str, str | None]] | None = None,
+) -> dict:
+    """Reads fresh prices and the series fees, then compares. Never raises for a Kalshi problem: it returns why not.
+    `companions` are (event ticker, series ticker) of the game's other market events."""
     if "unavailable" in prediction:
         return {"unavailable": "There is no prediction to compare."}
     try:
@@ -152,17 +180,18 @@ async def compare_run(client: KalshiClient, event_ticker: str, prediction: dict,
         log.warning("Prices for %s could not be read: %s", event_ticker, exc)
         return {"unavailable": f"Kalshi prices could not be read: {exc}"}
     priced_at = datetime.now(UTC)
-    series_ticker = (event_data.get("event") or {}).get("series_ticker")
-    fee = ASSUMED_FEE
-    if series_ticker:
-        try:
-            fee = fee_info_from_series((await asyncio.to_thread(client.get_series, series_ticker)).get("series") or {})
-        except KalshiError as exc:
-            fee = FeeInfo(ASSUMED_FEE.fee_type, ASSUMED_FEE.multiplier, "assumed: the series could not be read")
-            log.warning("Fee for series %s could not be read (%s); assuming quadratic, multiplier 1", series_ticker, exc)
-    else:
-        fee = FeeInfo(ASSUMED_FEE.fee_type, ASSUMED_FEE.multiplier, "assumed: the event has no series ticker")
-        log.warning("Event %s has no series ticker; assuming quadratic fee, multiplier 1", event_ticker)
+    fee = await _series_fee(client, (event_data.get("event") or {}).get("series_ticker"), event_ticker)
     if fee.source != "series":
         log.warning("Fee for %s is assumed: %s", event_ticker, fee.source)
-    return compare(prediction, event_data, fee, s, priced_at)
+    fees: dict[str | None, FeeInfo] = {(event_data.get("event") or {}).get("series_ticker"): fee}
+    extra: list[tuple[dict, FeeInfo]] = []
+    for companion_event, series in companions or []:
+        try:
+            data = await asyncio.to_thread(client.get_event, companion_event)
+        except KalshiError as exc:
+            log.warning("Prices for %s could not be read: %s", companion_event, exc)
+            continue  # its markets are reported as having no market price
+        if series not in fees:
+            fees[series] = await _series_fee(client, series, companion_event)
+        extra.append((data, fees[series]))
+    return compare(prediction, event_data, fee, s, priced_at, extra)

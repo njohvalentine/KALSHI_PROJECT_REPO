@@ -189,7 +189,7 @@ def test_the_real_model_class_sends_the_right_request():
     model = OpenAIForecastModel(SETTINGS, client=SimpleNamespace(responses=Responses()))
     got, usage = asyncio.run(model.forecast(GAME, CLAIMS, FRAMINGS[1]))
     assert seen["model"] == "gpt-5.4" and seen["store"] is False and "tools" not in seen
-    assert seen["reasoning"] == {"effort": "medium"} and seen["max_output_tokens"] == 4000 and seen["text_format"] is ForecastAnswer
+    assert seen["reasoning"] == {"effort": "medium"} and seen["max_output_tokens"] == 8000 and seen["text_format"] is ForecastAnswer
     assert FRAMINGS[1][1] in seen["instructions"] and "add up to 100%" in seen["instructions"]
     assert "KX-1" not in seen["input"] and usage.model == "gpt-5.4" and usage.output_tokens == 900 and got.reasoning
 

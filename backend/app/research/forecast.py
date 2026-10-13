@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.config import Settings
 from app.models import Forecast as ForecastRow
 from app.research.model import ResearchModelError, _today, openai_client, usage_from
-from app.research.prompts import EXCLUSIVE_RULE, FORECASTER_INSTRUCTIONS, FRAMINGS, forecaster_input
+from app.research.prompts import EXCLUSIVE_RULE, FORECASTER_INSTRUCTIONS, FRAMINGS, GROUP_RULE, forecaster_input
 from app.research.schemas import GameInfo, Usage
 
 log = logging.getLogger("app.research.forecast")
@@ -57,7 +57,8 @@ class OpenAIForecastModel:
             response = await self._client.responses.parse(
                 model=self._s.forecaster_model,
                 instructions=FORECASTER_INSTRUCTIONS.format(
-                    today=today, framing=framing[1], exclusive_rule=EXCLUSIVE_RULE if game.sums_to_one else ""
+                    today=today, framing=framing[1], exclusive_rule=EXCLUSIVE_RULE if game.sums_to_one else "",
+                    group_rule=GROUP_RULE if game.groups else "",
                 ),
                 input=forecaster_input(game, claims, today),
                 text_format=ForecastAnswer,
@@ -68,13 +69,58 @@ class OpenAIForecastModel:
         except Exception as exc:
             raise ResearchModelError(f"Forecaster call failed: {type(exc).__name__}: {exc}") from exc
         if response.output_parsed is None:
+            log.warning("The forecaster returned no usable answer: status %s, incomplete %s",
+                        getattr(response, "status", None), getattr(response, "incomplete_details", None))
             raise ResearchModelError("The forecaster returned no usable answer")
         return response.output_parsed, usage_from(response, self._s.forecaster_model)
 
 
-def validate(game: GameInfo, answer: ForecastAnswer) -> dict[str, float]:
-    """Turns an answer into {market ticker: probability} or raises InvalidForecast."""
-    n = len(game.outcomes)
+LINE_TOLERANCE = 0.03
+
+
+def _clip(probs: dict[str, float], ticker: str, ceiling: float, what: str, notes: list[str]) -> None:
+    """Lowers `ticker` to `ceiling` when it is higher by a small amount (and says so); a larger gap is an invalid answer."""
+    excess = probs[ticker] - ceiling
+    if excess <= 0:
+        return
+    if excess > LINE_TOLERANCE:
+        raise InvalidForecast(f"{what} (by {excess:.2f})")
+    notes.append(f"{what}: lowered by {excess:.3f}")
+    probs[ticker] = ceiling
+
+
+def enforce_consistency(game: GameInfo, probs: dict[str, float]) -> list[str]:
+    """Probabilities of related markets must agree. Small disagreements are fixed by lowering the number that is
+    too high (and reported); large ones raise InvalidForecast. Changes `probs` in place and returns the notes."""
+    notes: list[str] = []
+    winner = dict(zip(game.outcome_names, game.outcome_tickers))
+    totals_15 = None
+    for group in game.groups:
+        lines: dict[str | None, list[tuple[float, str]]] = {}
+        for ticker, strike, team in zip(group.tickers, group.strikes, group.teams):
+            lines.setdefault(team, []).append((strike if strike is not None else 0.0, ticker))
+        if group.kind in ("total", "spread"):
+            for items in lines.values():
+                items.sort()
+                for (_, lower), (_, higher) in zip(items, items[1:]):  # a higher line is never more likely
+                    _clip(probs, higher, probs[lower], f"{group.kind}: a higher line is more likely than a lower one", notes)
+        if group.kind == "spread":
+            for ticker, team in zip(group.tickers, group.teams):  # winning by more than 1.5 needs winning
+                if team in winner:
+                    _clip(probs, ticker, probs[winner[team]], "spread: winning by a margin is more likely than winning", notes)
+        if group.kind == "total":
+            totals_15 = next((t for t, strike in zip(group.tickers, group.strikes) if strike == 1.5), totals_15)
+    if totals_15:
+        for group in game.groups:
+            if group.kind == "btts":
+                for ticker in group.tickers:  # both teams scoring needs at least two goals
+                    _clip(probs, ticker, probs[totals_15], "btts: both teams to score is more likely than over 1.5 goals", notes)
+    return notes
+
+
+def validate_full(game: GameInfo, answer: ForecastAnswer) -> tuple[dict[str, float], list[str]]:
+    """Turns an answer into ({market ticker: probability}, adjustment notes) or raises InvalidForecast."""
+    n = len(game.market_tickers)
     numbers = [p.outcome_number for p in answer.probabilities]
     if sorted(numbers) != list(range(1, n + 1)):
         raise InvalidForecast(f"expected one probability for each outcome 1..{n}, got outcome numbers {numbers}")
@@ -82,12 +128,19 @@ def validate(game: GameInfo, answer: ForecastAnswer) -> dict[str, float]:
     bad = [num for num, p in probs.items() if not 0 < p < 1]
     if bad:
         raise InvalidForecast(f"probability must be above 0 and below 1 (outcome numbers {bad})")
-    if game.sums_to_one:
-        total = sum(probs.values())
+    winners = len(game.outcomes)
+    if game.sums_to_one:  # only the winner outcomes add up to 100%
+        total = sum(probs[i] for i in range(1, winners + 1))
         if abs(total - 1) > SUM_TOLERANCE:
             raise InvalidForecast(f"the outcomes are exclusive but the probabilities add up to {total:.3f}")
-        probs = {num: p / total for num, p in probs.items()}
-    return {game.outcome_tickers[num - 1]: p for num, p in probs.items()}
+        for i in range(1, winners + 1):
+            probs[i] = probs[i] / total
+    by_ticker = {game.market_tickers[num - 1]: p for num, p in probs.items()}
+    return by_ticker, enforce_consistency(game, by_ticker)
+
+
+def validate(game: GameInfo, answer: ForecastAnswer) -> dict[str, float]:
+    return validate_full(game, answer)[0]
 
 
 @dataclass
@@ -97,6 +150,7 @@ class ValidForecast:
     probabilities: dict[str, float]  # market ticker -> probability
     reasoning: str
     model: str
+    adjustments: list[str] = field(default_factory=list)  # small inconsistencies that were fixed, in words
 
 
 @dataclass
@@ -133,12 +187,12 @@ async def run_forecasters(game: GameInfo, claims: list[dict], model: ForecastMod
             return
         result.usages.append(asdict(usage))  # the call was paid for even if its answer is unusable
         try:
-            probabilities = validate(game, answer)
+            probabilities, adjustments = validate_full(game, answer)
         except InvalidForecast as exc:
             log.warning("Forecaster %d (%s) gave an unusable answer: %s", index + 1, framing[0], exc)
             result.dropped.append({"index": index, "variant": framing[0], "reason": str(exc)})
             return
-        result.forecasts.append(ValidForecast(index, framing[0], probabilities, answer.reasoning.strip(), usage.model))
+        result.forecasts.append(ValidForecast(index, framing[0], probabilities, answer.reasoning.strip(), usage.model, adjustments))
 
     await asyncio.gather(*(one(i) for i in range(settings.forecaster_count)))
     result.forecasts.sort(key=lambda f: f.index)

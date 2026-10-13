@@ -278,3 +278,30 @@ def test_the_score_command_prints_the_report_and_refuses_a_bad_date(fresh_db, mo
     assert "Records: 0" in capsys.readouterr().out
     assert cli.main(["score-records", "--since", "yesterday"]) == 2
     assert "--since must look like" in capsys.readouterr().err
+
+
+def test_each_record_has_its_market_kind_and_the_fee_of_its_own_series():
+    prediction_ = {**prediction(), "outcomes": [prediction()["outcomes"][0], {**prediction()["outcomes"][1], "kind": "total"}]}
+    comparison_ = comparison()
+    comparison_["outcomes"][1]["fee"] = {"fee_type": "quadratic", "multiplier": 0.5, "source": "series"}
+    a, b = build_records("run1", GAME, prediction_, comparison_, None, NOW)
+    assert (a.market_kind, b.market_kind) == ("winner", "total")
+    assert (a.fee_type, a.fee_multiplier) == ("quadratic_with_maker_fees", Decimal("0.5")) or a.fee_multiplier == Decimal("1.0")
+    assert (b.fee_type, b.fee_multiplier) == ("quadratic", Decimal("0.5"))
+
+
+@needs_db
+def test_scores_are_also_shown_per_kind_of_market(fresh_db):
+    command.upgrade(alembic_config(), "head")
+    winner = scored_record("E1", 0.8, True, 0.6, 0.50, 0.54, "yes")
+    total = scored_record("E2", 0.3, False, 0.5, 0.40, 0.44, "no", no_ask=0.60)
+    total.market_kind = "total"
+    with DbSession(fresh_db) as db:
+        db.add_all([winner, total])
+        db.commit()
+    s = score_records(fresh_db)
+    assert set(s["by_kind"]) == {"winner", "total"}
+    assert s["by_kind"]["winner"]["brier_ours"] == pytest.approx(0.04) and s["by_kind"]["total"]["brier_ours"] == pytest.approx(0.09)
+    assert s["by_kind"]["total"]["paper_all"]["bets"] == 1 and s["by_kind"]["total"]["same_records"]["n"] == 1
+    report = format_report(s)
+    assert "  total: 1 outcomes in 1 games, Brier ours 0.0900" in report and "  winner: 1 outcomes" in report

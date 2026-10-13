@@ -172,3 +172,53 @@ def test_no_prediction_means_nothing_to_compare_and_no_kalshi_call():
 def test_nested_markets_in_the_event_are_also_read():
     event = {"event": {"series_ticker": "KXTEST", "markets": [market()]}}
     assert compare(PREDICTION, event, FEE, S, NOW)["outcomes"][0]["side"] == "yes"
+
+
+def test_markets_of_other_events_are_compared_with_their_own_fee():
+    prediction = {"evidence": "supported", "supported_claims": 7, "forecasters_valid": 3, "dropped": [], "outcomes": [
+        outcome(0.55, 0.50, 0.60), {**outcome(0.70, 0.65, 0.75, ticker="T-2"), "kind": "total"}]}
+    total_event = {"event": {"series_ticker": "KXTTOTAL"}, "markets": [market(ticker="T-2", bid="0.50", ask="0.52")]}
+    half = FeeInfo("quadratic_with_maker_fees", Decimal("0.5"), "series")
+    c = compare(prediction, EVENT, FEE, S, NOW, companions=[(total_event, half)])
+    winner, total = c["outcomes"]
+    assert winner["fee"]["multiplier"] == 1.0 and total["fee"] == {"fee_type": "quadratic_with_maker_fees", "multiplier": 0.5, "source": "series"}
+    assert total["yes_ask"] == 0.52 and total["side"] == "yes"
+    assert total["net_edge"] == pytest.approx(0.70 - 0.52 - 0.07 * 0.5 * 0.52 * 0.48, abs=1e-5)
+    assert c["fee"]["multiplier"] == 1.0  # the top-level fee stays the winner event's
+
+
+class FakeKalshiMany:
+    def __init__(self, events, series, event_errors=()):
+        self.events, self.series, self.event_errors, self.calls = events, series, set(event_errors), []
+
+    def get_event(self, ticker):
+        self.calls.append(("event", ticker))
+        if ticker in self.event_errors:
+            raise KalshiError("down")
+        return self.events[ticker]
+
+    def get_series(self, ticker):
+        self.calls.append(("series", ticker))
+        return {"series": self.series[ticker]}
+
+
+def test_compare_run_reads_each_companion_event_and_each_series_fee_once():
+    prediction = {"evidence": "supported", "supported_claims": 7, "forecasters_valid": 3, "dropped": [], "outcomes": [
+        outcome(0.55, 0.50, 0.60), {**outcome(0.70, 0.65, 0.75, ticker="T-2"), "kind": "total"}, {**outcome(0.30, 0.25, 0.35, ticker="S-1"), "kind": "spread"}]}
+    events = {
+        "KX-1": EVENT,
+        "KXTTOTAL-1": {"event": {"series_ticker": "KXTTOTAL"}, "markets": [market(ticker="T-2", bid="0.50", ask="0.52")]},
+        "KXTSPREAD-1": {"event": {"series_ticker": "KXTTOTAL"}, "markets": [market(ticker="S-1", bid="0.20", ask="0.22")]},  # same series as the total
+    }
+    k = FakeKalshiMany(events, {"KXTEST": {"fee_type": "quadratic", "fee_multiplier": 1}, "KXTTOTAL": {"fee_type": "quadratic_with_maker_fees", "fee_multiplier": 0.5}})
+    c = asyncio.run(compare_run(k, "KX-1", prediction, S, companions=[("KXTTOTAL-1", "KXTTOTAL"), ("KXTSPREAD-1", "KXTTOTAL")]))
+    assert [o["fee"]["multiplier"] for o in c["outcomes"]] == [1.0, 0.5, 0.5]
+    assert [x for x in k.calls if x[0] == "series"] == [("series", "KXTEST"), ("series", "KXTTOTAL")]  # the shared series was read once
+
+
+def test_a_companion_event_that_cannot_be_read_leaves_its_markets_without_a_price_and_the_rest_intact():
+    prediction = {"evidence": "supported", "supported_claims": 7, "forecasters_valid": 3, "dropped": [], "outcomes": [
+        outcome(0.55, 0.50, 0.60), {**outcome(0.70, 0.65, 0.75, ticker="T-2"), "kind": "total"}]}
+    k = FakeKalshiMany({"KX-1": EVENT}, {"KXTEST": {"fee_type": "quadratic", "fee_multiplier": 1}}, event_errors=["KXTTOTAL-1"])
+    c = asyncio.run(compare_run(k, "KX-1", prediction, S, companions=[("KXTTOTAL-1", "KXTTOTAL")]))
+    assert c["outcomes"][0]["side"] == "yes" and c["outcomes"][1]["reasons"] == ["Kalshi returned no market for this outcome"]

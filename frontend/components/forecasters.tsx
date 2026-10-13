@@ -1,5 +1,5 @@
 import { pct } from "@/lib/format";
-import { FRAMING } from "@/lib/labels";
+import { FRAMING, KIND_HEADING } from "@/lib/labels";
 import type { Run } from "@/lib/types";
 
 /** The estimates side by side (three forecasters, the median, the plain AI call), then each forecaster's reasoning. */
@@ -14,14 +14,15 @@ export function ForecastersSection({ run }: { run: Run }) {
     byForecaster.set(f.forecaster_index, entry);
   }
   const forecasters = [...byForecaster.entries()].sort((a, b) => a[0] - b[0]);
-  const lines: { name: string; strong?: boolean; value: (ticker: string) => number | null }[] = [
+  const columns: { name: string; strong?: boolean; value: (ticker: string) => number | null }[] = [
     ...forecasters.map(([index, f]) => ({
-      name: `Forecaster ${index + 1}: ${FRAMING[f.variant] ?? f.variant}`,
+      name: `Forecaster ${index + 1}`,
       value: (t: string) => f.probs.get(t) ?? null,
     })),
     { name: "Our probability (the middle one)", strong: true, value: (t) => outcomes.find((o) => o.market_ticker === t)?.probability ?? null },
     ...(run.baseline ? [{ name: "Plain AI call, no research", value: (t: string) => run.baseline?.[t] ?? null }] : []),
   ];
+  const kinds = [...new Set(outcomes.map((o) => o.kind ?? "winner"))];
 
   return (
     <section className="mb-8" aria-labelledby="forecasters-heading">
@@ -35,28 +36,39 @@ export function ForecastersSection({ run }: { run: Run }) {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b">
-              <th className="px-4 py-3 font-medium">Estimate</th>
-              {outcomes.map((o) => (
-                <th key={o.market_ticker} className="px-4 py-3 font-medium">
-                  {o.outcome}
+              <th className="px-4 py-3 font-medium">Outcome</th>
+              {columns.map((c) => (
+                <th key={c.name} className={`px-4 py-3 font-medium ${c.strong ? "bg-ours-soft" : ""}`}>
+                  {c.name}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {lines.map((l) => (
-              <tr key={l.name} className={`border-b last:border-b-0 ${l.strong ? "bg-ours-soft font-semibold" : ""}`}>
-                <td className="px-4 py-2.5">{l.name}</td>
-                {outcomes.map((o) => {
-                  const v = l.value(o.market_ticker);
-                  return (
-                    <td key={o.market_ticker} className="px-4 py-2.5 tabular-nums">
-                      {v === null ? "–" : pct(v)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+            {kinds.map((kind) => [
+              kinds.length > 1 ? (
+                <tr key={`h-${kind}`} className="border-b bg-muted">
+                  <td colSpan={columns.length + 1} className="px-4 py-2 font-medium">
+                    {KIND_HEADING[kind] ?? kind}
+                  </td>
+                </tr>
+              ) : null,
+              ...outcomes
+                .filter((o) => (o.kind ?? "winner") === kind)
+                .map((o) => (
+                  <tr key={o.market_ticker} className="border-b last:border-b-0">
+                    <td className="px-4 py-2.5">{o.outcome}</td>
+                    {columns.map((c) => {
+                      const v = c.value(o.market_ticker);
+                      return (
+                        <td key={c.name} className={`px-4 py-2.5 tabular-nums ${c.strong ? "bg-ours-soft font-semibold" : ""}`}>
+                          {v === null ? "–" : pct(v)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )),
+            ])}
           </tbody>
         </table>
       </div>

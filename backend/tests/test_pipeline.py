@@ -23,7 +23,7 @@ FACTS = ["Home beat Away 2-1 last week", "Away lost 3 of the last 5 away games"]
 LINES = {"Form": [(FACTS[0], "https://form.test/a"), (FACTS[1], "https://form.test/b")]}
 
 
-def kalshi_mock(price_failures_after=None):
+def kalshi_mock(price_failures_after=None, companions=False):
     calls = {"event": 0}
 
     def handler(request):
@@ -34,14 +34,23 @@ def kalshi_mock(price_failures_after=None):
         if "/series/" in path:
             return httpx2.Response(200, json={"series": {"fee_type": "quadratic_with_maker_fees", "fee_multiplier": 1}})
         ticker = path.rsplit("/", 1)[-1]
+        if companions and ticker.startswith("KXTTOTAL"):
+            return httpx2.Response(200, json={"event": {"event_ticker": ticker, "series_ticker": "KXTTOTAL", "title": "Total goals"}, "markets": [
+                {"ticker": f"{ticker}-1", "status": "active", "yes_sub_title": "Over 1.5 goals scored", "floor_strike": 1.5, "yes_bid_dollars": "0.80", "yes_ask_dollars": "0.82", "yes_ask_size_fp": "100", "yes_bid_size_fp": "100"},
+                {"ticker": f"{ticker}-2", "status": "active", "yes_sub_title": "Over 2.5 goals scored", "floor_strike": 2.5, "yes_bid_dollars": "0.55", "yes_ask_dollars": "0.57", "yes_ask_size_fp": "100", "yes_bid_size_fp": "100"}]})
+        if companions and ticker.startswith("KXTSPREAD"):
+            return httpx2.Response(200, json={"event": {"event_ticker": ticker, "series_ticker": "KXTSPREAD", "title": "Spread"}, "markets": [
+                {"ticker": f"{ticker}-H2", "status": "active", "yes_sub_title": "Home wins by more than 1.5 goals", "floor_strike": 1.5, "yes_bid_dollars": "0.20", "yes_ask_dollars": "0.22", "yes_ask_size_fp": "100", "yes_bid_size_fp": "100"}]})
+        if companions and ticker.startswith("KXTBTTS"):
+            return httpx2.Response(404)
         calls["event"] += 1
         if price_failures_after is not None and calls["event"] > price_failures_after:
             return httpx2.Response(500)
         return httpx2.Response(200, json={
-            "event": {"event_ticker": ticker, "series_ticker": "KXT", "mutually_exclusive": True, "title": f"Game {ticker}"},
+            "event": {"event_ticker": ticker, "series_ticker": "KXTGAME", "mutually_exclusive": True, "title": f"Game {ticker}"},
             "markets": [
-                {"ticker": f"{ticker}-H", "title": "Home wins", "yes_bid_dollars": "0.40", "yes_ask_dollars": "0.42", "yes_ask_size_fp": "200", "yes_bid_size_fp": "150"},
-                {"ticker": f"{ticker}-A", "title": "Away wins", "yes_bid_dollars": "0.57", "yes_ask_dollars": "0.59", "yes_ask_size_fp": "100", "yes_bid_size_fp": "90"},
+                {"ticker": f"{ticker}-H", "title": "Home wins", "yes_sub_title": "Home", "yes_bid_dollars": "0.40", "yes_ask_dollars": "0.42", "yes_ask_size_fp": "200", "yes_bid_size_fp": "150"},
+                {"ticker": f"{ticker}-A", "title": "Away wins", "yes_sub_title": "Away", "yes_bid_dollars": "0.57", "yes_ask_dollars": "0.59", "yes_ask_size_fp": "100", "yes_bid_size_fp": "90"},
             ],
         })
 
@@ -76,7 +85,8 @@ class FakeForecaster:
         if self.fail or (self.fail_without_claims and not claims):
             raise RuntimeError("model down")
         base = {"evidence_first": 0.62, "base_rate_first": 0.58, "devils_advocate": 0.60}[framing[0]]
-        return ForecastAnswer(probabilities=[OutcomeProbability(outcome_number=1, probability=base), OutcomeProbability(outcome_number=2, probability=1 - base)],
+        values = [base, 1 - base] + [0.9 - 0.3 * i for i in range(len(game.market_tickers) - 2)]  # the other markets: 0.9, 0.6, 0.3 (consistent)
+        return ForecastAnswer(probabilities=[OutcomeProbability(outcome_number=i, probability=p) for i, p in enumerate(values, 1)],
                               reasoning=f"{framing[0]} reasoning"), Usage("gpt-5.4", 2000, 0, 1000)
 
 
@@ -168,6 +178,29 @@ def test_supported_odds_claims_are_never_given_to_the_forecasters(make_client):
     assert [c["verdict"] for c in run["claim_checks"]] == ["supported", "supported"]  # both were checked and are shown, and the odds claim IS supported
     assert run["prediction"]["supported_claims"] == 1  # but only the form claim goes forward
     assert {n for _, n in forecaster.calls if n} == {1}  # three forecasters saw one fact each (the baseline saw none)
+
+
+def test_a_game_with_total_and_spread_markets_is_forecast_compared_and_recorded_market_by_market(make_client):
+    client = signed_in(make_client, kalshi=kalshi_mock(companions=True), SPORTS_SERIES="Soccer:KXTGAME:Test league")
+    try:
+        run = run_game(client)
+    finally:
+        client.__exit__(None, None, None)
+    assert run["status"] == "done"
+    p = run["prediction"]
+    kinds = [o["kind"] for o in p["outcomes"]]
+    assert kinds == ["winner", "winner", "total", "total", "spread"]
+    assert p["markets_not_offered"] == ["both teams to score: not offered for this game"]
+    totals = [o for o in p["outcomes"] if o["kind"] == "total"]
+    assert [o["outcome"] for o in totals] == ["Over 1.5 goals scored", "Over 2.5 goals scored"] and totals[0]["probability"] > totals[1]["probability"]
+    assert sum(o["probability"] for o in p["outcomes"] if o["kind"] == "winner") == pytest.approx(1.0, abs=0.001)
+    comparison = {o["market_ticker"]: o for o in p["comparison"]["outcomes"]}
+    assert comparison["KXTTOTAL-1-1"]["yes_ask"] == 0.82 and comparison["KXTSPREAD-1-H2"]["yes_ask"] == 0.22
+    assert {o["fee"]["source"] for o in comparison.values()} == {"series"}
+    assert len(run["forecasts"]) == 3 * 5 and run["prediction"]["pipeline"]["baseline"] is True
+    with make_client.engine.connect() as conn:
+        rows = conn.execute(text("SELECT market_kind, count(*) FROM outcome_records GROUP BY market_kind ORDER BY market_kind")).all()
+    assert rows == [("spread", 1), ("total", 2), ("winner", 2)]
 
 
 def test_the_run_returns_the_baseline_and_the_latest_call_a_compact_forecast_without_text(make_client):

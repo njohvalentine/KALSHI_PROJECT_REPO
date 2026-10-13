@@ -19,6 +19,7 @@ from app.auth import require_requested_with, require_user
 from app.db import get_db
 from app.kalshi import KalshiError, KalshiNotFound
 from app.models import ClaimCheck, Forecast, OutcomeRecord, Run, SourcePage, User
+from app.research.markets import attach_companions
 from app.research.runner import execute_run
 from dataclasses import asdict
 
@@ -158,6 +159,9 @@ async def start_run(body: StartBody, request: Request, user: Annotated[User, Dep
         try:
             starts_at = await run_in_threadpool(_kickoff, state.kalshi, body.event_ticker)
             game = GameInfo.from_kalshi_event(raw, starts_at=starts_at)  # the server's copy of the game
+            series = (raw.get("event") or {}).get("series_ticker")
+            sport = next((e.sport for e in state.settings.sports_series if e.ticker == series), None)
+            game = await run_in_threadpool(attach_companions, game, raw, sport, state.kalshi)  # total, btts, spread if offered
         except ValueError as exc:
             raise HTTPException(status_code=502, detail="Kalshi returned game data we cannot use") from exc
         run_id = uuid.uuid4().hex

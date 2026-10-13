@@ -569,3 +569,14 @@ Forecaster prompts get longer (up to about 40 markets) but the number of calls d
 
 1. Is the first set right (soccer: total, both teams to score, spread; baseball: total, spread), or do you want the first-half, first-five-innings, corners, first-inning run or tennis markets in it too?
 2. The client's "no tie" is not a separate Kalshi market in what I found (the Tie market's "no" side is the same bet). Should I tell him that, or did he mean something else?
+
+
+### More market types, result (2026-10-13; first set approved by the user: soccer total goals, both teams to score and spread; baseball total runs and spread)
+
+Built as specified: `app/research/markets.py` (companion events found by ticker suffix; one that does not exist is noted, never guessed), `MarketGroup` and `GameInfo.groups`, forecaster prompt with numbered groups, `validate_full` and `enforce_consistency` (higher line never more likely; a margin cannot beat winning; both teams to score cannot beat over 1.5; fixes up to 0.03 are lowered and reported, larger ones invalidate the answer), per-market comparison with the fee of each series, `outcome_records.market_kind` (migration `190972cc2344`) and scores per kind, result page tables per kind. 408 backend tests pass.
+
+**Two real runs (public Kalshi reads, one run each):**
+- Galatasaray vs Barcelona (soccer): 14 markets (3 winner, 6 total lines, both teams to score, 4 spread), 3 of 3 forecasters valid, 20 supported claims, 0.53 USD (research 0.34, checking 0.08, forecasters 0.10, baseline 0.01).
+- Cleveland vs Tampa Bay (baseball): 19 markets (2 winner, 11 total lines, 6 spread), 0.63 USD. One of three forecasters failed ("returned no usable answer": the answer was cut off at the 4000-token output cap with 19 markets); two valid forecasts still gave a prediction. The cap default is raised to 8000 and the log now records the reason.
+
+**What the first soccer run shows (a warning, not an opportunity list):** 12 of 14 markets were marked "Worth a look", with gaps of 10 to 26 cents. The three forecasters agree almost exactly (Barcelona wins 54% in each; the plain AI call with no research says 55%) and sit far from the market (Barcelona 77 cents to buy yes). The forecasts barely moved with the research, and the market is usually the better informed side, so these gaps are far more likely the model's blind spot than an edge. The flag's tests (gap after fees, worst-case forecaster, enough supported claims, enough contracts) do not catch this, because agreeing forecasters from the same model are not independent evidence. Milestone 4 scoring is what decides; until then the flag over-promotes. Proposed next (not built): flag only when the research moved the forecast away from the plain-AI baseline, and mark a gap above a plausibility limit as "more likely a model error than an edge".
