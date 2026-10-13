@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { RUN_COST_NOTE } from "@/lib/format";
 import { isActive, type RunSummary } from "@/lib/types";
 
 type Latest = { id: string; status: RunSummary["status"] } | null;
@@ -49,7 +50,7 @@ export function AnalyzeButton({ eventTicker, latest }: { eventTicker: string; la
             View research
           </Link>
         ) : null}
-        <Button size="sm" onClick={start} disabled={pending}>
+        <Button size="sm" onClick={start} disabled={pending} title={RUN_COST_NOTE}>
           {pending ? "Starting…" : latest ? "Research again" : "Research"}
         </Button>
       </div>

@@ -9,7 +9,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { backendFetch } from "@/lib/backend";
-import { ago, bidAsk, pct } from "@/lib/format";
+import { ago, bidAsk, pct, RUN_COST_NOTE } from "@/lib/format";
 import type { GamesResponse, LatestForecast, LatestRun, RunSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -97,7 +97,7 @@ async function GamesList({ params }: { params: Params }) {
                 <TableHead className="px-4 py-3">Game</TableHead>
                 <TableHead className="hidden px-4 py-3 md:table-cell">Starts</TableHead>
                 <TableHead className="px-4 py-3">Outcomes (sell – buy price)</TableHead>
-                <TableHead className="hidden px-4 py-3 text-right md:table-cell">Research</TableHead>
+                <TableHead className="hidden px-4 py-3 text-right md:table-cell">Research (costs credit)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -199,7 +199,7 @@ export default async function GamesPage({ searchParams }: { searchParams: Promis
     <>
       <PageHeader
         title="Games"
-        description="Upcoming soccer, baseball and tennis games on Kalshi, soonest first. Press Research to look into a game and get our estimate for each outcome. An estimate is for the moment it was made; prices move."
+        description={`Upcoming soccer, baseball and tennis games on Kalshi, soonest first. Press Research to look into a game and get our estimate for each outcome. An estimate is for the moment it was made; prices move. ${RUN_COST_NOTE}`}
       />
       <form action="/games" method="get" className="mb-4 flex max-w-md gap-2">
         {params.sport ? <input type="hidden" name="sport" value={params.sport} /> : null}

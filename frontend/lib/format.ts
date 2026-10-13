@@ -62,3 +62,6 @@ export function ago(iso: string | null, now: number = Date.now()): string {
   if (hours < 48) return `${hours} h ago`;
   return `${Math.round(hours / 24)} days ago`;
 }
+
+/** What a run costs, from the real runs of 2026-10-13 (0.35 to 0.65 USD per game). Shown before the button is pressed. */
+export const RUN_COST_NOTE = "Each run spends about $0.35 to $0.65 of OpenAI credit.";
