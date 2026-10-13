@@ -53,3 +53,12 @@ A real order, Kalshi's request and response mapping, the Kalshi key, demo or pro
 
 1. Approve this design?
 2. The limits are placeholders; do you want to ask the client for his maximum per bet and per day now, or after Milestone 5 is built?
+
+
+## Result (2026-10-13; design approved by the user with placeholder limits)
+
+Built as specified: tables `orders` and `order_events` (migration `89690e74334f`; a partial unique index allows one open order per market), `app/orders.py` (prepare, checks, approve, reject, place, expire, settle, endpoints), settings `ORDER_*`, `resolve-records` also settles simulated orders, the Approval page, Prepare order on the Opportunities page and on flagged rows of a run page, the Orders section of the Results page. 461 backend tests pass; checked live against a real forecast: an order was prepared, approved and placed (3 contracts "no" on Over 9.5 runs at 76 cents, fee 0.02, the MLB fee multiplier of 0.5 applied), a second placing was refused, a second order for the same market was refused while one was open. No Kalshi trading code exists: a test fails if any source file makes an outgoing POST or names Kalshi's order endpoints, or if the Kalshi client gains a method that sounds like trading.
+
+**Differences from the design, and why:** a placed order is never partially filled in this version (a check requires enough contracts at the price and otherwise the simulation refuses it), so "fill capped at the contracts offered" does not occur; "Prepare order" is offered for flagged rows only in the pages, although the endpoint accepts any market with a price (the checks show whether it is still worth a look); the day limit counts approved orders at their maximum cost until they are placed, then at what they cost.
+
+**Placeholder limits** (`ORDER_MAX_CONTRACTS` 10, `ORDER_MAX_COST_USD` 5.00, `ORDER_MAX_DAY_COST_USD` 20.00, `ORDER_EXPIRY_MINUTES` 10, `ORDER_MAX_SLIPPAGE_CENTS` 2) stand until the client answers; the question was drafted for him.

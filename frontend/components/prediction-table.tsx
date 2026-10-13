@@ -1,5 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { PrepareOrder } from "@/components/prepare-order";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ago, cents, gapCents, pct } from "@/lib/format";
 import { KIND_HEADING, plainReason, sideText } from "@/lib/labels";
@@ -7,9 +8,16 @@ import type { ComparisonOutcome, PredictionOutcome, Run } from "@/lib/types";
 
 type Row = { outcome: PredictionOutcome; market: ComparisonOutcome | null };
 
-function FlagCell({ market }: { market: ComparisonOutcome | null }) {
+function FlagCell({ market, runId }: { market: ComparisonOutcome | null; runId: string }) {
   if (!market) return <span className="text-muted-foreground">No market price</span>;
-  if (market.meaningful) return <Badge className="bg-good-soft text-good">Worth a look</Badge>;
+  if (market.meaningful) {
+    return (
+      <div className="grid gap-2">
+        <Badge className="bg-good-soft text-good">Worth a look</Badge>
+        <PrepareOrder runId={runId} marketTicker={market.market_ticker} />
+      </div>
+    );
+  }
   const reasons = market.reasons.map(plainReason);
   return (
     <span className="text-sm text-muted-foreground">
@@ -39,7 +47,7 @@ function GapCell({ market }: { market: ComparisonOutcome | null }) {
   );
 }
 
-function GroupRows({ rows }: { rows: Row[] }) {
+function GroupRows({ rows, runId }: { rows: Row[]; runId: string }) {
   return (
     <>
       <div className="hidden overflow-x-auto rounded-xl border bg-card sm:block">
@@ -69,7 +77,7 @@ function GroupRows({ rows }: { rows: Row[] }) {
                 <GapCell market={market} />
               </TableCell>
               <TableCell className="max-w-[28ch] whitespace-normal px-4 py-3.5">
-                <FlagCell market={market} />
+                <FlagCell market={market} runId={runId} />
               </TableCell>
             </TableRow>
           ))}
@@ -105,7 +113,7 @@ function GroupRows({ rows }: { rows: Row[] }) {
             </div>
           </dl>
           <div className="mt-2">
-            <FlagCell market={market} />
+            <FlagCell market={market} runId={runId} />
           </div>
         </li>
       ))}
@@ -152,7 +160,7 @@ export function PredictionSection({ run }: { run: Run }) {
       {groups.map(([kind, groupRows]) => (
         <div key={kind} className="mb-5">
           {groups.length > 1 ? <h3 className="mb-2 text-lg font-semibold tracking-tight">{KIND_HEADING[kind] ?? kind}</h3> : null}
-          <GroupRows rows={groupRows} />
+          <GroupRows rows={groupRows} runId={run.id} />
         </div>
       ))}
 

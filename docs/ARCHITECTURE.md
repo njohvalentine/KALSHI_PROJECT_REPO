@@ -29,7 +29,8 @@ An AI research assistant for Kalshi prediction markets, focused on **soccer, bas
 | Record of every forecast with the market price at that moment, and scoring against what happened | **Built**; the first real results come as games finish |
 | Watcher: alerts recorded in the app, optional automatic research of upcoming games (off, capped) | **Built**; alerts go to a chat message once you tell us which application |
 | Accuracy report and results dashboard | Planned (Milestone 4); needs about 30 or more finished games |
-| Approving bets and placing orders | Planned, last, only on your approval |
+| Approval screen: prepare, check, approve or reject, and place in a simulation; settled when the game ends | **Built** (simulated: no order is sent to Kalshi) |
+| Real orders on Kalshi | Planned, last, only on your approval |
 
 **Important wording on the result page:** a claim marked "Supported" means the page itself says it. "Could not check" means the page could not be read, does not say it, or the claim was worked out rather than stated. Only supported claims are used. "Worth a look" is never a recommendation.
 
@@ -58,10 +59,10 @@ An AI research assistant for Kalshi prediction markets, focused on **soccer, bas
  [6] MARKET COMPARER ... compares with the price a bet could be placed at, after fees (built)
       |
       v
- [7] HUMAN APPROVAL .... a person approves or rejects a bet                           (planned)
+ [7] HUMAN APPROVAL .... a person approves or rejects a bet                           (built, simulated)
       |
       v
- [8] ORDER STEP ........ sends the bet to Kalshi, only after approval                 (planned)
+ [8] ORDER STEP ........ simulated today; a real order only after your approval and later  (planned)
 ```
 
 | Step | What it does | Why it exists |
@@ -151,11 +152,12 @@ The rule for when real betting could be considered is **deferred**; we will agre
 2. Which leagues and tours do you trade?
 3. Which chat application do you want alerts in? We suggest Telegram.
 4. What should "help" cover: finding and researching bets, or also suggesting how much to bet?
-5. Will you create a new Kalshi key (limited permissions if Kalshi offers them) before any real trading?
+5. What is the most you want to risk on one bet, and in one day? (The approval screen enforces these limits; for now it uses placeholders.)
+6. Will you create a new Kalshi key (limited permissions if Kalshi offers them) before any real trading?
 
 ## 9. What happens next
 
 1. The first real scores as games finish; keep researching games so the record grows.
 2. Milestone 4: a short accuracy report once there are enough finished games.
 3. Chat alerts, once you tell us the application.
-4. Only then: the approval screen and any real orders.
+4. Your betting limits (the most per bet and per day), then, only if the results justify it, real orders.

@@ -20,7 +20,7 @@ Last updated: 2026-10-13.
 | 3 | Full prediction | Page checking, three forecasts, one probability per outcome, comparison with Kalshi's price | None | **Built** (tested on real games; forecast quality not yet known) |
 | 3+ | Extras you asked for | More markets (total goals or runs, both teams to score, margin), Opportunities page, alerts and optional automatic research | None | **Built**; chat alerts wait for your choice of application |
 | 4 | Evaluation | Scores against the market price and a plain AI call | None | Planned; needs about 30 or more finished games |
-| 5 | Approval screen | Where a person approves or rejects each bet (orders simulated) | None | Planned |
+| 5 | Approval screen | Where a person approves or rejects each bet (orders simulated) | None | **Built** (limits are placeholders until you agree yours) |
 | 6 | Live paper trading | Weeks of real predictions, scored as games finish | None | Started (every forecast is recorded) |
 | 7 | Go / no-go, then real bets | Decision based on results; optional limited launch | Only if you approve | Planned |
 
@@ -67,10 +67,12 @@ The web pages: Games, Opportunities, Prediction (runs and results), Approval and
 - Checks on citation quality and on safety (no order without approval).
 - **Done when:** a short report is delivered and you decide whether to continue. This may show the system is a good research assistant but cannot beat the market; that is a valid result.
 
-## Milestone 5: Approval screen
-- The approval page: the exact order (market, side, price, quantity), checks before sending, an expiry time, approve or reject. Orders are still simulated.
-- A prepared order is a separate step after approval, rechecks the price, and cannot be sent twice.
-- Betting limits are agreed here, before any real order exists.
+## Milestone 5: Approval screen (built, simulated)
+- A person prepares an order from an opportunity: the market, whether to buy "yes" or "no", the price at that moment, the number of contracts and the most it can cost. It expires after 10 minutes.
+- The Approval page shows the exact order in words and the checks before approving: not expired, game not started, forecast recent, within the betting limits, price has not moved against us, enough contracts offered, still worth a look. A failed check blocks approving.
+- A person presses Approve or Reject. An approved order is placed in a **simulation** by a separate press, which rechecks the price and the limits and records what a bet at that moment would have been; pressing twice, or two people at once, cannot place it twice. When the game ends the order is settled and the Results page shows what it would have paid.
+- Every change of an order is kept in a history (who, when, why). **No order is ever sent to Kalshi:** there is no trading code at all.
+- **Betting limits (to be agreed with you):** the most you want to risk on one bet and in one day. They are settings; the values in use now are placeholders (10 contracts, 5 dollars per order, 20 dollars per day).
 
 ## Milestone 6: Live paper trading
 - The system runs on live markets and records predictions. **No bets are placed.** This has started: every run records its forecast.

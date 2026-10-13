@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AnalyzeButton } from "@/components/analyze-button";
 import { LocalTime } from "@/components/local-time";
+import { PrepareOrder } from "@/components/prepare-order";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +65,11 @@ function Row({ o }: { o: Opportunity }) {
               <dd className="tabular-nums">{o.supported_claims}</dd>
             </div>
           </dl>
+          {o.flagged && !o.stale ? (
+            <div className="mt-2">
+              <PrepareOrder runId={o.run_id} marketTicker={b.market_ticker} />
+            </div>
+          ) : null}
           {o.flagged && o.flagged_markets > 1 ? (
             <p className="mt-2 text-sm text-muted-foreground">
               {o.flagged_markets - 1} more market{o.flagged_markets - 1 === 1 ? "" : "s"} of this game {o.flagged_markets - 1 === 1 ? "is" : "are"} also worth a look.{" "}

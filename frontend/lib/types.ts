@@ -197,3 +197,37 @@ export type AlertsResponse = {
     auto_research_started_today: number;
   };
 };
+
+export type OrderCheck = { name: string; ok: boolean; blocking: boolean; detail: string };
+export type OrderState = "proposed" | "approved" | "rejected" | "expired" | "placed" | "simulated_rejected" | "settled";
+export type SimOrder = {
+  id: number;
+  run_id: string;
+  event_ticker: string;
+  market_ticker: string;
+  outcome: string;
+  title: string;
+  game_start: string | null;
+  side: "yes" | "no";
+  price: number;
+  contracts: number;
+  max_cost: number;
+  fee_estimate: number;
+  our_probability: number;
+  gap: number;
+  forecast_at: string | null;
+  state: OrderState;
+  created_at: string;
+  expires_at: string;
+  approved_at: string | null;
+  reason: string | null;
+  placed_at: string | null;
+  fill_contracts: number | null;
+  fill_price: number | null;
+  fill_fee: number | null;
+  settled_at: string | null;
+  won: boolean | null;
+  paper_result: number | null;
+  checks?: OrderCheck[];
+};
+export type OrdersResponse = { orders: SimOrder[]; totals: { settled: number; won: number; paper_result: number } };

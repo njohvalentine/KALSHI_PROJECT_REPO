@@ -2,7 +2,7 @@
 
 How to run, check and look after the system. Written for the person who runs it day to day. For what the system does and why, read `docs/ARCHITECTURE.md`; for the decisions behind it, `docs/discussion/NOTEPAD.md`.
 
-Nothing in this system places an order on Kalshi. A person approves every bet, and the approval screen does not exist yet. Kalshi is only read.
+Nothing in this system places an order on Kalshi. Kalshi is only read. The approval screen exists, but its orders are **simulated**: there is no trading code at all.
 
 ---
 
@@ -81,6 +81,12 @@ docker compose exec backend uv run --no-sync python -m app.cli score-records --s
 
 `resolve-records` looks at games that started more than `RESOLVE_AFTER_HOURS` (3) ago and can be run as often as you like. `score-records` prints Brier scores (lower is better) of our probability, the plain-AI call and Kalshi's price on the same outcomes, per kind of market, and what buying the chosen side at the ask would have paid. Below about 30 games it says there is too little to conclude anything; do not read more into it than that.
 
+## 8b. Simulated orders and the approval screen
+
+From an Opportunities row (or a flagged row of a run page) a person presses **Prepare order** with a number of contracts. The order waits on the **Approval** page with its checks (not expired, game not started, forecast recent, within the limits, price has not moved against us, enough contracts offered, still worth a look). A person presses Approve or Reject; an approved order is placed in the simulation by a separate press, which records a simulated fill at the price of that moment. An order not approved and placed within `ORDER_EXPIRY_MINUTES` (10) expires. The history of every change is kept (`order_events`). When the game has ended, `resolve-records` also settles the simulated orders, and the Results page shows what they would have paid.
+
+The limits are settings in `.env.example` (`ORDER_MAX_CONTRACTS`, `ORDER_MAX_COST_USD`, `ORDER_MAX_DAY_COST_USD`, `ORDER_EXPIRY_MINUTES`, `ORDER_MAX_SLIPPAGE_CENTS`). **They are placeholders until the client has agreed his own.** Nothing here sends anything to Kalshi.
+
 ## 9. Backups
 
 The database holds everything (runs, sources, forecasts, records, alerts, accounts). A backup:
@@ -120,5 +126,5 @@ Use the values from your `.env` for USER, PASSWORD and the host port (`DB_HOST_P
 Not done yet, in this order of importance:
 1. Kalshi's Developer Agreement has not been read, and it must be before any real order.
 2. The Kalshi key that was shared in a chat must be replaced by a new one, and the old one revoked. Real keys are never kept in the code or in chat.
-3. Betting limits and the rule for going live are not agreed. The approval screen and the order step do not exist.
+3. Betting limits and the rule for going live are not agreed (the approval screen exists, with placeholder limits, but only simulates orders; the real order step does not exist and is Milestone 7).
 4. Handover: remove the development key file and the key lines from the development `.env`; do not hand over `.env`; the client creates their own keys, a new `SESSION_SECRET` and a new database password; set `SESSION_COOKIE_SECURE=true` and serve over HTTPS; replace the demo account.

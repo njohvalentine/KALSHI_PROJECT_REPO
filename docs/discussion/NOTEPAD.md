@@ -14,7 +14,8 @@ Last updated: 2026-10-13.
 - **What is NOT known yet:** whether the forecasts are any good. The first real results arrive after the games of 2026-10-13 are over; about 30 games are needed before the scores mean anything. The flag "Worth a look" has placeholder thresholds and the first soccer run showed it can over-promote (fixed with a research-shift rule and a plausibility limit, D33); the forecasts moved little from the plain-AI call on the games seen.
 - **Kalshi facts that bit us (D25, D29, D33):** `occurrence_datetime` is settlement time, real kickoff is in `GET /milestones`; `last_price_dollars` is often 0; combination markets need `mve_filter=exclude`; companion markets (total, both teams to score, spread) are separate events with the game's ticker suffix; the fee type and multiplier are on the series.
 - **The user's setup rules:** never write `.env` (they own secrets); Kalshi reachable from here only with their VPN on; demo account `demo@example.com` exists locally; the Kalshi key is a production key shared over WhatsApp (client must rotate; handover checklist in D24); Kalshi's Developer Agreement is unread.
-- **Waiting on the client (D34):** which chat application for alerts (he said "chat message"), his US state, leagues and tours, whether "help" includes bet sizing, a new Kalshi key.
+- **Milestone 5 built (2026-10-13):** approval screen with SIMULATED orders (prepare, checks, approve or reject, separate place step, settlement); no trading code exists; limits are placeholders (spec `docs/specs/FEAT-20261013-1416-milestone-5-approval.md`).
+- **Waiting on the client (D34):** which chat application for alerts (he said "chat message"), his maximum per bet and per day, his US state, leagues and tours, whether "help" includes bet sizing, a new Kalshi key.
 - **Open items (`TODO.md`):** Telegram sender (blocked on the client), bookmaker consensus benchmark (needs a reliable odds source), monitoring phase 2 (re-forecast on news; wait for scores). Next milestones: 4 (accuracy report), 5 (approval screen), 6 (live paper trading), 7 (go or no go).
 
 ---
@@ -500,12 +501,13 @@ Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules ap
 2. Which leagues and tours exactly? (The Games page shows 15 series by default, D26.) Market types: he named win, loss, draw, tie and no tie, total goals, over 1.5 goals and both teams to score, so those are built (D33).
 3. What should "help" cover: finding and researching bets, or also sizing? (Not answered.)
 4. Which chat application for alerts? (He answered "chat message", D34.)
-5. Will they create a new Kalshi key (limited permissions if offered) and revoke the one shared over WhatsApp? (D24 checklist.)
+5. The most he wants to risk on one bet and in one day (the approval screen uses placeholder limits).
+6. Will they create a new Kalshi key (limited permissions if offered) and revoke the one shared over WhatsApp? (D24 checklist.)
 Answered: soccer, baseball and tennis (D21); LangSmith cloud tracing OK; Docker Compose; OpenAI credit added; the Kalshi key is production and valid (D24); his priority is finding genuine opportunities, not only research; alerts by chat message.
 
 ## 7. Next steps
 - **Soon:** read the first real scores after the games of 2026-10-13 (`resolve-records`, then `score-records`); keep researching games to build the record (the watcher's automatic research is off until the user sets a cap).
 - **When the client answers:** the alert channel (Telegram sender item), leagues and tours, bet-sizing scope.
-- **Milestones:** 4 accuracy report (needs the scores); 5 approval screen (design for approval first, D18); 6 live paper trading; 7 go or no go.
+- **Milestones:** 4 accuracy report (needs the scores); 5 approval screen is built (simulated); 6 live paper trading (started); 7 go or no go (the real order step, after the Developer Agreement is read).
 - **Small, anytime:** automated web app tests (needs a new test dependency, ask first); the bookmaker consensus benchmark once an odds source exists.
 - **Before any real order:** read Kalshi's Developer Agreement, rotate the shared key, agree betting limits and the go-live rule; handover checklist in D24; test that the host reaches Kalshi without a VPN.

@@ -113,10 +113,13 @@ def checks_for(order: Order, fresh: dict, s: Settings, db: DbSession, now: datet
     """The checks shown on the Approval page. A failed check with blocking true stops approving and placing."""
     game, market = fresh["game"], fresh["market"]
     age_h = None if game["finished_at"] is None else (now - game["finished_at"]).total_seconds() / 3600
-    out = [{"name": "not_expired", "ok": now < order_expiry(order), "blocking": True,
-            "detail": f"expires {order.expires_at.isoformat()}"}]
-    out.append({"name": "game_not_started", "ok": game["start"] is None or game["start"] > now, "blocking": True,
-                "detail": "the game has not started" if game["start"] is None or game["start"] > now else "the game has started"})
+    minutes_left = (order.expires_at - now).total_seconds() / 60
+    out = [{"name": "not_expired", "ok": minutes_left > 0, "blocking": True,
+            "detail": f"{minutes_left:.0f} minutes left" if minutes_left > 0 else "the time limit has passed"}]
+    started = game["start"] is not None and game["start"] <= now
+    out.append({"name": "game_not_started", "ok": not started, "blocking": True,
+                "detail": "the game has started" if started else ("start time unknown" if game["start"] is None
+                                                                 else f"it starts in {(game['start'] - now).total_seconds() / 3600:.1f} hours")})
     out.append({"name": "forecast_fresh", "ok": age_h is not None and age_h <= s.opportunity_max_age_hours, "blocking": True,
                 "detail": "forecast age unknown" if age_h is None else f"the forecast is {age_h:.1f} hours old (limit {s.opportunity_max_age_hours:g})"})
     max_cost = order.max_cost
@@ -139,12 +142,8 @@ def checks_for(order: Order, fresh: dict, s: Settings, db: DbSession, now: datet
     out.append({"name": "enough_contracts", "ok": size is not None and _dec(size) >= order.contracts, "blocking": True,
                 "detail": f"{'unknown' if size is None else f'{float(size):g}'} contracts offered at that price, {order.contracts} wanted"})
     out.append({"name": "still_worth_a_look", "ok": bool(market["meaningful"]), "blocking": False,
-                "detail": "still worth a look at today's prices" if market["meaningful"] else "no longer worth a look at today's prices"})
+                "detail": "the flag still holds" if market["meaningful"] else "the flag no longer holds"})
     return out
-
-
-def order_expiry(order: Order) -> datetime:
-    return order.expires_at
 
 
 # ---- the steps ---------------------------------------------------------------------------------------------

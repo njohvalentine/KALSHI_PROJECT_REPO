@@ -80,3 +80,23 @@ export const KIND_HEADING: Record<string, string> = {
   btts: "Both teams to score",
   spread: "Margin of victory",
 };
+
+export const ORDER_STATE: Record<string, string> = {
+  proposed: "Waiting for approval",
+  approved: "Approved, not placed yet",
+  rejected: "Rejected",
+  expired: "Expired",
+  placed: "Placed in the simulation",
+  simulated_rejected: "The simulation refused it",
+  settled: "Game ended",
+};
+
+export const CHECK_NAME: Record<string, string> = {
+  not_expired: "Still within its time limit",
+  game_not_started: "The game has not started",
+  forecast_fresh: "The forecast is recent enough",
+  within_limits: "Within the betting limits",
+  price_ok: "The price has not moved against us",
+  enough_contracts: "Enough contracts are offered at that price",
+  still_worth_a_look: "Still worth a look at today’s prices",
+};
