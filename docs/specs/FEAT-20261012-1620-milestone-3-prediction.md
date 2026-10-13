@@ -406,3 +406,10 @@ A full run from start to `done` with a fake research model, fake fetch transport
 ### Not in this task
 
 Result pages (1629), more market types (0907), the opportunities screen (0908), monitoring (0909). Cached or repeated research of the same game is not added.
+
+
+### Task 10 result (2026-10-13)
+
+Built as specified: `app/research/pipeline.py` (stages, failure rules), `execute_run` restructured (`summarize` now sums every stage and stores a cost per stage; the run stays `running` until the last stage), `create_app` builds the real judge and forecaster next to the research model, `GET /api/runs/{id}` returns `stage`, `pages` (no page text), `claim_checks`, `forecasts`, `prediction`, `costs`, and the list returns `stage` and `flagged_outcomes`. 377 backend tests pass, including 12 whole-run tests with fakes for every outside service.
+
+**Not yet done:** a run with the real OpenAI and Kalshi services. Until then the time (estimated one and a half to three minutes) and the total cost (estimated about 50 cents) are unmeasured. The running Docker stack is still the old build; rebuild with `docker compose up -d --build` to use this (a migration runs at start).

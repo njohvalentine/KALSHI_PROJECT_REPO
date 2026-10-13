@@ -14,6 +14,8 @@ from app.config import Settings, load_settings
 from app.kalshi import KalshiClient
 from app.markets import router as markets_router
 from app.research.graph import build_graph
+from app.research.check import OpenAIClaimJudge
+from app.research.forecast import OpenAIForecastModel
 from app.research.model import OpenAIResearchModel
 from app.research.runner import mark_stale_runs_failed
 from app.runs import router as runs_router
@@ -22,7 +24,7 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("app")
 
 
-def create_app(settings: Settings | None = None, research_model=None) -> FastAPI:
+def create_app(settings: Settings | None = None, research_model=None, judge=None, forecaster=None, fetch_options=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Fails here, before serving anything, if required settings are bad.
@@ -40,6 +42,12 @@ def create_app(settings: Settings | None = None, research_model=None) -> FastAPI
         app.state.research_graph = (
             build_graph(model, app.state.settings, app.state.checkpointer) if model else None
         )
+        # The checker and the forecasters need the same key as research; tests pass fakes (or none, which
+        # leaves the stages after research off, and the run says so).
+        key = app.state.settings.research_enabled
+        app.state.judge = judge or (OpenAIClaimJudge(app.state.settings) if key else None)
+        app.state.forecaster = forecaster or (OpenAIForecastModel(app.state.settings) if key else None)
+        app.state.fetch_options = fetch_options or {}
         app.state.active_runs = 0
         app.state.tasks = set()
         await asyncio.to_thread(mark_stale_runs_failed, app.state.engine)

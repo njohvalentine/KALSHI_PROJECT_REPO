@@ -230,33 +230,32 @@ LangGraph writes the graph state to Postgres after each step, under the run id (
 
 ---
 
-## 5. Milestone 3: the full prediction (Planned, not approved, not built; to be planned per game: one probability for each outcome of the game)
+## 5. Milestone 3: the full prediction (Built on 2026-10-13, not yet run end to end with the real services)
 
-Proposal from `NOTEPAD.md` D23. It extends the same graph; the Built steps above stay as they are.
+After the research graph (section 2) returns, the runner (`app/research/runner.py`) calls the stages in `app/research/pipeline.py` **one after another in plain code**. They are not more graph nodes: each stage saves its own result in the database, a restarted run is marked failed and not resumed, and the stages do not fan out, so graph checkpoints would add moving parts and no recovery we use. In LangSmith the research graph is one trace and every later OpenAI call (checker, forecasters, baseline) is its own trace. Spec: `docs/specs/FEAT-20261012-1620-milestone-3-prediction.md`.
 
 ```
- plan ─► research ×N (parallel) ─► fetch_pages (parallel) ─► check_claims (parallel)
-                                                                   │
-                                                                   ▼
-                              compare ◄─ aggregate ◄─ forecast ×3 (parallel)
-                                 │
-                                 ▼
-                                END ──► (later) approval ──► place order
+ research graph ─► fetch ─► check ─► forecast ─► compare ─► records ─► done
+ (plan, N researchers)                (3 forecasters + plain-AI baseline, at once)
 ```
 
-| Step | Kind | Parallel or sequential | Use case | How it will be used |
-|---|---|---|---|---|
-| `fetch_pages` | plain code (HTTP), no model | **parallel** per distinct cited URL, with a cap; waits for all | get the page text so claims can be checked, and save a real page snapshot for backtests | results feed `check_claims` and are saved to `source_pages` |
-| `check_claims` | LLM judge, `gpt-5.4-mini` | **parallel** per claim, with a cap | label each claim *supported*, *not supported* or *could not check* by reading the fetched page | only *supported* claims go on; the others stay visible but unused; too few supported claims marks the run "thin evidence" |
-| `forecast` | LLM agents, `gpt-5.4`, no search | **three in parallel**, independent | each gives its own probability with short reasoning from the supported claims | three estimates (spread = disagreement) |
-| `aggregate` | plain code | **sequential** | combine the estimates into one probability | median, with min to max recorded |
-| `compare` | plain code | **sequential** | compare our probability with the price one could actually trade at, show the gap and the estimated edge after fees | flags a "meaningful gap" only if it exceeds a threshold, the forecasters agree, and the evidence is not thin |
+| Stage (`runs.stage`) | Kind | What it does | Saved in |
+|---|---|---|---|
+| `research` | LLM agents with web search | as section 2 | `runs.result`, `source_pages` (link, title, claims) |
+| `fetch` | plain code (HTTP) | reads each cited page: public addresses only, checked redirects, size and time limits; every outcome recorded | `source_pages.fetch_*`, `page_text` |
+| `check` | LLM judge `gpt-5.4-mini`, one call per page | labels each cited claim supported, not supported or could not check; a verdict stands only with a quote found on the page and the claim's numbers in the quotes | `claim_checks` |
+| `forecast` | 3 LLM forecasters `gpt-5.4` + 1 baseline, no search | each sees the game, numbered outcomes and the supported claims only (never a price) and gives a probability per outcome; the baseline sees no facts | `forecasts` |
+| median | plain code | median per outcome, spread, min, max; scaled to 100% where exactly one outcome happens | `runs.prediction` |
+| `compare` | plain code + Kalshi read | fresh bid and ask, fee from the series, net edge both sides, "meaningful gap" flag with named reasons | `runs.prediction.comparison` |
+| records | plain code | one frozen record per outcome for later scoring (`resolve-records`, `score-records`) | `outcome_records` |
+
+Failure rules: research failing fails the run; a later stage failing leaves the run `done` with `prediction.unavailable` naming the stage and the reason; fetching or checking switched off, or no judge or forecaster configured, stops after research and says so; no supported claims continues with evidence `none`; fewer than two valid forecasts gives no prediction and no records.
 
 Design points behind it:
-- Forecasters are **not** shown the market price (a benchmark found showing the price can make a model just echo it); the comparison happens afterwards.
-- Page fetching must block private and local addresses (the URLs come from a model), limit size, time and redirects, and some pages will not be readable (paywalls, bot blocks, script-only pages).
-- Judge models have known biases, so labels are validated against a small hand-labelled sample.
-- Costs and thresholds here are placeholders to be tuned from real runs and from Milestone 4.
+- Forecasters are **not** shown the market price (showing it can make a model echo it); the comparison happens afterwards. Facts reach them in a marked block, one bounded line each, because a sentence on a web page that tells the reader what to answer is also "on the page".
+- Page fetching blocks private and local addresses (the URLs come from a model), limits size, time and redirects; about one page in five could not be read in the first sample (bot blocks); Jina Reader was measured and not adopted (notes D30).
+- The claim checker is measured against a hand-labelled sample (notes D31): no wrongly supported claim in any run, about 7 of 9 true claims kept.
+- Thresholds (`EDGE_MIN`, `MIN_SUPPORTED_CLAIMS`, `MIN_ASK_SIZE`) are placeholders until Milestone 4 has scored real forecasts.
 
 ---
 

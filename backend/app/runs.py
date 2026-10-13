@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.auth import require_requested_with, require_user
 from app.db import get_db
 from app.kalshi import KalshiError, KalshiNotFound
-from app.models import Run, User
+from app.models import ClaimCheck, Forecast, Run, SourcePage, User
 from app.research.runner import execute_run
 from dataclasses import asdict
 
@@ -29,7 +29,12 @@ log = logging.getLogger("app.runs")
 router = APIRouter(prefix="/api/runs", tags=["runs"], dependencies=[Depends(require_user)])
 
 
-def run_to_dict(run: Run, full: bool = True) -> dict:
+def _flagged(run: Run) -> int | None:
+    outcomes = ((run.prediction or {}).get("comparison") or {}).get("outcomes")
+    return None if outcomes is None else sum(1 for o in outcomes if o.get("meaningful"))
+
+
+def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None) -> dict:
     def iso(value: datetime | None):
         return value.isoformat() if value else None
 
@@ -50,10 +55,33 @@ def run_to_dict(run: Run, full: bool = True) -> dict:
         "cost_note": run.cost_note,
         "over_budget": run.over_budget,
         "sourced_claims": sum(1 for f in findings for c in f["claims"] if c["kind"] == "sourced"),
+        "stage": run.stage,
+        "flagged_outcomes": _flagged(run),
     }
     if full:
         summary["plan"] = run.plan
         summary["result"] = run.result
+        summary["prediction"] = run.prediction
+        summary["costs"] = (run.result or {}).get("costs")
+        if db is not None:
+            # Page text stays in the database: it is a copy of third-party pages and large.
+            summary["pages"] = [
+                {"url": p.url, "title": p.title, "fetch_status": p.fetch_status, "fetch_detail": p.fetch_detail,
+                 "fetch_method": p.fetch_method, "http_status": p.http_status, "fetched_at": iso(p.fetched_at)}
+                for p in db.scalars(select(SourcePage).where(SourcePage.run_id == run.id).order_by(SourcePage.id))
+            ]
+            summary["claim_checks"] = [
+                {"finding_index": c.finding_index, "claim_index": c.claim_index, "source_url": c.source_url,
+                 "verdict": c.verdict, "reason": c.reason}
+                for c in db.scalars(select(ClaimCheck).where(ClaimCheck.run_id == run.id).order_by(
+                    ClaimCheck.finding_index, ClaimCheck.claim_index, ClaimCheck.source_url))
+            ]
+            summary["forecasts"] = [
+                {"forecaster_index": f.forecaster_index, "variant": f.variant, "market_ticker": f.market_ticker,
+                 "probability": float(f.probability), "reasoning": f.reasoning, "model": f.model}
+                for f in db.scalars(select(Forecast).where(Forecast.run_id == run.id).order_by(
+                    Forecast.forecaster_index, Forecast.market_ticker))
+            ]
     return summary
 
 
@@ -96,7 +124,8 @@ async def _run_and_release(request_app, run_id: str, game: GameInfo) -> None:
     try:
         await execute_run(
             engine=state.engine, graph=state.research_graph, settings=state.settings,
-            run_id=run_id, game=asdict(game),
+            run_id=run_id, game=asdict(game), judge=state.judge, forecaster=state.forecaster, kalshi=state.kalshi,
+            fetch_options=state.fetch_options,
         )
     finally:
         state.active_runs -= 1
@@ -157,7 +186,7 @@ def get_run(run_id: str, db: Annotated[DbSession, Depends(get_db)]):
     run = db.get(Run, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return run_to_dict(run)
+    return run_to_dict(run, db=db)
 
 
 @router.get("")
