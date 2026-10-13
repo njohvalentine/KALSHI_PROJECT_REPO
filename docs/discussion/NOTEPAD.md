@@ -472,6 +472,12 @@ Built only from facts verified in LangGraph docs (D4, D11): `interrupt()` pauses
 - **The result to remember:** in Galatasaray vs Barcelona 12 of 14 markets were flagged "Worth a look", yet the forecasters agreed to the percent and matched the plain-AI call that saw no facts; the gaps to the market (10 to 26 cents) are most likely the model's blind spot. The flag does not protect against that. Proposed, not built: flag only when the research moved the forecast away from the plain-AI baseline, and label very large gaps as more likely an error than an edge.
 - **Run cost with 14 to 19 markets:** 0.53 and 0.63 USD, one forecaster failed on the output cap (raised to 8000 tokens).
 
+### D34. The client's answer about alerts (2026-10-13, WhatsApp, 10:50)
+
+- **Said:** after our update (which asked how he wants to receive alerts: email, a chat message, or inside the application) he answered **"Chat message"**. He did not say which chat application, and he did not comment on the rest of the update or answer the other open questions (US state, leagues and tours, whether "help" includes bet sizing, a new Kalshi key).
+- **Checked (2026-10-13):** WhatsApp Business Platform needs a business account and approved message templates; free-form messages are free only inside the 24-hour window after the person writes to the business, and an alert to someone who has not just written goes out as a template message billed per message (Meta pricing documents; exact amounts differ by source and country, to be read from the current rate card). Telegram: a bot made with @BotFather messages users at no cost by default, up to about one message per second to one chat (Telegram bot FAQ; the page does not say whether the person must start the bot first, which is the usual rule and must be tested).
+- **Recommendation for FEAT-20261013-0909:** Telegram bot (free, simple, runs from our backend with a token kept in settings, never in the code). WhatsApp is possible but needs a business account, template approval and a per-message fee. To be confirmed with the client: which chat application he uses.
+
 ## 4. Environment
 Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules apply: project-local installs only, ask before adding any dependency, spec and approval before code.
 
