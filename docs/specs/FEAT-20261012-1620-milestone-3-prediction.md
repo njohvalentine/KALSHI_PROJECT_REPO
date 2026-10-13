@@ -427,3 +427,42 @@ Built as specified: `app/research/pipeline.py` (stages, failure rules), `execute
 **Not built here (logged as a separate deferred item):** using the odds as a benchmark (bookmaker prices with the margin removed) in the accuracy test.
 
 **Tests:** planner prompt asks for the kind; findings carry it; `supported_claims` excludes `market_odds` and an angle named with "odds"; a whole run in which the odds claims are supported gives the forecasters only the other claims (and the supported count excludes them); the forecaster instructions carry the rule.
+
+## Task 11 detail: the result pages (FEAT-20261012-1629), for approval
+
+Branch `feature/sports-games-list`. Web app only (Next.js 16, shadcn components already in the project; the project has no automated web tests, so the checks are `npm run lint`, `npm run build` and headless-browser screenshots of real runs, as before). The run API already returns everything needed (task 10), except the small addition to the "latest run" call described under the Games list.
+
+### 1. The result page (`/prediction/[runId]`, `components/run-view.tsx`), top to bottom
+
+1. **Progress while it works:** one line per stage (Research, Read pages, Check claims, Forecast, Compare with the market) with the current one marked and finished ones ticked, from `stage`. The page still updates itself every 3 seconds. A failed or "unavailable" later stage shows a plain sentence at the top ("The forecast could not be made: <reason>") and the research below stays visible.
+2. **The prediction table** (one row per outcome), with a one-sentence explanation above it: "Our probability is the middle of three independent forecasts that never saw Kalshi's price." Columns: **Outcome**; **Our probability** (median); **Range** (lowest to highest forecaster, the "spread"); **Market** (the price you would pay now for that outcome, in cents, with the side we compared: buying "yes" or buying "no"); **Gap** (net edge in cents per contract after fees, for the better side); **Flag**. A flagged row says "Worth a look" and nothing stronger; an unflagged row says in small text why not, in plain words from the named reasons ("only 2 supported claims", "the least favourable forecaster sees no gap", "no supported evidence", "too few contracts at that price"). Under the table: when the fee was assumed, say so; the time the prices were read; and "A flag is not a recommendation: its thresholds are placeholders until we have scored real forecasts." In a two-outcome game the two outcomes describe almost the same bet; a short note says so.
+3. **Evidence** (what the forecasters were given): "x of y cited lines were supported by their page". Claims grouped by angle as now, each with a **check label** (Supported by the page / The page says something different / Could not check) and its reason, and the source links. The odds angle has its own heading, "Market prices found (not given to the forecasters)".
+4. **Forecasters:** three collapsed cards (native `<details>`): the way each one worked in plain words ("Looked at each fact first", "Started from how often such sides win", "Argued against its first view"), its probability per outcome, and its reasoning text. The plain-AI baseline (the same question with no facts) is shown as a fourth line in the same table of estimates, so the effect of the research is visible. (The baseline's numbers are read from `outcome_records`; the run API returns them, see below.)
+5. **Pages we tried to read:** a compact list: readable, or "could not read (blocked by the site, HTTP 403)", "needs JavaScript", "not a web page we can read".
+6. **Side panel** as now, plus cost per stage and the stage the run reached.
+
+The old closing note ("Cited does not mean checked ... no probability yet") is replaced by one that says what the labels mean.
+
+### 2. The Games list
+
+Each outcome row shows, next to the buy and sell prices, **our estimate** from the latest finished run for that game ("57% · forecast 2 h ago"), and a small "Worth a look" badge when that run flagged the outcome. A game with no forecast shows nothing extra. The header text is updated. Prices on the list are live (up to a minute old) while the estimate is from the time of the forecast, so the row shows the age, and the page says so. **Backend change:** `GET /api/runs/latest` also returns, for a finished run with a prediction, a compact `forecast` (per outcome: ticker, probability, flagged, and the time the prices were read); no page text, no reasoning.
+
+### 3. The run list (`/prediction`)
+
+A **Stage** column text for running runs, a **Flagged** column (count of "worth a look" outcomes, a dash when no forecast), and a corrected description ("Research and forecast runs").
+
+### Backend additions
+
+`GET /api/runs/{id}` also returns `baseline` (probability per outcome from the plain-AI call, from `outcome_records`), and `GET /api/runs/latest` returns the compact `forecast` above. Tests: both fields present, absent when there is no prediction, no page text anywhere.
+
+### Plain-English labels (so the page never shows internal words)
+
+Framings: `evidence_first` "Looked at each fact first", `base_rate_first` "Started from how often such sides win", `devils_advocate` "Argued against its first view". Checks: `supported` "Supported by the page", `not_supported` "The page says something different", `could_not_check` "Could not check". Fetch statuses: `ok` "Read", `blocked` "Not allowed to fetch", `empty_js` "Needs JavaScript or has almost no text", `unsupported` "Not a web page we can read", `too_large` "Too large", `failed` "Could not read (reason)", `not_fetched` "Not fetched".
+
+### Accessibility and phone layout
+
+Meaning is never colour alone (labels in words); tables scroll sideways on a phone; the prediction table collapses to stacked rows under 640 px; the existing 1120 px content width is kept.
+
+### Not in this task
+
+Approval buttons, charts, the opportunities screen (FEAT-20261013-0908), monitoring (0909), automated web tests (still a small open item; they would need a new test dependency, which would be asked first).
