@@ -310,3 +310,47 @@ Built as specified: `app/research/predict.py` (median, spread, scaling, no-predi
 **Live read-only check (2026-10-13, public calls):** on a real MLB event the comparer read the series fee (`quadratic_with_maker_fees`, multiplier 0.5), the real bid, ask and sizes, and computed both sides. The probabilities used were invented for the check, so its output says nothing about opportunities.
 
 **Observation for the opportunities screen (FEAT-20261013-0908):** in a two-outcome game, "buy YES on A" and "buy NO on B" are almost the same bet, so both outcomes of one game are flagged together (same edge in the check above). The screen must show one opportunity per game, not two.
+
+## Early record of every forecast (FEAT-20261013-0906), for approval
+
+Branch `feature/sports-games-list`. This answers the client's main question (can the system consistently find genuine opportunities?) from the first working forecast on, with no hindsight in the data: only **live** forecasts are recorded, each with the market price at that moment, and the real result is added when the game ends.
+
+### What is recorded: one row per run and outcome, in a new table `outcome_records`
+
+- **Identity and time:** `run_id`, `event_ticker`, `market_ticker`, `outcome` (title), `game_start` (from the game's milestone), `created_at`, and `before_start` (true when the record was made before the game started; the scoring uses only these, so in-play prices and results cannot leak in). Unique on (`run_id`, `market_ticker`).
+- **Our forecast:** `probability` (the median), `min`, `max`, `forecasters_valid`, `evidence`, `supported_claims`.
+- **The plain-AI baseline:** `baseline_probability`, from **one extra forecaster call with no claims and no research** (the same prompt and model, an empty fact list, the first framing). This is the "plain single AI call" of the Milestone 4 comparison; it costs about a cent per game. Setting `RECORD_BASELINE` (default true) switches it off; if the call fails the field is empty and the failure is logged, never replaced by a guess.
+- **The market at that moment:** `yes_bid`, `yes_ask`, `no_ask`, `yes_ask_size`, `yes_bid_size`, `priced_at`, `fee_type`, `fee_multiplier`, `fee_source` (what the comparer read).
+- **What our rule said then:** `side` (`yes` or `no` or none), `net_edge`, `worst_case_edge`, `meaningful`, `reasons`.
+- **The result (filled in later, the only fields that ever change):** `resolved_at`, `resolved_yes` (true or false), `settlement_value`.
+
+`runs.prediction` stays the display payload for the result page. The records table is the frozen, easy-to-query copy for scoring. A record is **never edited** except for the three result fields (code has a single update path, tested).
+
+### Getting the result (verified live on 2026-10-13, public read calls)
+
+A finished market has `status` `finalized`, `result` `yes` or `no`, `settlement_value_dollars` `1.0000` or `0.0000` and `settlement_ts`; an open one has `status` `active` and `result` empty. `GET /markets?tickers=A,B,...` returns many markets at once. Example seen today: Atalanta vs Venezia, Atalanta market `yes`, Tie market `no`. A market that was voided or settled at another value (for example a postponed game) is recorded as it is (`settlement_value` between 0 and 1) and **left out of the scores**, with a count shown.
+
+### Two commands (added to `app/cli.py`, run like `check-kalshi-key`)
+
+1. `resolve-records`: finds records without a result whose game started more than 3 hours ago (a setting, `RESOLVE_AFTER_HOURS`), asks Kalshi for those markets in batches, and fills in the result for the finalized ones. Safe to run again and again; prints how many were resolved and how many are still open.
+2. `score-records` (optional `--since DATE`): over resolved records made before the game started, prints
+   - the number of games and outcomes;
+   - the **Brier score** (mean squared error, lower is better) of: our probability, the plain-AI baseline, and Kalshi's price (the middle of the YES bid and ask at the time; records with no two-sided quote are left out of that line and counted), all on the **same** records;
+   - for records flagged as a meaningful gap, and for all records: the number, how often the chosen side won, and the **paper result per contract** (what buying the chosen side at the ask would have paid: win 1 dollar, minus the price, minus the fee), average and total;
+   - a clear line when there are fewer than about 30 games: "too few to conclude anything". No verdict is printed; the numbers are shown, with the number of games next to each.
+   Nothing here sizes a bet or places an order.
+
+### Where records come from
+
+`save_records` is called at the end of a run by the wiring task (FEAT-20261012-1628), after the comparison. Until then, tests and a small helper create them. Records only exist for games that were researched, so the sample is the games the client or the later scanner chose to run; a record is made for every outcome of the game, flagged or not, so the scores are not limited to the flattering ones.
+
+### Honest limits
+
+- Few games at first: a run costs real money and takes time, so the early numbers are small. The sample builds as runs accumulate (the later opportunities screen and monitoring items will produce many more).
+- Brier scores of 25 games say very little; the command says so.
+- The Kalshi price used is the mid of bid and ask when the forecast was made; a person trading would pay the ask and the fee, which is why the paper result uses the ask.
+- The baseline uses the same model as the forecasters, so it tests "does research and checking help", not "does AI beat the market".
+
+### Settings, tests, migration
+
+Settings: `RECORD_BASELINE` (true), `RESOLVE_AFTER_HOURS` (3). One Alembic migration (autogenerated, reviewed). Tests: a record per outcome with the market snapshot and the rule's verdict; unique per run and outcome; `before_start` true and false; baseline stored, switched off, and failed; the only update is the result fields (a record cannot be rewritten); resolve with `yes`, `no`, still open, voided, and a Kalshi failure; running resolve twice changes nothing; the batch call uses `tickers`; scoring on a hand-worked set (Brier of each line, paper result, hit rate) with fake records; records made after the start, unresolved and voided ones excluded and counted; fewer than 30 games prints the warning; records with no two-sided quote are excluded from the market line only.
