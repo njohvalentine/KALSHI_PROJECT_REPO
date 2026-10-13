@@ -507,3 +507,14 @@ Task 1 is kept (single facts are easier to check and easier to read); it is not 
 ### Evidence recall, task 2 result (2026-10-13)
 
 Text extraction now keeps each real HTML table row on one line, cells separated by " | " (header row too; nested blocks inside a cell become spaces; empty cells do not pile up bars). Tests cover rows, nested cells, empty cells and unchanged text outside tables. **Limit found on the real page:** tennis-db.com does not use table rows for its match list (only the header is a table); each match is a grid of `div` elements, which extraction still prints one cell per line, so the two tennis-db cases of the labelled sample are **not** helped. A general rule for div grids would be guessing at page layout, so none is added; pages built from real tables (many results and statistics pages) benefit.
+
+
+### Evidence recall, task 3 result (2026-10-13)
+
+Built: a number of the claim now counts if it is in the judge's quotes or within 200 characters of the quote's place on the page (`quote_context`); tests cover the window, the far-away number and the quoted number.
+
+**Measured with the real judge:**
+- **Labelled sample, two runs:** 0 wrongly supported in both (the requirement). True claims kept: 4 and 5 of 9. The three earlier runs of the same checker kept 5, 8 and 7; the sample is small and the judge varies from run to run by two or three cases, so these runs do not show a change in either direction.
+- **Replay of 55 real claim and page pairs** from the four real runs (pages as saved, judged again): supported rose from **12 to 15**, not supported 6 to 5, could not check 37 to 35. Three claims gained support through the new rule (a date in a heading just above the quote); one went the other way because the judge answered differently this time (a player named by surname only). Nothing the old rule had marked as not supported became supported by the new one.
+
+**Where recall stands after the three tasks:** on the replayed real claims 15 of 55 (27%) are supported, against 12 of 55 (22%) before; on the labelled short claims about 4 to 8 of 9. The main losses are outside these three tasks: pages the plain fetch reads as menus only, the date the researcher looked at being put into claims, a year missing on the page, and two PDFs. The first two of those are logged as separate items awaiting the user's approval (ISS items in TODO.md); the menu-only pages and PDFs need a different way of reading pages.
