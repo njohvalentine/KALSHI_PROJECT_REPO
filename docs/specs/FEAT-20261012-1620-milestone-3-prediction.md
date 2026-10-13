@@ -637,3 +637,42 @@ Built as specified: `app/opportunities.py` (`GET /api/opportunities`, `?all=true
 **First look (five real games, prices of the moment):** 1 of 5 flagged (Cleveland vs Tampa Bay: "Buy no on Over 9.5 runs at 76 cents", gap 7 cents, with 2 more markets of the game also worth a look); the others were not flagged because the research did not move the forecast toward the gap (4 games), the gap was above the plausibility limit (2) or small (2). The first uncached read took about 8 seconds for five games; a few Kalshi reads per game, no model call.
 
 **Decision recorded:** the "cheap first screen" is not built; moved to FEAT-20261013-0909.
+
+## Monitoring and alerts (FEAT-20261013-0909), for approval
+
+Branch `feature/sports-games-list`. The client asked for the system to watch prices, news, injuries and lineups, update forecasts automatically, and alert him on big changes; he answered that alerts should be a **chat message** (which app is not yet known; Telegram recommended, notes D34). This section proposes what to build first and what to leave until the scoring says it is worth it.
+
+### An important point about price alerts
+
+When the market price moves away from our forecast, the likelier reason is that the market learned something we do not know (a lineup, an injury), not that we found an opportunity. A forecast that is hours old and a price that moved against it is a reason to **research again**, not a reason to bet. So alerts say that, and the response to a large move is a new run, not a "gap opened" message.
+
+### Phase 1 (proposed now)
+
+1. **Alerts from three events, no model calls except the runs themselves:**
+   - **A run finishes with markets worth a look:** "Worth a look: Atletico vs Manchester United. Buy “no” on Over 9.5 runs at 76¢, gap +7¢ after fees. 7 supported claims. Forecast made just now."
+   - **A flagged opportunity disappears or the market moves a lot** (default 8 cents or more since the forecast, a setting): "The market moved 9¢ since our forecast 4 hours ago. The forecast may be out of date. Research again?" with the link.
+   - **A flagged game starts soon** (default 60 minutes): a one-line reminder that the forecast is hours old, so lineups may have changed.
+   Every alert says the forecast's age, the supported claims and that it is not a recommendation. Nothing places an order.
+2. **A watcher** in the backend (an asyncio task started with the app, off by default) wakes every `MONITOR_INTERVAL_MINUTES` (default 10), reads fresh prices for the researched games that have not started (the same read as the Opportunities page, cached), and decides which alerts are due. State is kept in the database so a restart does not repeat alerts.
+3. **An alerts history** (new table `alerts`: time, kind, game, market, text, whether it was sent, the error kind if not), shown on the Opportunities page ("Recent alerts"), so alerts are visible in the app even without a chat channel.
+4. **Rate limit and dedupe:** one alert per game and kind per `ALERT_COOLDOWN_MINUTES` (default 60), and at most `ALERT_MAX_PER_HOUR` (default 6) in total; the history records the ones held back.
+5. **Telegram sender** (no new package; `httpx2` to Telegram's Bot API): settings `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (secrets: only in `.env`, never in the code, never logged; I will tell you which lines to add to `.env.example` and never write `.env` myself). Alerts are switched on with `ALERTS_ENABLED`; if it is true and the Telegram settings are missing the app **refuses to start** (no silent fallback); with `ALERTS_ENABLED=false` alerts still go to the history only, and that is said at startup. A helper command `telegram-chat-id` prints your chat id after you press Start on the bot, so setup is: create the bot with @BotFather, press Start, run the command, add two lines. Telegram's FAQ does not say whether a person must start a bot before it can message them; the usual rule is that they must, and the setup test will show it.
+6. **Plain batch research (the cheap first screen we dropped, as a plain rule):** `AUTO_RESEARCH_MAX_PER_DAY` (default **0, off**). When above 0, each cycle the watcher starts a normal run for upcoming games of the configured leagues whose start is within `AUTO_RESEARCH_HOURS_AHEAD` (default 24), that have no run in the last `AUTO_RESEARCH_MIN_GAP_HOURS` (default 12), soonest start first, until the daily cap or `MAX_CONCURRENT_RUNS`. Each run costs real money (about 0.35 to 0.65 USD in the real runs), so it is **opt-in with an explicit cap**, and the daily count is stored and shown. Its purpose is to build the evaluation dataset on a rule we can state.
+7. **Scoring with several forecasts of one game:** `score-records` headline numbers use the **latest forecast made before the start** for each market (the most informed), and also print the first one, so the value of updating can be seen.
+
+### Phase 2 (not now; I recommend waiting for scored results)
+
+News, injury and lineup detection and automatic re-forecast: a re-run triggered by a large price move (the best cheap signal of news), by the lineup window (about an hour before a soccer kickoff), or by a changed injury report. It costs a full run each time, and we do not yet know whether updating improves the forecast; the scoring in item 7 will show that.
+
+### Settings (defaults)
+
+`ALERTS_ENABLED` false, `MONITOR_ENABLED` false, `MONITOR_INTERVAL_MINUTES` 10, `ALERT_MOVE_CENTS` 8, `ALERT_START_SOON_MINUTES` 60, `ALERT_COOLDOWN_MINUTES` 60, `ALERT_MAX_PER_HOUR` 6, `AUTO_RESEARCH_MAX_PER_DAY` 0, `AUTO_RESEARCH_HOURS_AHEAD` 24, `AUTO_RESEARCH_MIN_GAP_HOURS` 12, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (secrets).
+
+### Tests (fakes only)
+
+Each alert kind fires once and is not repeated across a restart; cooldown and hourly limit hold alerts back and record it; the text carries age, supported claims and the not-a-recommendation line and no token; the Telegram sender builds the right request and a failure is recorded by error kind only; startup refuses `ALERTS_ENABLED=true` without the two settings; the watcher does nothing when off; auto-research respects the daily cap, the hours-ahead window, the minimum gap between runs and `MAX_CONCURRENT_RUNS`, and counts only runs it started; `score-records` uses the latest forecast before the start.
+
+### Decisions for you
+
+1. Phase 1 as above (alerts from run results, large moves and start-soon; history in the app; Telegram sender; capped opt-in batch research; latest-before-start scoring), Phase 2 later?
+2. Build the Telegram sender now even though the client has not confirmed Telegram? (It sits behind one small function, so another channel can replace it.)
