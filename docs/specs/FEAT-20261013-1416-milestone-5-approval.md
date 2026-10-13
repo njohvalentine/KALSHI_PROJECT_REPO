@@ -1,4 +1,4 @@
-# Spec: Milestone 5, approval screen with simulated orders (FEAT-20261013-20261013-1416)
+# Spec: Milestone 5, approval screen with simulated orders (FEAT-20261013-1416)
 
 Branch `feature/sports-games-list`. For approval; nothing here is built yet. **No order is ever sent to Kalshi in this milestone.** There is no trading code and no Kalshi key involved: everything is simulated, and the code for a real order is Milestone 7, after Kalshi's Developer Agreement has been read.
 
