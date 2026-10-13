@@ -93,6 +93,10 @@ class Settings:
     check_page_chars: int
     checker_max_output_tokens: int
     check_concurrency: int
+    forecaster_model: str
+    forecaster_reasoning_effort: str
+    forecaster_max_output_tokens: int
+    forecaster_count: int
 
     @property
     def research_enabled(self) -> bool:
@@ -219,6 +223,19 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     )
     check_concurrency = _parse_positive_int("CHECK_CONCURRENCY", env.get("CHECK_CONCURRENCY", "5"), problems)
 
+    forecaster_model = env.get("FORECASTER_MODEL", "gpt-5.4").strip()
+    if not forecaster_model:
+        problems.append("FORECASTER_MODEL must not be empty")
+    forecaster_effort = env.get("FORECASTER_REASONING_EFFORT", "medium").strip()
+    if forecaster_effort not in EFFORTS:
+        problems.append(f"FORECASTER_REASONING_EFFORT must be one of {', '.join(EFFORTS)}, got {forecaster_effort!r}")
+    forecaster_max_output = _parse_positive_int(
+        "FORECASTER_MAX_OUTPUT_TOKENS", env.get("FORECASTER_MAX_OUTPUT_TOKENS", "4000"), problems
+    )
+    forecaster_count = _parse_positive_int("FORECASTER_COUNT", env.get("FORECASTER_COUNT", "3"), problems)
+    if forecaster_count < 2:
+        problems.append("FORECASTER_COUNT must be at least 2 (a median of one forecast is not a median)")
+
     if problems:
         raise SettingsError("Invalid settings:\n- " + "\n- ".join(problems))
 
@@ -270,4 +287,8 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         check_page_chars=check_page_chars,
         checker_max_output_tokens=checker_max_output,
         check_concurrency=check_concurrency,
+        forecaster_model=forecaster_model,
+        forecaster_reasoning_effort=forecaster_effort,
+        forecaster_max_output_tokens=forecaster_max_output,
+        forecaster_count=forecaster_count,
     )

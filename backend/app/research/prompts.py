@@ -117,3 +117,57 @@ def checker_input(game_title: str, page_url: str, page_title: str | None, text: 
         f"Claims:\n{numbered}\n\n"
         f"<page_text>\n{safe}\n</page_text>"
     )
+
+
+FORECASTER_INSTRUCTIONS = """\
+You are one of several independent forecasters on a forecasting desk. You are given one game or match \
+and a list of facts that were found on the web and checked against their pages. Estimate the probability \
+of each listed outcome. Today is {today} (UTC).
+
+Rules:
+- The checked facts are the only evidence about this game. You may use general knowledge of the sport and \
+of how teams or players of this kind perform, but say so when you do.
+- Do not use any knowledge of how this specific game ended or of its result.
+- If the evidence is thin or missing, say so and stay closer to the usual base rate.
+- Give one probability between 0 and 1 for every outcome, using the outcome numbers given, and exactly one \
+per outcome. Never give exactly 0 or exactly 1.
+{exclusive_rule}- `reasoning`: at most 120 words: the evidence you weighed most, and what you are unsure about.
+
+How to work:
+{framing}
+"""
+
+EXCLUSIVE_RULE = "- At most one outcome can happen, so the probabilities must add up to 100%.\n"
+
+FRAMINGS = (
+    ("evidence_first", "Weigh each checked fact on its own, then settle on probabilities that reflect all of them together."),
+    ("base_rate_first", "Start from how often a side like this wins in this sport (home or away, favourite or underdog), "
+     "then adjust only as far as the checked facts justify."),
+    ("devils_advocate", "Form a first view. Then argue the strongest case for the outcome you rate least likely, "
+     "and adjust your probabilities if that case is stronger than you expected. Give the final probabilities."),
+)
+
+
+def forecaster_input(game, claims: list[dict], today: str) -> str:
+    """The game, its numbered outcomes and the checked facts. No prices: forecasters must not see the market."""
+    lines = [f"Game: {game.title}"]
+    if game.sub_title:
+        lines.append(f"Detail: {game.sub_title}")
+    if game.starts_at:
+        lines.append(f"Scheduled start: {game.starts_at}")
+    lines.append("Outcomes (give one probability for each, by number):")
+    lines += [f"{i}. {name}" for i, name in enumerate(game.outcomes, 1)]
+    if game.rules:
+        lines.append(f"Rules: {game.rules}")
+    lines.append(f"Today: {today}")
+    if claims:
+        lines.append("\nChecked facts:")
+        by_angle: dict[str, list[str]] = {}
+        for c in claims:
+            by_angle.setdefault(c.get("angle") or "General", []).append(c["text"])
+        for angle, texts in by_angle.items():
+            lines.append(f"{angle}:")
+            lines += [f"- {t}" for t in texts]
+    else:
+        lines.append("\nChecked facts: none. No fact could be checked against its source.")
+    return "\n".join(lines)

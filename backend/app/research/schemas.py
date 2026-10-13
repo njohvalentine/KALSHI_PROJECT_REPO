@@ -14,6 +14,8 @@ class GameInfo:
     sub_title: str | None = None
     starts_at: str | None = None
     outcomes: list[str] = field(default_factory=list)  # e.g. ["Newcastle wins", "Tie is the result", ...]
+    outcome_tickers: list[str] = field(default_factory=list)  # the Kalshi market of each outcome, same order
+    exclusive: bool = False  # Kalshi says at most one outcome happens (mutually_exclusive)
     rules: str | None = None
     # Prices are deliberately not part of what the agents are shown (avoids anchoring on the market).
 
@@ -34,6 +36,8 @@ class GameInfo:
             sub_title=event.get("sub_title") or None,
             starts_at=starts_at,
             outcomes=[m.get("title") or m.get("yes_sub_title") or m["ticker"] for m in markets],
+            outcome_tickers=[m["ticker"] for m in markets],
+            exclusive=bool(event.get("mutually_exclusive")),
             rules=next((m["rules_primary"] for m in markets if m.get("rules_primary")), None),
         )
 

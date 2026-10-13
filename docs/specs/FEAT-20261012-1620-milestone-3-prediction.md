@@ -253,3 +253,11 @@ The three differ only in the instruction; the output shape is the same. Differen
 **Tests (fake model, no network):** the prompt holds no price, no link and only supported claims; each framing gets its own instruction; the answer checks above (missing outcome, unknown outcome, sum out of range, scaling to 1, probability 0 or 1); fewer than two valid forecasts gives no prediction with a reason; one failed call does not stop the others; no supported claims gives `evidence: none`; usage is returned; rows are saved per outcome and forecaster; the request to the real model class has the right model, effort, output cap and no tools.
 
 **Not in this task:** the median and spread (task 6), the comparison with the market (task 7), market types other than the winner (FEAT-20261013-0907).
+
+### Task 5 result (2026-10-13)
+
+Built as specified: `app/research/forecast.py`, framings and prompt in `app/research/prompts.py`, `GameInfo` now carries `outcome_tickers` and `exclusive` (Kalshi's `mutually_exclusive`), four new settings. 298 backend tests pass.
+
+**Live check with the real model (one game, three forecasters, `gpt-5.4`, medium effort):** the request was accepted, 1,649 input and 1,209 output tokens, **2.2 cents for the three forecasters**, all three answers valid. Atalanta vs Venezia with four real supported claims gave Atalanta 0.69, 0.67 and 0.68, draw 0.19 to 0.20, Venezia 0.12 to 0.13. **The three framings barely differ** on this one game, so the spread will be small; whether three framings add anything over one call is for Milestone 4 to measure (no conclusion from one game).
+
+**Still to verify before the sum-to-100% rule is trusted on real data (Kalshi was not reachable from the build machine today, no VPN):** that Kalshi's `mutually_exclusive` is true for the game-winner events of every configured series, and that those outcomes are exhaustive (soccer: three outcomes; baseball and tennis: two). Until it is checked, the rule follows Kalshi's flag only; a game whose outcomes are exclusive but not exhaustive would have its probabilities scaled up wrongly. The check is one read-only call per series type.
