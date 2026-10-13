@@ -105,6 +105,18 @@ def test_unusable_answers_are_refused_with_a_reason(bad, why):
         validate(GAME, bad)
 
 
+@pytest.mark.parametrize("outcomes,exclusive,expected", [
+    (["Newcastle wins", "Tie is the result", "Arsenal wins"], True, True),   # soccer winner
+    (["Dodgers", "Brewers"], True, True),                                     # baseball and tennis
+    (["Team A", "Team B", "Team C"], True, False),                            # exclusive but not known to be exhaustive
+    (["A", "B", "C", "D"], True, False),                                      # a futures-style market
+    (["Newcastle wins", "Tie is the result", "Arsenal wins"], False, False),  # Kalshi does not say exclusive
+])
+def test_probabilities_must_add_up_only_for_exclusive_and_exhaustive_outcomes(outcomes, exclusive, expected):
+    game = GameInfo(event_ticker="E", title="T", outcomes=outcomes, outcome_tickers=[f"M{i}" for i in range(len(outcomes))], exclusive=exclusive)
+    assert game.sums_to_one is expected
+
+
 def test_probabilities_are_not_scaled_when_outcomes_are_not_exclusive():
     game = GameInfo(event_ticker="KX-2", title="Totals", outcomes=["Over 1.5", "Over 2.5"], outcome_tickers=["T15", "T25"], exclusive=False)
     assert validate(game, answer(0.8, 0.5)) == {"T15": 0.8, "T25": 0.5}  # do not add up to 1 and must not be forced to

@@ -19,6 +19,15 @@ class GameInfo:
     rules: str | None = None
     # Prices are deliberately not part of what the agents are shown (avoids anchoring on the market).
 
+    @property
+    def sums_to_one(self) -> bool:
+        """True when the outcome probabilities must add up to 100%: exactly one outcome happens. Kalshi's flag
+        only says at most one does, so we also need the outcomes to cover every result. Checked live on
+        2026-10-13 for all 15 configured series: soccer winner events have three outcomes (home, away, Tie),
+        baseball and tennis two. Anything else (for example a futures market) is not scaled."""
+        n = len(self.outcomes)
+        return self.exclusive and (n == 2 or (n == 3 and any(w in o.lower() for o in self.outcomes for w in ("tie", "draw"))))
+
     @classmethod
     def from_kalshi_event(cls, data: dict, starts_at: str | None = None) -> "GameInfo":
         """Builds from Kalshi's GET /events/{ticker} response: {"event": {...}, "markets": [...]}.

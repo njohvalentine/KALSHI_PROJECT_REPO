@@ -4,8 +4,8 @@ A forecaster sees the game, its outcomes and the checked (supported) claims only
 price from the market, so the estimates can later be compared with the market honestly.
 
 The answer is checked in code, not trusted: every outcome exactly once, no probability of exactly 0
-or 1, and, where Kalshi says at most one outcome can happen, the probabilities must add up to
-about 100% (and are then scaled to exactly 100%). A forecast that fails is dropped, logged and
+or 1, and, where exactly one outcome happens (GameInfo.sums_to_one), the probabilities must add up
+to about 100% (and are then scaled to exactly 100%). A forecast that fails is dropped, logged and
 counted. With fewer than two valid forecasts there is no prediction, and the result says why."""
 
 import asyncio
@@ -57,7 +57,7 @@ class OpenAIForecastModel:
             response = await self._client.responses.parse(
                 model=self._s.forecaster_model,
                 instructions=FORECASTER_INSTRUCTIONS.format(
-                    today=today, framing=framing[1], exclusive_rule=EXCLUSIVE_RULE if game.exclusive else ""
+                    today=today, framing=framing[1], exclusive_rule=EXCLUSIVE_RULE if game.sums_to_one else ""
                 ),
                 input=forecaster_input(game, claims, today),
                 text_format=ForecastAnswer,
@@ -82,7 +82,7 @@ def validate(game: GameInfo, answer: ForecastAnswer) -> dict[str, float]:
     bad = [num for num, p in probs.items() if not 0 < p < 1]
     if bad:
         raise InvalidForecast(f"probability must be above 0 and below 1 (outcome numbers {bad})")
-    if game.exclusive:
+    if game.sums_to_one:
         total = sum(probs.values())
         if abs(total - 1) > SUM_TOLERANCE:
             raise InvalidForecast(f"the outcomes are exclusive but the probabilities add up to {total:.3f}")
