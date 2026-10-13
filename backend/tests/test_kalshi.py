@@ -187,3 +187,15 @@ def test_events_calls_use_the_documented_paths_and_parameters():
     assert seen[2][1] == {}  # nothing is sent that was not asked for
     assert seen[3] == (f"{base}/events/KXEPLGAME-26OCT12COVNEW", {})
     assert "%2F" in raw[0] and "/portfolio" not in raw[0]  # an event ticker cannot climb out of its path segment
+
+
+def test_get_series_uses_the_series_path_and_returns_json_unchanged():
+    seen = {}
+
+    def handler(request):
+        seen["path"] = request.url.path
+        return httpx2.Response(200, json={"series": {"ticker": "KXEPLGAME", "fee_type": "quadratic", "fee_multiplier": 1}})
+
+    client, _ = make(handler)
+    assert client.get_series("KXEPLGAME")["series"]["fee_multiplier"] == 1
+    assert seen["path"].endswith("/series/KXEPLGAME")

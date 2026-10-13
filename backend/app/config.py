@@ -97,6 +97,9 @@ class Settings:
     forecaster_reasoning_effort: str
     forecaster_max_output_tokens: int
     forecaster_count: int
+    edge_min: float
+    min_supported_claims: int
+    min_ask_size: float
 
     @property
     def research_enabled(self) -> bool:
@@ -236,6 +239,12 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     if forecaster_count < 2:
         problems.append("FORECASTER_COUNT must be at least 2 (a median of one forecast is not a median)")
 
+    edge_min = _parse_positive_float("EDGE_MIN", env.get("EDGE_MIN", "0.05"), problems)
+    if edge_min >= 1:
+        problems.append("EDGE_MIN is a probability gap in dollars per contract and must be below 1")
+    min_supported_claims = _parse_positive_int("MIN_SUPPORTED_CLAIMS", env.get("MIN_SUPPORTED_CLAIMS", "5"), problems)
+    min_ask_size = _parse_positive_float("MIN_ASK_SIZE", env.get("MIN_ASK_SIZE", "10"), problems)
+
     if problems:
         raise SettingsError("Invalid settings:\n- " + "\n- ".join(problems))
 
@@ -291,4 +300,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         forecaster_reasoning_effort=forecaster_effort,
         forecaster_max_output_tokens=forecaster_max_output,
         forecaster_count=forecaster_count,
+        edge_min=edge_min,
+        min_supported_claims=min_supported_claims,
+        min_ask_size=min_ask_size,
     )

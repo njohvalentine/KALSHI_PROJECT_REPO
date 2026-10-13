@@ -302,3 +302,11 @@ Any failed condition is listed by name next to the flag ("worst-case forecaster 
 **Tests (no network):** median of three and of two; unscaled and scaled medians; spread, min and max; no-prediction record carries the reason; NO ask equals 1 minus the YES bid; empty-book sides give no executable price; fee for sample prices (P 0.50 gives 1.75 cents at multiplier 1 and 0.875 at 0.5; P 0.10 and 0.90 give 0.63 cents); YES and NO edges and choice of side; each flag condition failing on its own with its named reason, and all passing; assumed-fee fallback is marked and logged; the comparer never receives forecaster text and the forecasters' prompt never receives prices (already tested for the prompt).
 
 **Limits to state to the client:** the fee formula is from secondary sources until Kalshi's schedule can be read; the thresholds are placeholders; edge per contract ignores that large orders move the price (only the best level is used).
+
+### Tasks 6 and 7 result (2026-10-13)
+
+Built as specified: `app/research/predict.py` (median, spread, scaling, no-prediction record), `app/research/compare.py` (executable prices, fee, both sides, worst-case forecaster, named reasons), `KalshiClient.get_series`, three settings (`EDGE_MIN`, `MIN_SUPPORTED_CLAIMS`, `MIN_ASK_SIZE`, placeholders). 346 backend tests pass.
+
+**Live read-only check (2026-10-13, public calls):** on a real MLB event the comparer read the series fee (`quadratic_with_maker_fees`, multiplier 0.5), the real bid, ask and sizes, and computed both sides. The probabilities used were invented for the check, so its output says nothing about opportunities.
+
+**Observation for the opportunities screen (FEAT-20261013-0908):** in a two-outcome game, "buy YES on A" and "buy NO on B" are almost the same bet, so both outcomes of one game are flagged together (same edge in the check above). The screen must show one opportunity per game, not two.

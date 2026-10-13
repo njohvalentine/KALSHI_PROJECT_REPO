@@ -112,6 +112,10 @@ class KalshiClient:
         path = f"/series/{quote(series_ticker, safe='')}/markets/{quote(ticker, safe='')}/candlesticks"
         return self._get(path, dict(start_ts=start_ts, end_ts=end_ts, period_interval=period_interval))
 
+    def get_series(self, series_ticker: str) -> dict[str, Any]:
+        """Returns {"series": {...}}; the series carries the fee type and fee multiplier of its markets."""
+        return self._get(f"/series/{quote(series_ticker, safe='')}")
+
     # Events: one game or match with all its outcome markets.
     def list_events(
         self,
