@@ -518,3 +518,19 @@ Built: a number of the claim now counts if it is in the judge's quotes or within
 - **Replay of 55 real claim and page pairs** from the four real runs (pages as saved, judged again): supported rose from **12 to 15**, not supported 6 to 5, could not check 37 to 35. Three claims gained support through the new rule (a date in a heading just above the quote); one went the other way because the judge answered differently this time (a player named by surname only). Nothing the old rule had marked as not supported became supported by the new one.
 
 **Where recall stands after the three tasks:** on the replayed real claims 15 of 55 (27%) are supported, against 12 of 55 (22%) before; on the labelled short claims about 4 to 8 of 9. The main losses are outside these three tasks: pages the plain fetch reads as menus only, the date the researcher looked at being put into claims, a year missing on the page, and two PDFs. The first two of those are logged as separate items awaiting the user's approval (ISS items in TODO.md); the menu-only pages and PDFs need a different way of reading pages.
+
+
+### Evidence recall: the two small fixes and the combined result (2026-10-13)
+
+**Fixes (both approved):** the researchers are told to put in a line only dates the page itself shows (never the day they looked, never "today"); the judge is told that a page date without a year ("Tuesday 13 October") matches a claim date with the same day and month in the current year when a weekday shown fits.
+
+**Combined real result (all five changes: one fact per line, rows on one line, numbers near the quote, no looking date, year rule), the same two games, one run each, supported claims of the claims cited outside the odds angle:**
+
+| Game | Start of the day (old build) | After one fact per line | After all changes |
+|---|---|---|---|
+| Atletico vs Manchester United | 1 of 14 (7%) | 0 of 15 | **7 of 26 (27%)** |
+| Inter vs Club Brugge | 5 of 14 (36%) | 6 of 18 | **10 of 21 (48%)** |
+
+Claims are now short (average 104 and 89 characters against 232 and 205), more numerous, and the "looked today" phrases fell from 13 of 21 claims to 2 of 35 in the Manchester United game and stayed at 0 in the other. Cost per run stayed about 0.40 USD. Replay of the 55 saved claims with the year rule: supported 15 before and after, one new support (a page date without a year) offset by judge variation; the labelled sample again had 0 wrongly supported (4 to 5 of 9 kept, within the usual variation).
+
+**Limits:** one run per game, and research varies from run to run, so these are signals, not proof; the 1 of 14 start could itself have been unlucky. Unchanged losses: pages that are menus to the plain fetch, PDFs, blocked bookmaker pages. Not changed: forecasters are still given only supported claims; with 7 and 10 supported claims the evidence is no longer "thin" by the placeholder rule of 5.

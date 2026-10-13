@@ -318,3 +318,11 @@ def test_the_real_judge_turns_api_errors_into_the_research_error():
     judge = OpenAIClaimJudge(SETTINGS, client=SimpleNamespace(responses=Responses()))
     with pytest.raises(ResearchModelError, match="rate limited"):
         asyncio.run(judge.judge("A vs B", "https://a.test", None, TEXT_A, False, ["c1"]))
+
+
+def test_the_judge_is_told_how_to_treat_a_page_date_without_a_year():
+    from app.research.prompts import CHECKER_INSTRUCTIONS
+
+    text = CHECKER_INSTRUCTIONS.format(today="2026-10-13")
+    assert 'A date on the page without a year (for example "Tuesday 13 October") matches a claim date' in text
+    assert "a weekday shown on the page fits" in text

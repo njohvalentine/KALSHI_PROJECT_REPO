@@ -152,5 +152,6 @@ def test_researchers_are_asked_for_one_fact_per_line_with_its_date_and_for_artic
     from app.research.prompts import RESEARCHER_INSTRUCTIONS
 
     text = RESEARCHER_INSTRUCTIONS.format(today="2026-10-13")
-    assert "ONE fact per line" in text and "Put the date of the match, the update or the page in the line itself." in text
+    assert "ONE fact per line" in text and "Put in the line only dates that the page itself shows" in text
+    assert "Never put the day you looked at the page" in text
     assert "whose text is in the article itself" in text and "at most 10 findings" in text

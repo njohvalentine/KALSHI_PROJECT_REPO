@@ -42,7 +42,8 @@ Rules:
 - ONE fact per line: one match result, one player's status, one price, one statement. Never join several \
 facts in one line (no lists of several matches or players in one line): write one line for each. Each line \
 is checked against the page it cites, and a line is only accepted if the page states everything in it.
-- Put the date of the match, the update or the page in the line itself.
+- Put in the line only dates that the page itself shows: the date of the match, or the date the page was \
+published or updated. Never put the day you looked at the page, and never write "today".
 - Prefer official club, league and news pages whose text is in the article itself over database, \
 widget, form-guide or fixture-list pages whose content is built by scripts. Do not cite a page of which \
 you saw only menus.
@@ -97,6 +98,9 @@ Rules:
 the page states that very number or fact.
 - Claims about odds, prices, lineups, injuries or form change over time: they are supported only if the \
 page shows a date or time that matches the claim; otherwise could_not_check.
+- A date on the page without a year (for example "Tuesday 13 October") matches a claim date with the same \
+day and month in the current year (today's date is given above), as long as a weekday shown on the page fits \
+that date.
 - If the page is mostly menus, links, cookie notices, or a message saying you are blocked or must verify \
 you are human, every claim is could_not_check.
 - If the text was cut off, a fact you cannot find may be in the cut part: could_not_check, never not_supported.
