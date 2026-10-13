@@ -2,18 +2,20 @@
 
 Read this first. It explains what we are building, every route we chose and why, what we rejected, and what is still open.
 It is a discussion log, not tracking. Approved work items go in `TODO.md` (CLAUDE.md Module 7). No spec or code exists yet.
-Last updated: 2026-10-09.
+Last updated: 2026-10-13.
 
 ---
 
-## Current status (read this first; end of session on 2026-10-12)
+## Current status (read this first; updated 2026-10-13)
 
-- **Code:** `master` holds Milestones 1 and 2. **Branch `feature/sports-games-list` (last commit `3743cbf`, not merged, no remote) is where the live work is** and is what the running Docker stack was built from. 169 backend tests pass; the web app has no automated tests (lint, build and browser checks only).
-- **What works, checked live (VPN on, real OpenAI key, public Kalshi calls only):** sign-in; Games page (15 configured series, about 334 games, one row per game, kickoff time from Kalshi milestones, buy and sell prices, sport filter, search, started games hidden); research per game (planner, parallel researchers, cited claims, cost). Four real runs: $0.26 to $0.33 each, 28 to 48 s, current dated odds, no markdown (D27, D28).
-- **Kalshi facts that bit us (D25, D29):** `occurrence_datetime` is settlement time, real kickoff is in `GET /milestones` (needs `limit`); `last_price_dollars` is often 0 where bid and ask exist; combination markets need `mve_filter=exclude`; no category filter on markets or events, only on series.
-- **Not verified:** research quality beyond four games; behaviour on the client's own network (the 10 s first load is the user's VPN); anything about placing orders (never to be called without approval); Kalshi's Developer Agreement (unread).
-- **The user's setup rules:** never write `.env` (they own secrets); Kalshi reachable from here only with their VPN on; demo account `demo@example.com` exists locally; the Kalshi key is a production key, valid, shared over WhatsApp (client must rotate; handover checklist in D24).
-- **Next step the user wants:** a Milestone 3 plan **per game** (one probability per outcome) for approval (D23, D26); then merge decision for the branch.
+- **Code:** `master` holds Milestones 1 and 2. **Branch `feature/sports-games-list` (about 60 commits ahead, not merged, no remote) holds everything else** and is what the running Docker stack is built from. 439 backend tests pass; the web app has no automated tests (lint, build and screenshots only).
+- **Built and checked with real services (public Kalshi reads, real OpenAI key):** the full pipeline per game: research, reading the cited pages, checking each claim against its page, three forecasters and a plain-AI comparison, median, comparison with the market (executable price, fee of the series, flag), early record of every forecast. Plus: the winner, total goals or runs, both teams to score and spread markets in one run; result pages; the Opportunities page; the watcher with alerts recorded in the app and optional capped automatic research (off); scoring commands (`resolve-records`, `score-records`); operator guide `docs/RUNBOOK.md`.
+- **Real run facts:** 58 to 92 seconds and 0.32 to 0.63 USD per game (D32, D33); about 27 to 48 percent of cited claims end up supported after the recall fixes (spec, evidence recall); claim checker never wrongly supported a claim on the labelled sample (D31).
+- **What is NOT known yet:** whether the forecasts are any good. The first real results arrive after the games of 2026-10-13 are over; about 30 games are needed before the scores mean anything. The flag "Worth a look" has placeholder thresholds and the first soccer run showed it can over-promote (fixed with a research-shift rule and a plausibility limit, D33); the forecasts moved little from the plain-AI call on the games seen.
+- **Kalshi facts that bit us (D25, D29, D33):** `occurrence_datetime` is settlement time, real kickoff is in `GET /milestones`; `last_price_dollars` is often 0; combination markets need `mve_filter=exclude`; companion markets (total, both teams to score, spread) are separate events with the game's ticker suffix; the fee type and multiplier are on the series.
+- **The user's setup rules:** never write `.env` (they own secrets); Kalshi reachable from here only with their VPN on; demo account `demo@example.com` exists locally; the Kalshi key is a production key shared over WhatsApp (client must rotate; handover checklist in D24); Kalshi's Developer Agreement is unread.
+- **Waiting on the client (D34):** which chat application for alerts (he said "chat message"), his US state, leagues and tours, whether "help" includes bet sizing, a new Kalshi key.
+- **Open items (`TODO.md`):** Telegram sender (blocked on the client), bookmaker consensus benchmark (needs a reliable odds source), monitoring phase 2 (re-forecast on news; wait for scores). Next milestones: 4 (accuracy report), 5 (approval screen), 6 (live paper trading), 7 (go or no go).
 
 ---
 
@@ -484,25 +486,26 @@ Python 3.13.11, Node v24.18.0, uv 0.9.5. No project code yet. CLAUDE.md rules ap
 ---
 
 ## 5. Not decided yet (so no one assumes)
-- **Milestone 3** (D23), now **per game**: the task list for approval; the five questions (check sources before forecasting; fetch pages ourselves with safety limits; hide the price from forecasters; median; 3 or 5 forecasters); one probability per outcome of a game; how "meaningful gap" is defined.
+- **Whether the system adds anything over the plain-AI call and over Kalshi's price:** Milestone 4 decides, from scored forecasts (about 30 games or more). All thresholds for "worth a look" (`EDGE_MIN`, `MIN_SUPPORTED_CLAIMS`, `MIN_ASK_SIZE`, `MIN_RESEARCH_SHIFT`, `EDGE_PLAUSIBLE_MAX`) are placeholders until then.
 - **Merging `feature/sports-games-list`** into `master`: the user's call.
-- **Which leagues and bet types the client trades** (default list of 15 series; only game and match winners shown; milestones list spreads, totals, halves and props for the same game if wanted later, D29).
-- **Periodic re-checks** (D15): proposed, client not asked.
-- **Approval flow details** (D18): built in a later milestone. HTTPS for real use.
-- **Dropped by the user for now (D16):** OpenAI budget and models, betting limits (until the order milestone), the go-live rule.
+- **Which chat application for alerts** (D34), and whether to build the sender (a separate item, blocked on the client).
+- **News-driven re-forecast** (monitoring phase 2): only if scoring shows updating helps.
+- **Approval flow details** (D18) for Milestone 5; **betting limits and the go-live rule** (dropped by the user until the order milestone, D16); HTTPS for real use.
+- **Reading pages that need JavaScript or are PDFs:** Jina Reader was measured and not adopted (D30); a PDF reader would need a new package; to decide if the share of unreadable pages matters after more runs.
 
 ---
 
 ## 6. Questions for the client
 1. Which US state are they in? (Not answered; matters for sports contracts.)
-2. Which leagues and tours exactly, and only game and match winners, or also totals, spreads and player props? (The Games page shows 15 series by default, D26.)
-3. Do they want periodic re-checks for new information (D15)?
-4. What should "help" cover: finding and researching bets, or also sizing? (Not answered.)
+2. Which leagues and tours exactly? (The Games page shows 15 series by default, D26.) Market types: he named win, loss, draw, tie and no tie, total goals, over 1.5 goals and both teams to score, so those are built (D33).
+3. What should "help" cover: finding and researching bets, or also sizing? (Not answered.)
+4. Which chat application for alerts? (He answered "chat message", D34.)
 5. Will they create a new Kalshi key (limited permissions if offered) and revoke the one shared over WhatsApp? (D24 checklist.)
-Answered: soccer, baseball and tennis (D21); LangSmith cloud tracing OK; Docker Compose; OpenAI credit added; the Kalshi key is production and valid (D24).
+Answered: soccer, baseball and tennis (D21); LangSmith cloud tracing OK; Docker Compose; OpenAI credit added; the Kalshi key is production and valid (D24); his priority is finding genuine opportunities, not only research; alerts by chat message.
 
 ## 7. Next steps
-- **Me, when the user says go:** the Milestone 3 plan per game for approval (D23 revised), then spec and build with a commit per task on a branch the user names.
-- **User:** decide when to merge `feature/sports-games-list`; ask the client the questions above; optionally press Research on more games and report quality.
-- **Small, anytime:** remove the unused single-market endpoints (`/api/markets`); a cost note on the Research button; automated web app tests; a run guide for the operator; show totals and spreads if the client wants them.
-- **Before any real order:** read Kalshi's Developer Agreement (could not be loaded, D16), rotate the shared key, agree betting limits and the go-live rule; handover checklist in D24; test that the host reaches Kalshi without a VPN.
+- **Soon:** read the first real scores after the games of 2026-10-13 (`resolve-records`, then `score-records`); keep researching games to build the record (the watcher's automatic research is off until the user sets a cap).
+- **When the client answers:** the alert channel (Telegram sender item), leagues and tours, bet-sizing scope.
+- **Milestones:** 4 accuracy report (needs the scores); 5 approval screen (design for approval first, D18); 6 live paper trading; 7 go or no go.
+- **Small, anytime:** automated web app tests (needs a new test dependency, ask first); the bookmaker consensus benchmark once an odds source exists.
+- **Before any real order:** read Kalshi's Developer Agreement, rotate the shared key, agree betting limits and the go-live rule; handover checklist in D24; test that the host reaches Kalshi without a VPN.
