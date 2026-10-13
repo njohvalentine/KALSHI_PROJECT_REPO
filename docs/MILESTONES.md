@@ -6,7 +6,7 @@
 
 **Ordering principle:** we answer the riskiest question first, which is whether the system predicts better than Kalshi's own price. Real bets come last, and only if the results justify them.
 
-Last updated: 2026-10-12.
+Last updated: 2026-10-13.
 
 ---
 
@@ -14,54 +14,56 @@ Last updated: 2026-10-12.
 
 | # | Milestone | You get | Money at risk | State |
 |---|---|---|---|---|
-| 0 | Confirm and specify | Written specifications to approve | None | Done for Milestones 1 and 2; Milestone 3 plan awaiting approval |
-| 1 | Foundation | Sign-in, Kalshi market list, database, tracing, Docker setup | None | **Built** (live Kalshi check still to be run) |
-| 2 | Research stage | Research runs: planner, parallel researchers, cited findings, cost per run | None | **Built** (first real run with your OpenAI key still to be done) |
-| 3 | Full prediction | Source checking, three forecasts, one probability, comparison with Kalshi's price | None | Planned; task list waiting for approval |
-| 4 | Evaluation | Scores against the market price and a plain AI call | None | Planned |
+| 0 | Confirm and specify | Written specifications to approve | None | Done through Milestone 3 and the extras |
+| 1 | Foundation | Sign-in, Kalshi game list, database, tracing, Docker setup | None | **Built** |
+| 2 | Research stage | Research runs: planner, parallel researchers, cited findings, cost per run | None | **Built** |
+| 3 | Full prediction | Page checking, three forecasts, one probability per outcome, comparison with Kalshi's price | None | **Built** (tested on real games; forecast quality not yet known) |
+| 3+ | Extras you asked for | More markets (total goals or runs, both teams to score, margin), Opportunities page, alerts and optional automatic research | None | **Built**; chat alerts wait for your choice of application |
+| 4 | Evaluation | Scores against the market price and a plain AI call | None | Planned; needs about 30 or more finished games |
 | 5 | Approval screen | Where a person approves or rejects each bet (orders simulated) | None | Planned |
-| 6 | Live paper trading | Weeks of real predictions, scored as games finish | None | Planned |
+| 6 | Live paper trading | Weeks of real predictions, scored as games finish | None | Started (every forecast is recorded) |
 | 7 | Go / no-go, then real bets | Decision based on results; optional limited launch | Only if you approve | Planned |
 
-The web pages (Markets, Prediction, Approval, Results) are built across milestones: Markets and Prediction exist now; Approval and Results come later. A sign-in page exists now.
+The web pages: Games, Opportunities, Prediction (runs and results), Approval and Results. Approval and Results come later.
 
 ---
 
 ## Milestone 0: Confirm and specify
 - Questions answered, specifications written and approved before each build.
-- **Done:** Milestones 1 and 2. **Waiting:** Milestone 3 task list (see `docs/discussion/NOTEPAD.md`, D23).
-- Still open from you: your US state, which contract types you trade, whether to add periodic re-checks.
+- **Done:** Milestones 1, 2 and 3 and the extras.
+- Still open from you: your US state, which leagues and tours, which chat application, whether "help" includes bet sizing, a new Kalshi key.
 
 ## Milestone 1: Foundation (built)
 - Docker Compose runs the database, backend and web app together.
 - One-account sign-in (account created by the operator with a script), session cookie, lockout after repeated failures.
-- Read-only connection to Kalshi: markets, events, price history. No Kalshi key is needed for this.
-- Database tables managed with migrations; LangSmith tracing; LangGraph's saved progress in Postgres.
-- Web app: shared layout, login page, and the Games page (later rebuilt as one row per game, see Milestone 2).
-- A command that tells whether the Kalshi key is demo or production (`check-kalshi-key`).
-- Found and fixed along the way: a login lockout race, sessions surviving a password change, a login flood risk, and slow failures when Kalshi is unreachable.
-- **Done when:** a real market list loads and a traced test run is visible. **Still to do:** run the Kalshi check and the live market list from a machine that can reach Kalshi.
+- Read-only connection to Kalshi: games, outcomes, prices, fees. No Kalshi key is needed to read.
+- Database tables managed with migrations; LangSmith tracing.
+- Web app: shared layout, login page, the Games page.
 
 ## Milestone 2: Research stage (built)
 - A lead agent plans up to 4 research angles written for soccer, baseball and tennis.
-- Researchers run in parallel, each forced to use web search (at most 3 searches), and return findings with source links taken from the search tool's own citations.
-- Every cited page is recorded with its link, title, time and the claims it was cited for. This is a record of what each source was used for, not a copy of the page (OpenAI's citations carry no page text); real page text is saved in Milestone 3.
-- Runs go in the background; **one run per game**; one active run per game, at most 2 at once; interrupted runs are marked failed.
-- Web app: the **Games page** (upcoming soccer, baseball and tennis games from a configured league list, soonest first, with start time in your time zone, buy and sell prices for each outcome, sport filter and search, already-started games hidden by default), a Research button per game, a list of runs, and a result page that updates itself while the run works and shows findings, source links, tokens and cost.
-- **Done when:** for a sample of real markets, each result lists findings with working links and shows its cost. **Still to do:** the first run with your real OpenAI key.
+- Researchers run in parallel, each forced to use web search (at most 3 searches), and return one fact per line with source links taken from the search tool's own citations.
+- Runs go in the background; one run per game; at most 2 at once; interrupted runs are marked failed.
+- Web app: the **Games page** (upcoming games from a configured league list, soonest first, start time in your time zone, buy and sell prices, sport filter and search), a Research button per game, a run list and a result page that updates itself.
 
-## Milestone 3: Full prediction (planned, not approved)
-- Fetch each cited page safely and save its text (this is also the page record that fair backtests need).
-- Check each claim against its page: supported, not supported, or could not check. Only supported claims go forward; the rest stay visible.
-- Three independent forecasters estimate the probability (they are not shown Kalshi's price); the estimates are combined with the median and their spread is recorded.
-- Compare with the price a bet could actually be placed at; show the gap and the estimated edge after fees; flag a gap as meaningful only if it is large enough, the forecasters agree and the evidence is not thin.
-- Web app: probability for each outcome of the game, the gap bar, each forecaster's estimate, each claim's check result; the Games list gets an estimate and gap column.
-- **Done when:** for any market, the system returns one probability, its reasoning, checked citations and the comparison, with the cost of the run.
+## Milestone 3: Full prediction (built)
+- Each cited page is downloaded safely (public addresses only, size and time limits) and its text is saved with the time it was read.
+- Every claim is checked against its page: supported, the page says something different, or could not check. A verdict needs an exact quote from the page. Only supported claims go forward; the rest stay visible. Wrong claims were caught in real runs.
+- Three independent forecasters (they never see Kalshi's price) estimate every outcome; the middle estimate is the forecast, and the lowest and highest are kept. A plain AI call with no research is recorded for comparison.
+- The forecast is compared with the price a bet could really be placed at, after Kalshi's fee. A gap is marked "worth a look" only if it is large enough but not suspiciously large, the research moved the estimate away from the plain AI call toward the gap, the forecasters agree, enough claims were supported and enough contracts are on offer. It is a flag, never a recommendation; the limits are placeholders until the evaluation.
+- Web pages: the result page (forecast and market, the forecasts, the evidence with each claim's check result, the pages that could not be read, the cost per step) and the Games list with our estimates.
+- **Measured on real games:** about 1 to 1.5 minutes and 0.32 to 0.63 USD per game.
+
+## Extras you asked for (built)
+- **More markets:** total goals or runs, both teams to score and margin of victory are forecast in the same run as the winner, with checks that related markets agree (for example, a higher goal line is never more likely than a lower one). Tie and no tie are the two sides of the Tie market. Further types Kalshi offers (first half, corners, team totals, tennis scores) can be added the same way.
+- **Opportunities page:** researched games that have not started, ranked by the gap after fees at today's prices, one row per game, with the risks in plain words.
+- **Watcher and alerts:** alerts when a game is worth a look, when the market moves a lot since the forecast, when it stops being worth a look, and when a flagged game starts soon. For now they appear in the app; they go to a chat message once you tell us the application. Optional automatic research of upcoming games is off and capped.
 
 ## Milestone 4: Evaluation
-- Brier score; three-way comparison on the same questions: full system, a plain single AI call, and Kalshi's price.
-- Backtest on past markets, labelled not fully reliable until the saved page record is large enough; sports results are widely published, so live testing is the one to trust.
-- Experiments: showing the forecasters the price as a starting point; splitting evidence between forecasters; other ways of combining estimates.
+- Brier score; three-way comparison on the same outcomes: our forecast, a plain single AI call with no research, and Kalshi's price; shown per kind of market, with what buying the chosen side at the market price would have paid.
+- **Already built:** every live forecast is recorded before the game starts, the result is filled in afterwards, and the command `score-records` prints the scores. **What is missing is data:** about 30 or more finished games before the numbers mean anything.
+- Live forecasts are the test to trust (sports results are widely published, so a backtest on past games could be contaminated by what the AI already knows).
+- Experiments: showing the forecasters the price as a starting point; splitting evidence between forecasters; other ways of combining estimates; replacing the placeholder limits behind "worth a look" with values chosen from the scores.
 - Checks on citation quality and on safety (no order without approval).
 - **Done when:** a short report is delivered and you decide whether to continue. This may show the system is a good research assistant but cannot beat the market; that is a valid result.
 
@@ -71,9 +73,10 @@ The web pages (Markets, Prediction, Approval, Results) are built across mileston
 - Betting limits are agreed here, before any real order exists.
 
 ## Milestone 6: Live paper trading
-- The system runs on live markets and records predictions. **No bets are placed.**
-- The Results page shows forecast, Kalshi price and outcome as games finish.
-- Optionally, periodic re-checks for new information such as announced lineups (proposed, not built; each re-check is another run and spends credit).
+- The system runs on live markets and records predictions. **No bets are placed.** This has started: every run records its forecast.
+- The Results page (to be built) shows forecast, Kalshi price and outcome as games finish.
+- The watcher can research upcoming games by itself within a daily cap you set (off by default; each run costs real credit).
+- Re-forecasting automatically when news, injuries or lineups change is not built; we first want the scores to show whether updating helps.
 
 ## Milestone 7: Go / no-go, then real bets (optional)
 - Review the results together; the rule for going live is agreed at that point.
@@ -86,5 +89,6 @@ The web pages (Markets, Prediction, Approval, Results) are built across mileston
 ## Risks that could change the plan
 - **Edge is small or absent.** Likely for sports markets. We stop or simplify at Milestone 4 or 6.
 - **Sports contracts are legally contested** in several states. Your state decides what is possible.
-- **Cost.** Research runs use real credit. The first live runs will give real numbers.
-- **Kalshi access.** The live Kalshi connection and the key have not yet been tested from our build environment.
+- **Cost.** Research runs use real credit: about 0.32 to 0.63 USD per game in the real runs.
+- **Evidence we cannot read.** Many pages (bookmaker sites, pages built by scripts, PDFs) cannot be read by an automatic reader, so only about a quarter to a half of the cited claims could be confirmed in the real runs.
+- **Kalshi access.** Reading Kalshi works; the connection has not been tested from your own network, and the Kalshi key has not been used for anything yet.

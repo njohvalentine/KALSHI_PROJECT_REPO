@@ -1,14 +1,16 @@
 # Architecture (Draft for Client Review)
 
-**Status: draft, not final.** This describes the system as it stands after Milestones 1 and 2, and the plan for the rest. Items marked **Open** still need a decision or an answer from you. A step-by-step explanation of the agent graphs is in `docs/agent/GRAPHS.md`.
+**Status: draft, not final.** This describes the system as it stands after Milestone 3 and the extras added at the client's request, and the plan for the rest. Items marked **Open** still need a decision or an answer from you. A step-by-step explanation of the agent graphs is in `docs/agent/GRAPHS.md`.
 
-Last updated: 2026-10-12.
+Last updated: 2026-10-13.
 
 ---
 
 ## 1. What we are building
 
-An AI research assistant for Kalshi prediction markets, focused on **soccer, baseball and tennis**. You pick a game (for example, "Arsenal vs Chelsea"). It researches the game on the web, and in the finished system it will estimate the probability and compare it with Kalshi's price. Every claim comes with a source link. A person decides whether to bet.
+An AI research assistant for Kalshi prediction markets, focused on **soccer, baseball and tennis**. You pick a game (for example, "Arsenal vs Chelsea"). It researches the game on the web, checks what it found against the sources, estimates the probability of each outcome with three independent forecasts, and compares them with Kalshi's price to show where the price may be worth a closer look. Every claim comes with a source link. A person decides whether to bet.
+
+**The main question is whether it finds genuine opportunities, not only research.** We test that against what really happened before any real money is used (section 5).
 
 **It does not place bets on its own.** Any bet needs a person to approve it. During testing no bets are placed at all.
 
@@ -17,38 +19,43 @@ An AI research assistant for Kalshi prediction markets, focused on **soccer, bas
 | Part | State |
 |---|---|
 | Sign-in (one account, created by the operator with a script) | **Built** |
-| Games list: upcoming soccer, baseball and tennis games with start times and buy and sell prices, filter by sport, search | **Built**, checked against live Kalshi data (335 games from 15 leagues and tours). The list of leagues is a setting the client chooses |
-| Research run **per game**: a planner chooses angles, several researchers search the web in parallel, results with source links, cost per run | **Built** (tested with simulated OpenAI responses and real Kalshi games; not yet run with your real OpenAI key) |
-| Checking that each source really supports its claim | Planned (Milestone 3) |
-| A probability estimate and comparison with Kalshi's price | Planned (Milestone 3) |
-| Results dashboard, accuracy testing | Planned (Milestone 4) |
+| Games list: upcoming soccer, baseball and tennis games with start times, buy and sell prices and, where researched, our estimate; filter by sport, search | **Built** (15 leagues and tours by default; a setting) |
+| Research per game: a planner chooses angles, several researchers search the web in parallel, results with source links | **Built**, tested on real games |
+| Reading each cited page and checking every claim against it (supported, page says something different, could not check) | **Built**; only supported claims go on to the forecasters |
+| Three independent forecasts per game (they never see Kalshi's price), combined with the median; a plain AI call with no research as a comparison | **Built** |
+| Markets beyond the game winner: total goals or runs, both teams to score, margin of victory | **Built** (soccer: all three; baseball: total runs and margin) |
+| Comparison with the price a bet could really be placed at, after fees; "worth a look" flag with the reasons shown | **Built**; the limits behind the flag are placeholders until we have scored real forecasts |
+| Result pages, an Opportunities page (researched games ranked by the gap at today's prices) | **Built** |
+| Record of every forecast with the market price at that moment, and scoring against what happened | **Built**; the first real results come as games finish |
+| Watcher: alerts recorded in the app, optional automatic research of upcoming games (off, capped) | **Built**; alerts go to a chat message once you tell us which application |
+| Accuracy report and results dashboard | Planned (Milestone 4); needs about 30 or more finished games |
 | Approving bets and placing orders | Planned, last, only on your approval |
 
-**Important wording on the result page:** a line marked "Cited" means the search tool attached a source link to it. It does **not** mean the source was checked. Checking comes in Milestone 3.
+**Important wording on the result page:** a claim marked "Supported" means the page itself says it. "Could not check" means the page could not be read, does not say it, or the claim was worked out rather than stated. Only supported claims are used. "Worth a look" is never a recommendation.
 
 ## 3. How it works
 
 ```
- Kalshi market
+ Kalshi game
       |
       v
- [1] LEAD AGENT ........ reads the market, plans which angles to research            (built)
+ [1] LEAD AGENT ........ reads the game, plans which angles to research                (built)
       |
       v
  [2] RESEARCHERS (several, at the same time)
-      each searches the web on one angle and returns facts with links                 (built)
+      each searches the web on one angle and returns facts with links                  (built)
       |
       v
- [3] FETCH AND CHECK SOURCES .. reads each cited page, labels claims                  (planned)
-      |                         supported / not supported / could not check
+ [3] READ AND CHECK SOURCES .. reads each cited page, labels each claim               (built)
+      |                        supported / page says something different / could not check
       v
- [4] FORECASTERS (three, independent) each estimates the probability                  (planned)
+ [4] FORECASTERS (three, independent) each estimates every outcome                     (built)
+      |   plus one plain AI call with no research, for comparison
+      v
+ [5] COMBINE ........... median of the three, with how far apart they were             (built)
       |
       v
- [5] AGGREGATOR ........ combines the estimates into one probability                  (planned)
-      |
-      v
- [6] MARKET COMPARER ... compares with Kalshi's price, flags a meaningful gap         (planned)
+ [6] MARKET COMPARER ... compares with the price a bet could be placed at, after fees (built)
       |
       v
  [7] HUMAN APPROVAL .... a person approves or rejects a bet                           (planned)
@@ -59,12 +66,14 @@ An AI research assistant for Kalshi prediction markets, focused on **soccer, bas
 
 | Step | What it does | Why it exists |
 |---|---|---|
-| Lead agent | Chooses research angles for this market (injuries and lineups, recent form, head-to-head, venue or surface, probable pitchers, weather, betting odds) | One place decides what is worth looking into |
-| Researchers | Each takes one angle, searches the web, returns findings with links | Different angles give different evidence; running them together saves time |
-| Fetch and check sources | Opens each cited page and checks the claim against it | So "cited" can become "checked", and the page text is saved for fair testing later |
-| Forecasters | Three independent estimates, not shown Kalshi's price | Independent views are steadier than one; not seeing the price stops them just copying it |
-| Aggregator | Combines them (median) and records how far apart they were | One clear answer, plus a measure of disagreement |
-| Market comparer | Compares with the price a bet could actually be placed at, and shows the estimated gap after fees | A bet only makes sense if we disagree with the market by enough |
+| Lead agent | Chooses research angles for this game (injuries and lineups, recent form, head-to-head, scoring, venue or surface, probable pitchers, betting odds) | One place decides what is worth looking into |
+| Researchers | Each takes one angle, searches the web, returns one fact per line with links | Different angles give different evidence; running them together saves time |
+| Read and check sources | Opens each cited page, saves its text, and checks every claim against it; a verdict stands only with an exact quote from the page | So "cited" becomes "checked"; wrong claims were caught in real runs |
+| Forecasters | Three independent estimates for every outcome, from the checked facts only | Independent views are steadier than one; not seeing the price stops them just copying it |
+| Plain AI call | The same question with no facts at all | Shows what the research added |
+| Combine | Median, with the lowest and highest estimate kept | One clear answer, plus a measure of disagreement |
+| Market comparer | Compares with the price a bet could actually be placed at, and shows the gap after Kalshi's fee | A bet only makes sense if we disagree with the market by enough |
+| Flag "worth a look" | Only when the gap is large enough but not suspiciously large, the research moved our estimate away from the plain AI call toward the gap, the forecasters agree, enough claims were supported and enough contracts are on offer | The first soccer run showed that without these tests almost everything looked like an opportunity |
 | Human approval | A person says yes or no on the exact order | You stay in control of your money |
 | Order step | Places the approved bet | Kept separate so an approval can never cause a bet to be sent twice |
 
@@ -93,60 +102,60 @@ We considered two ways to organize the AI agents.
 
 | Part | Choice | Reason |
 |---|---|---|
-| AI models | OpenAI (your key). Planner `gpt-5.4-mini`, researchers `gpt-5.4`, both changeable in settings | You supplied the key |
-| Agent framework | LangGraph (Python) | The steps are an explicit, testable flow; it supports parallel helpers, saved progress and pausing for approval |
-| Evidence gathering | OpenAI web search tool | Uses your key; returns a link for each source |
-| Market data | Kalshi public API (no key needed to read) | Games, outcomes, prices, rules. Kalshi has no sports filter, so the Games page reads a configured list of series (leagues and tours), fetched in parallel and kept for a minute |
+| AI models | OpenAI (your key). Planner and claim checker `gpt-5.4-mini`, researchers and forecasters `gpt-5.4`, all changeable in settings | You supplied the key |
+| Agent framework | LangGraph (Python) for the research step; the later steps run as plain code, each saving its result | The research fans out in parallel; the later steps do not, so saved progress between them adds nothing |
+| Evidence gathering | OpenAI web search tool, then our own safe download of each cited page (public addresses only, size and time limits, every redirect checked) | The search tool returns a link but no page text; we need the text to check claims |
+| Market data | Kalshi public API (no key needed to read) | Games, outcomes, prices, rules, fees. Kalshi has no sports filter, so the Games page reads a configured list of series (leagues and tours) |
 | Backend | FastAPI (Python) | Runs research in the background and serves the web app |
-| Web app | Next.js with shadcn/ui, light theme | Pages: Markets, Prediction (research runs and results), Approval, Results |
-| Database | PostgreSQL | Runs, results, saved sources, forecasts, accounts, and the agents' saved progress |
+| Web app | Next.js with shadcn/ui, light theme | Pages: Games, Opportunities, Prediction (runs and results), Approval, Results |
+| Database | PostgreSQL | Runs, saved sources and page text, claim checks, forecasts, a record of every forecast, alerts, accounts |
 | Packaging | Docker Compose: database, backend and web app start together | One command to run everything |
 | Tracing | LangSmith (free tier; consent given) | Shows what every agent did and what it cost |
 | Sign-in | Email and password, one account created by the operator with a script; no registration page | Single-user tool; a public registration page would let strangers approve bets |
 
-**Open:** whether your OpenAI key works for web search and the chosen models (confirmed only by a first real run).
 **Open:** which leagues and tours you trade. The Games page shows 15 by default (Premier League, Champions League, Europa League, MLS, La Liga, Serie A, Bundesliga, Ligue 1, MLB, Japan's NPB, Korea's KBO, ATP, WTA and both challenger tours).
+**Open:** which chat application you want alerts in (you answered "chat message"; Telegram is the simplest).
 
 ## 5. How we will know if it works
 
 The honest question is whether the system predicts better than the market price alone. Kalshi prices are already well calibrated, and sports prices especially, so the room to beat them is small. We test before any real money is used.
 
-**Stage 1, backtest on past markets.** Fast and repeatable, good for finding bugs. Caveat: the AI or its search may already know how a past game ended. Results only count once we have a saved copy of the sources to replay (Milestone 3 starts saving page text).
+**Live paper trading.** Every forecast is recorded with Kalshi's price at that moment, **before the game starts**; when the game ends, the result is added. **No bets are placed and no money is at risk.** The records are made only from live forecasts, so nothing about the result can leak into them. This is the main test, and sports results arrive within hours or days. The command `score-records` prints the scores; below about 30 finished games it says there is too little to conclude anything.
 
-**Stage 2, live paper trading.** The system forecasts open markets and records its predictions. **No bets are placed and no money is at risk.** We score the predictions when the games finish. This is the main test, and sports results arrive within days.
-
-**What we compare, on the same questions:** the full system, one plain AI call with no research, and Kalshi's price. Scores use the Brier score (a standard accuracy measure for probabilities; lower is better).
-- If the full system does not beat the plain AI call, the research adds cost without accuracy, and we simplify.
+**What we compare, on the same outcomes:** our forecast, one plain AI call with no research, and Kalshi's price (the middle of buy and sell). Scores use the Brier score (a standard accuracy measure for probabilities; lower is better), shown per kind of market (winner, total, both teams to score, margin), and what buying the chosen side at the market price would have paid.
+- If our forecast does not beat the plain AI call, the research adds cost without accuracy, and we simplify.
 - If it beats the plain call but not Kalshi's price, it is a useful research assistant but not a betting edge.
 - If it beats both, it is worth taking further.
+
+**What we already saw in real runs:** on the first games the forecasts were close to the plain AI call and far from the market on some markets; the market is usually the better informed side, so a large gap is more often the model's mistake than an opportunity. The flag "worth a look" was therefore tightened (the research must move the estimate away from the plain AI call, and a suspiciously large gap is not flagged). The scores will show whether any of this is real.
 
 The rule for when real betting could be considered is **deferred**; we will agree it after seeing real results.
 
 ## 6. Costs
 
-- A research run uses several AI calls plus web searches. Published reports put multi-agent systems at roughly 15 times a normal chat (secondary sources). Prices per million tokens are on OpenAI's pricing page (for example `gpt-5.4`: 2.50 in, 15.00 out); web search costs about 1 cent per search. **Real cost per run is not yet measured**; the result page shows tokens and cost for each run, so the first runs will tell us.
-- Built-in limits: at most 4 researchers per run, at most 3 searches each, a cap on output length per call, at most 2 runs at the same time, and one active run per market. A run that costs more than a set warning level is flagged.
-- Every press of Analyze spends credit.
+- A run (research, page reading, claim checking, three forecasts and the comparison) takes about one to one and a half minutes and cost **about 0.32 to 0.63 USD per game** in the real runs (the more markets a game has, the more it costs). The result page shows the cost of each step.
+- Built-in limits: at most 4 researchers per run, at most 3 searches each, a cap on output length per call, at most 2 runs at the same time, and one active run per game. A run that costs more than a set warning level is flagged.
+- Every press of Research spends credit, and the button says so. Automatic research of upcoming games exists but is **off**; if you switch it on you set how many games it may research per day.
 
 ## 7. Risks you should know about
 
 1. **No guaranteed edge.** The system may be a good research assistant but not a way to beat the market. The testing in section 5 finds this out cheaply.
 2. **Sports contracts are legally contested.** Several US states and federal appeals courts have ruled against Kalshi's sports contracts (as of late September 2026). What you can trade depends on your state. **Open:** your state.
-3. **Fees.** Kalshi charges trading fees that reduce small edges; the exact schedule must be confirmed.
-4. **Research quality.** Web evidence can be wrong or outdated; checking sources (Milestone 3) reduces this but does not remove it.
+3. **Fees.** Kalshi charges trading fees that reduce small edges. We read each series' fee type and multiplier from Kalshi and use the published formula, which we have so far only seen described by third parties; it will be confirmed against Kalshi's own schedule.
+4. **Research quality.** Web evidence can be wrong or outdated. Checking against the pages caught real mistakes, but in the real runs only about a quarter to a half of the cited claims could be confirmed, because many pages (bookmaker sites, pages built by scripts, PDFs) cannot be read by an automatic reader.
 5. **Keys.** The Kalshi key was shared in a chat. For real trading, create a new one and share it more safely. Keys are kept only in local settings files, never in the code.
 
 ## 8. Questions for you
 
 1. Which US state are you in?
-2. Which leagues and tours do you trade? Do you trade only game and match winners, or also totals, spreads and player props? (The Games page currently lists game and match winners only.)
-3. Is the Kalshi key a demo key or a production key? (We provide a command that tells you.)
-4. Do you want the system to re-check markets from time to time for new information (for example when lineups are announced)? This is proposed, not built.
-5. What should "help" cover: finding and researching bets, or also suggesting how much to bet?
+2. Which leagues and tours do you trade?
+3. Which chat application do you want alerts in? We suggest Telegram.
+4. What should "help" cover: finding and researching bets, or also suggesting how much to bet?
+5. Will you create a new Kalshi key (limited permissions if Kalshi offers them) before any real trading?
 
 ## 9. What happens next
 
-1. A first real research run with your OpenAI key, to measure cost, time and quality.
-2. Milestone 3: checking sources, forecasts, comparison with the market price (task list needs your approval first).
-3. Milestone 4: accuracy testing against the market price.
-4. Only then: approval screen and any real orders.
+1. The first real scores as games finish; keep researching games so the record grows.
+2. Milestone 4: a short accuracy report once there are enough finished games.
+3. Chat alerts, once you tell us the application.
+4. Only then: the approval screen and any real orders.
