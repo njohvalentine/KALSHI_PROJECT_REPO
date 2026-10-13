@@ -568,7 +568,7 @@ Forecaster prompts get longer (up to about 40 markets) but the number of calls d
 ### Questions for you before I build
 
 1. Is the first set right (soccer: total, both teams to score, spread; baseball: total, spread), or do you want the first-half, first-five-innings, corners, first-inning run or tennis markets in it too?
-2. The client's "no tie" is not a separate Kalshi market in what I found (the Tie market's "no" side is the same bet). Should I tell him that, or did he mean something else?
+2. (Answered, no question needed.) The client already explained in his WhatsApp message that "tie" and "no tie" are examples of the market types he wants; they are the two sides of Kalshi's Tie market, which the winner group already covers ("no tie" is buying "no" on Tie).
 
 
 ### More market types, result (2026-10-13; first set approved by the user: soccer total goals, both teams to score and spread; baseball total runs and spread)
