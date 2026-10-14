@@ -12,7 +12,7 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.auth import require_requested_with, require_user
 from app.config import Settings
 from app.models import Order, OrderEvent, OrderLeg, OutcomeRecord, User
-from app.opportunities import evaluate_game, load_game
+from app.opportunities import _event_of, evaluate_game, load_game
 from app.research.compare import FEE_RATE
 
 log = logging.getLogger("app.orders")
@@ -85,6 +85,8 @@ def order_to_dict(o: Order, legs: list[OrderLeg] | None = None) -> dict:
         "fill_price": num(o.fill_price), "fill_fee": num(o.fill_fee), "settled_at": iso(o.settled_at), "won": o.won, "paper_result": num(o.paper_result),
     }
     if legs is not None:
+        games = [g.run_id for g in legs]
+        out["same_game_legs"] = len({r for r in games if games.count(r) > 1})  # games with more than one leg: their legs move together
         out["legs"] = [
             {"position": g.position, "run_id": g.run_id, "event_ticker": g.event_ticker, "market_ticker": g.market_ticker, "outcome": g.outcome,
              "title": g.title, "game_start": iso(g.game_start), "side": g.side, "price": num(g.price), "our_probability": num(g.our_probability),
@@ -103,14 +105,20 @@ def _close_legs(db: DbSession, order_id: int) -> None:
     db.execute(update(OrderLeg).where(OrderLeg.order_id == order_id).values(open=False))
 
 
-async def fresh_market(app, order_or_run: tuple[str, str]) -> dict:
-    """Today's prices for one market of a stored forecast: {"market": comparison outcome or None, "game": stored game data}."""
+async def fresh_market(app, order_or_run: tuple[str, str], cache: dict | None = None) -> dict:
+    """Today's prices for one market of a stored forecast: {"market": comparison outcome or None, "game": stored game data}.
+    `cache` holds one reading per run, so the many legs of one game cost one read of Kalshi."""
     run_id, market_ticker = order_or_run
     state = app.state
-    game = await asyncio.to_thread(load_game, state.engine, run_id)
-    if game is None:
-        raise OrderError(404, "There is no forecast for that run.")
-    comparison = await evaluate_game(state.kalshi, state.settings, state.fee_cache, game)
+    if cache is not None and run_id in cache:
+        game, comparison = cache[run_id]
+    else:
+        game = await asyncio.to_thread(load_game, state.engine, run_id)
+        if game is None:
+            raise OrderError(404, "There is no forecast for that run.")
+        comparison = await evaluate_game(state.kalshi, state.settings, state.fee_cache, game)
+        if cache is not None:
+            cache[run_id] = (game, comparison)
     if "unavailable" in comparison:
         return {"market": None, "game": game, "unavailable": comparison["unavailable"]}
     market = next((c for c in comparison["outcomes"] if c["market_ticker"] == market_ticker), None)
@@ -145,11 +153,11 @@ def checks_for(order: Order, legs: list[OrderLeg], fresh_by_leg: list[dict], s: 
     out.append({"name": "within_limits", "leg": None, "ok": within, "blocking": True,
                 "detail": f"{order.contracts} contracts (limit {s.order_max_contracts}), up to ${order.max_cost:.2f} (limit ${s.order_max_cost_usd:.2f}), "
                           f"${spent + order.max_cost:.2f} today (limit ${s.order_max_day_cost_usd:.2f})"})
-    games = [g.event_ticker for g in legs]
-    legs_ok = len(legs) <= s.ticket_max_legs and len(set(games)) == len(games)
+    events = [g.event_ticker for g in legs]
+    legs_ok = len(legs) <= s.ticket_max_legs and len(set(events)) == len(events)
     out.append({"name": "legs_ok", "leg": None, "ok": legs_ok, "blocking": True,
                 "detail": f"{len(legs)} leg{'s' if len(legs) != 1 else ''} (limit {s.ticket_max_legs}), "
-                          + ("each from a different game" if len(set(games)) == len(games) else "two legs are from the same game")})
+                          + ("no two legs from the same group of markets" if len(set(events)) == len(events) else "two legs are from the same group of markets")})
     for leg, fresh in zip(legs, fresh_by_leg):
         game, market = fresh["game"], fresh["market"]
         n = leg.position
@@ -173,47 +181,51 @@ def checks_for(order: Order, legs: list[OrderLeg], fresh_by_leg: list[dict], s: 
         size = _side_size(market, leg.side)
         out.append({"name": "enough_contracts", "leg": n, "ok": size is not None and _dec(size) >= order.contracts, "blocking": True,
                     "detail": f"{'unknown' if size is None else f'{float(size):g}'} contracts offered at that price, {order.contracts} wanted"})
-        out.append({"name": "still_worth_a_look", "leg": n, "ok": bool(market["meaningful"]), "blocking": False,
-                    "detail": "the flag still holds" if market["meaningful"] else "the flag no longer holds"})
+        flagged = bool(market["meaningful"]) and market["side"] == leg.side
+        out.append({"name": "still_worth_a_look", "leg": n, "ok": flagged, "blocking": False,
+                    "detail": "the flag still holds" if flagged else "this side is not flagged at today's prices"})
     return out
 
 
 # ---- the steps ---------------------------------------------------------------------------------------------
 
-async def prepare_ticket(app, user_id: int, contracts: int, legs_in: list[tuple[str, str]], now: datetime | None = None) -> dict:
+async def prepare_ticket(app, user_id: int, contracts: int, legs_in: list[tuple], now: datetime | None = None) -> dict:
+    """`legs_in` holds (run_id, market_ticker) or (run_id, market_ticker, side); without a side the side with the larger gap is used."""
     now = now or datetime.now(UTC)
     s = app.state.settings
+    legs_in = [(tuple(leg) + (None,))[:3] for leg in legs_in]
     if contracts < 1 or contracts > s.order_max_contracts:
         raise OrderError(422, f"Contracts must be between 1 and {s.order_max_contracts}.")
     if not legs_in:
         raise OrderError(422, "A ticket needs at least one leg.")
     if len(legs_in) > s.ticket_max_legs:
         raise OrderError(422, f"A ticket may have at most {s.ticket_max_legs} legs.")
-    if len({m for _, m in legs_in}) != len(legs_in):
+    if len({m for _, m, _ in legs_in}) != len(legs_in):
         raise OrderError(422, "The same market is in the ticket twice.")
-    fresh_all = [await fresh_market(app, leg) for leg in legs_in]
+    if len({_event_of(m) for _, m, _ in legs_in}) != len(legs_in):
+        raise OrderError(422, "Two legs are from the same group of markets (for example both outcomes of the winner, or two lines of the same total). They cannot both be useful, so a ticket may hold one leg from each group.")
+    cache: dict = {}
+    fresh_all = [await fresh_market(app, (r, m), cache) for r, m, _ in legs_in]
     prepared = []
-    for (run_id, market_ticker), fresh in zip(legs_in, fresh_all):
+    for (run_id, market_ticker, wanted), fresh in zip(legs_in, fresh_all):
         game, market = fresh["game"], fresh["market"]
         outcome = next((o for o in game["prediction"]["outcomes"] if o["market_ticker"] == market_ticker), None)
         if outcome is None:
             raise OrderError(404, "That market is not part of the forecast.")
         if fresh.get("unavailable") or market is None:
             raise OrderError(502, f"Today's prices could not be read: {fresh.get('unavailable') or 'no market'}")
-        if market["side"] is None:
-            raise OrderError(409, f"There is no price to buy at on {outcome['outcome']}.")
+        side = wanted or market["side"]
+        if side is None or _side_price(market, side) is None:
+            raise OrderError(409, f"There is no price to buy {f'“{side}” ' if side else ''}at on {outcome['outcome']}.")
         if game["start"] is not None and game["start"] <= now:
             raise OrderError(409, f"The game has started ({game['title']}).")
         age_h = None if game["finished_at"] is None else (now - game["finished_at"]).total_seconds() / 3600
         if age_h is None or age_h > s.opportunity_max_age_hours:
             raise OrderError(409, f"The forecast for {game['title']} is too old (limit {s.opportunity_max_age_hours:g} hours). Research the game again.")
-        side = market["side"]
         probability = outcome["probability"] if side == "yes" else 1 - outcome["probability"]
         prepared.append({"run_id": run_id, "market_ticker": market_ticker, "game": game, "outcome": outcome, "side": side,
                          "price": _dec(_side_price(market, side)), "probability": _dec(round(probability, 4)),
                          "multiplier": _dec((market.get("fee") or {}).get("multiplier", 1))})
-    if len({p["game"]["event_ticker"] for p in prepared}) != len(prepared):
-        raise OrderError(422, "Two legs are from the same game. Several markets of one game move together, so a ticket may hold one leg per game.")
 
     price = _combined([p["price"] for p in prepared])
     if price < CENT:
@@ -232,7 +244,7 @@ async def prepare_ticket(app, user_id: int, contracts: int, legs_in: list[tuple[
             order = Order(
                 client_order_id=uuid.uuid4().hex, run_id=first["run_id"], event_ticker=first["game"]["event_ticker"], market_ticker=first["market_ticker"],
                 outcome=first["outcome"]["outcome"] if single else " + ".join(p["outcome"]["outcome"] for p in prepared)[:500],
-                title=first["game"]["title"] if single else f"Ticket of {len(prepared)} games"[:500],
+                title=first["game"]["title"] if single else f"Ticket of {len(prepared)} legs in {len({p['run_id'] for p in prepared})} games",
                 game_start=min((p["game"]["start"] for p in prepared if p["game"]["start"]), default=None),
                 side=first["side"] if single else "yes", price=price, contracts=contracts, max_cost=max_cost, fee_estimate=fee,
                 our_probability=probability.quantize(Decimal("0.0001")), gap=gap.quantize(Decimal("0.0001")),
@@ -247,7 +259,7 @@ async def prepare_ticket(app, user_id: int, contracts: int, legs_in: list[tuple[
             db.flush()
             try:
                 for position, p in enumerate(prepared):
-                    db.add(OrderLeg(order_id=order.id, position=position, run_id=p["run_id"], event_ticker=p["game"]["event_ticker"],
+                    db.add(OrderLeg(order_id=order.id, position=position, run_id=p["run_id"], event_ticker=_event_of(p["market_ticker"]),
                                     market_ticker=p["market_ticker"], outcome=p["outcome"]["outcome"], title=p["game"]["title"],
                                     game_start=p["game"]["start"], side=p["side"], price=p["price"], our_probability=p["probability"],
                                     forecast_at=p["game"]["finished_at"], open=True))
@@ -297,7 +309,8 @@ async def _checked(app, order_id: int, now: datetime):
             return order, legs
 
     order, legs = await asyncio.to_thread(load)
-    fresh_all = [await fresh_market(app, (g.run_id, g.market_ticker)) for g in legs]
+    cache: dict = {}
+    fresh_all = [await fresh_market(app, (g.run_id, g.market_ticker), cache) for g in legs]
 
     def run_checks():
         with DbSession(app.state.engine) as db:
@@ -443,11 +456,12 @@ def _raise(exc: OrderError):
 class LegBody(BaseModel):
     run_id: str = Field(min_length=1, max_length=64)
     market_ticker: str = Field(min_length=1, max_length=128)
+    side: Literal["yes", "no"] | None = None
 
 
 class PrepareBody(BaseModel):
     contracts: int = Field(ge=1, le=1000)
-    legs: list[LegBody] = Field(min_length=1, max_length=10)
+    legs: list[LegBody] = Field(min_length=1, max_length=30)
 
 
 class RejectBody(BaseModel):
@@ -457,7 +471,7 @@ class RejectBody(BaseModel):
 @router.post("", status_code=201, dependencies=[Depends(require_requested_with)])
 async def prepare(body: PrepareBody, request: Request, user: Annotated[User, Depends(require_user)]):
     try:
-        return await prepare_ticket(request.app, user.id, body.contracts, [(g.run_id, g.market_ticker) for g in body.legs])
+        return await prepare_ticket(request.app, user.id, body.contracts, [(g.run_id, g.market_ticker, g.side) for g in body.legs])
     except OrderError as exc:
         _raise(exc)
 

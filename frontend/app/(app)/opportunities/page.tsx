@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AnalyzeButton } from "@/components/analyze-button";
 import { LocalTime } from "@/components/local-time";
-import { AddToTicket, TicketProvider } from "@/components/ticket";
+import { AddToTicket } from "@/components/ticket";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -201,13 +201,11 @@ async function List({ all }: { all: boolean }) {
           </AlertDescription>
         </Alert>
       ) : (
-        <TicketProvider maxLegs={data.max_ticket_legs}>
-          <ul className="grid gap-3">
-            {data.opportunities.map((o) => (
-              <Row key={o.event_ticker} o={o} />
-            ))}
-          </ul>
-        </TicketProvider>
+        <ul className="grid gap-3">
+          {data.opportunities.map((o) => (
+            <Row key={o.event_ticker} o={o} />
+          ))}
+        </ul>
       )}
       <p className="mt-4 text-sm text-muted-foreground">
         “Worth a look” is not a recommendation. The limits behind it are placeholders until we have scored real forecasts, and a gap that looks very large is

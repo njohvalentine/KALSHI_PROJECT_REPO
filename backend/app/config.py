@@ -296,9 +296,9 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     order_max_day_cost = _parse_positive_float("ORDER_MAX_DAY_COST_USD", env.get("ORDER_MAX_DAY_COST_USD", "20.00"), problems)
     order_expiry = _parse_positive_float("ORDER_EXPIRY_MINUTES", env.get("ORDER_EXPIRY_MINUTES", "10"), problems)
     order_slippage = _parse_positive_float("ORDER_MAX_SLIPPAGE_CENTS", env.get("ORDER_MAX_SLIPPAGE_CENTS", "2"), problems)
-    ticket_max_legs = _parse_positive_int("TICKET_MAX_LEGS", env.get("TICKET_MAX_LEGS", "4"), problems)
-    if ticket_max_legs > 10:
-        problems.append("TICKET_MAX_LEGS must be 10 or less")
+    ticket_max_legs = _parse_positive_int("TICKET_MAX_LEGS", env.get("TICKET_MAX_LEGS", "20"), problems)
+    if ticket_max_legs > 30:
+        problems.append("TICKET_MAX_LEGS must be 30 or less")
     if order_max_day_cost < order_max_cost:
         problems.append("ORDER_MAX_DAY_COST_USD must not be smaller than ORDER_MAX_COST_USD")
     alerts_enabled = _parse_bool("ALERTS_ENABLED", env.get("ALERTS_ENABLED", "false"), problems)

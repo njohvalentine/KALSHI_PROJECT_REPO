@@ -46,15 +46,36 @@ def test_a_two_leg_ticket_multiplies_prices_and_probabilities(client, make_clien
     assert t["gap"] == pytest.approx(0.33 - 0.21 - t["fee_estimate"] / 2, abs=1e-3)
 
 
-def test_two_legs_of_one_game_or_too_many_legs_or_a_repeat_are_refused(client, make_client):
+def test_legs_of_one_group_of_markets_or_too_many_legs_or_a_repeat_are_refused(client, make_client):
     e = make_client.engine
-    with pytest.raises(OrderError, match="same game"):
-        ticket(client, e, [("run-KX-1", "KX-1-H"), ("run-KX-1", "KXTTOTAL-1-1")])
+    with pytest.raises(OrderError, match="same group of markets"):
+        ticket(client, e, [("run-KX-1", "KX-1-H"), ("run-KX-1", "KX-1-A")])
     with pytest.raises(OrderError, match="twice"):
         ticket(client, e, [("run-KX-1", "KX-1-H"), ("run-KX-1", "KX-1-H")])
     client.app.state.settings = replace(client.app.state.settings, ticket_max_legs=1)
     with pytest.raises(OrderError, match="at most 1"):
         ticket(client, e, TWO)
+
+
+def test_several_markets_of_one_game_are_allowed_and_counted_as_linked(client, make_client):
+    t = ticket(client, make_client.engine, [("run-KX-1", "KX-1-H"), ("run-KX-1", "KXTTOTAL-1-1"), ("run-KX-3", "KX-3-H")])
+    assert t["same_game_legs"] == 1 and [g["event_ticker"] for g in t["legs"]] == ["KX-1", "KXTTOTAL-1", "KX-3"]
+    assert ticket(client, make_client.engine, [("run-KX-3", "KX-3-A")])["same_game_legs"] == 0
+
+
+def test_the_person_chooses_the_side_and_a_side_without_a_price_is_refused(client, make_client):
+    e = make_client.engine
+    t = ticket(client, e, [("run-KX-1", "KX-1-H", "no")])
+    assert t["legs"][0]["side"] == "no" and t["price"] == pytest.approx(0.60) and t["our_probability"] == pytest.approx(0.45)
+    client.app.state.kalshi.events["KX-3"] = event("KX-3", "KXTGAME", {**market("KX-3-H", "0.48", "0.50"), "yes_bid_dollars": None}, market("KX-3-A", "0.48", "0.50"))
+    with pytest.raises(OrderError, match="no price"):
+        ticket(client, e, [("run-KX-3", "KX-3-H", "no")])
+
+
+def test_twenty_legs_fit_and_twenty_one_do_not(client, make_client):
+    legs = [("run-KX-1", "KX-1-H")] * 21
+    with pytest.raises(OrderError, match="at most 20"):
+        ticket(client, make_client.engine, legs)
 
 
 def test_a_market_in_an_open_ticket_cannot_be_used_again_until_it_is_rejected(client, make_client):

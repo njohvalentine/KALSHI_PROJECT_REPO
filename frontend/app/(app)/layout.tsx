@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Nav } from "@/components/nav";
 import { PageContainer } from "@/components/page-container";
 import { SignOutButton } from "@/components/sign-out-button";
+import { TicketProvider } from "@/components/ticket";
 import { verifySession } from "@/lib/session";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +27,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </PageContainer>
       </div>
       <main className="flex-1 pb-16 pt-10">
-        <PageContainer>{children}</PageContainer>
+        <PageContainer>
+          <TicketProvider>{children}</TicketProvider>
+        </PageContainer>
       </main>
     </>
   );

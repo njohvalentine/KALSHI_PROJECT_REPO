@@ -98,7 +98,7 @@ The limits are settings in `.env.example` (`ORDER_MAX_CONTRACTS`, `ORDER_MAX_COS
 
 ### Tickets of several games
 
-On the Opportunities page, **Add to ticket** on up to `TICKET_MAX_LEGS` (4) games, then **Prepare ticket**. A ticket pays only if every game wins, so one leg per game. Its price and chance are the legs multiplied, and the fee uses the dearest leg's fee type. This is the simulation's price; a real Kalshi combo is quoted on request and is usually worse. The Approval page shows each game with its own checks. A ticket is lost as soon as one game is lost; if a game is voided the stake is returned.
+On the Opportunities page or on a run page, **Add “yes” / Add “no”** on up to `TICKET_MAX_LEGS` (20) markets, then **Prepare ticket** in the panel at the bottom (it stays while you move between pages). A ticket pays only if every leg wins. It may hold several markets of one game (winner, total, both teams to score) but only one from each group of markets; when it does, its combined numbers are marked rough because those legs move together. Its price and chance are the legs multiplied, and the fee uses the dearest leg's fee type. This is the simulation's price; a real Kalshi combo is quoted on request and is usually worse. The Approval page shows each game with its own checks. A ticket is lost as soon as one game is lost; if a game is voided the stake is returned.
 
 ## 9. Backups
 

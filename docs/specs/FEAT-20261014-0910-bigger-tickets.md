@@ -40,3 +40,9 @@ Backend: legs of one game in different events allowed; two legs of one event ref
 ## Checks to state at close
 
 Lateral spread: every place that assumes one leg per game (prepare, `checks_for`, settle, the Results and Approval pages, the monitor). Causal depth: the client's need is "build the slip I build on Kalshi", which needs more than the limit (sides, any market, several pages), so the three items are one spec.
+
+## Result (2026-10-14)
+
+Built as specified. Backend: `TICKET_MAX_LEGS` 20 (up to 30), one leg per Kalshi market group (`_event_of`), a chosen side per leg, `same_game_legs` on every ticket, one read of Kalshi per game however many legs it has, `still_worth_a_look` true only for the flagged side. Web app: the ticket lives in the app layout and keeps its legs in session storage; every priced market on the run page has "Add yes" and "Add no" buttons; the panel shows the rough-number note and, from 15 legs, "about 1 time in N". 489 backend tests pass (6 new or changed); the web app is checked by lint and build only, **not yet looked at in a browser**.
+
+Checks done: lateral spread (every place that assumed one leg per game: prepare, `checks_for`, the title of a ticket, the pages; settlement and the monitor never did); causal depth (the limit alone would not have been enough: sides and any-market choice were also missing). Not done: legs already migrated from the first tickets keep the game's group in `order_legs.event_ticker` (only one old order exists and it is closed, so it cannot clash). Basketball is not started.

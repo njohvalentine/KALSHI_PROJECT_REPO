@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { PrepareOrder } from "@/components/prepare-order";
+import { AddToTicket } from "@/components/ticket";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ago, cents, gapCents, pct } from "@/lib/format";
 import { KIND_HEADING, plainReason, sideText } from "@/lib/labels";
@@ -8,21 +9,42 @@ import type { ComparisonOutcome, PredictionOutcome, Run } from "@/lib/types";
 
 type Row = { outcome: PredictionOutcome; market: ComparisonOutcome | null };
 
-function FlagCell({ market, runId }: { market: ComparisonOutcome | null; runId: string }) {
+function TicketButtons({ outcome, market, run }: { outcome: PredictionOutcome; market: ComparisonOutcome; run: { id: string; event_ticker: string; event_title: string } }) {
+  const sides = [
+    { side: "yes" as const, price: market.yes_ask, probability: outcome.probability },
+    { side: "no" as const, price: market.no_ask, probability: 1 - outcome.probability },
+  ];
+  return (
+    <div className="flex flex-wrap gap-2">
+      {sides.map((s) =>
+        s.price === null ? null : (
+          <AddToTicket
+            key={s.side}
+            leg={{ runId: run.id, eventTicker: run.event_ticker, marketTicker: market.market_ticker, title: run.event_title, market: outcome.outcome, side: s.side, price: s.price, probability: s.probability }}
+          />
+        ),
+      )}
+    </div>
+  );
+}
+
+function FlagCell({ outcome, market, run }: { outcome: PredictionOutcome; market: ComparisonOutcome | null; run: { id: string; event_ticker: string; event_title: string } }) {
   if (!market) return <span className="text-muted-foreground">No market price</span>;
-  if (market.meaningful) {
-    return (
-      <div className="grid gap-2">
-        <Badge className="bg-good-soft text-good">Worth a look</Badge>
-        <PrepareOrder runId={runId} marketTicker={market.market_ticker} />
-      </div>
-    );
-  }
   const reasons = market.reasons.map(plainReason);
   return (
-    <span className="text-sm text-muted-foreground">
-      Not flagged{reasons.length > 0 ? `: ${reasons.join("; ")}` : ""}
-    </span>
+    <div className="grid gap-2">
+      {market.meaningful ? (
+        <>
+          <Badge className="bg-good-soft text-good">Worth a look</Badge>
+          <PrepareOrder runId={run.id} marketTicker={market.market_ticker} />
+        </>
+      ) : (
+        <span className="text-sm text-muted-foreground">
+          Not flagged{reasons.length > 0 ? `: ${reasons.join("; ")}` : ""}
+        </span>
+      )}
+      <TicketButtons outcome={outcome} market={market} run={run} />
+    </div>
   );
 }
 
@@ -47,7 +69,7 @@ function GapCell({ market }: { market: ComparisonOutcome | null }) {
   );
 }
 
-function GroupRows({ rows, runId }: { rows: Row[]; runId: string }) {
+function GroupRows({ rows, run }: { rows: Row[]; run: { id: string; event_ticker: string; event_title: string } }) {
   return (
     <>
       <div className="hidden overflow-x-auto rounded-xl border bg-card sm:block">
@@ -77,7 +99,7 @@ function GroupRows({ rows, runId }: { rows: Row[]; runId: string }) {
                 <GapCell market={market} />
               </TableCell>
               <TableCell className="max-w-[28ch] whitespace-normal px-4 py-3.5">
-                <FlagCell market={market} runId={runId} />
+                <FlagCell outcome={outcome} market={market} run={run} />
               </TableCell>
             </TableRow>
           ))}
@@ -113,7 +135,7 @@ function GroupRows({ rows, runId }: { rows: Row[]; runId: string }) {
             </div>
           </dl>
           <div className="mt-2">
-            <FlagCell market={market} runId={runId} />
+            <FlagCell outcome={outcome} market={market} run={run} />
           </div>
         </li>
       ))}
@@ -160,7 +182,7 @@ export function PredictionSection({ run }: { run: Run }) {
       {groups.map(([kind, groupRows]) => (
         <div key={kind} className="mb-5">
           {groups.length > 1 ? <h3 className="mb-2 text-lg font-semibold tracking-tight">{KIND_HEADING[kind] ?? kind}</h3> : null}
-          <GroupRows rows={groupRows} runId={run.id} />
+          <GroupRows rows={groupRows} run={run} />
         </div>
       ))}
 
