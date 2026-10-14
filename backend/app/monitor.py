@@ -7,7 +7,7 @@ code, no model call) and records an alert when something is worth saying:
   something we do not, so the alert says to research again, not to bet),
 - no_longer_flagged: the markets that were worth a look no longer are,
 - start_soon: a game worth a look starts within ALERT_START_SOON_MINUTES (the forecast may be out of date).
-Alerts are recorded in the app. A chat channel can be added behind `deliver`; none exists yet.
+Alerts are recorded in the app and, when ALERTS_ENABLED is true, also sent to Telegram through `deliver`.
 
 Automatic research (AUTO_RESEARCH_MAX_PER_DAY, 0 = off) starts ordinary runs for the next games on a
 plain rule. Each run costs real money, hence the explicit cap."""
@@ -75,8 +75,8 @@ class Monitor:
             return db.scalar(query) > 0
 
     async def deliver(self, text: str) -> tuple[str, str | None]:
-        """Sends the text to a chat channel if one is configured: (status, error kind). None is configured yet, so
-        an alert is only recorded in the app."""
+        """Sends the text to Telegram when a notifier exists (ALERTS_ENABLED=true): (status, error kind). Without one
+        the alert is only recorded in the app."""
         notifier = getattr(self.app.state, "notifier", None)
         if notifier is None:
             return "recorded", None

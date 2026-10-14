@@ -23,3 +23,9 @@ A test of `load_settings` with the watcher on, once with and once without alerts
 ## Checks to state at close
 
 Lateral spread: every sentence in code, docs and pages that says no chat channel exists or is configured (config line, two monitor comments; the page and the runbook were read and are right). Causal depth: one cause, the old wording; the same line's other facts (interval, automatic research) are unchanged.
+
+## Result (2026-10-14)
+
+Done as specified: the watcher line in `config.py` names where alerts go ("sent to Telegram and recorded in the app" or "only recorded in the app"); the module docstring and the `deliver` docstring in `monitor.py` match what the code does. One new test (`test_config.py`); 529 backend tests pass. Live after the rebuild: "The watcher is ON (every 10 min). Alerts are sent to Telegram and recorded in the app. Automatic research: off."
+
+Checks done: lateral spread (the same words searched in code, tests, docs and the web pages: only the three places above were wrong; the Opportunities page text depends on the monitor's channel field and the RUNBOOK was already right); causal depth (one cause, the wording written before the Telegram sender existed).

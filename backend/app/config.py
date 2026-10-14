@@ -346,8 +346,9 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     log.info("Alerts are %s." % ("sent to a Telegram chat" if alerts_enabled else "only recorded in the app (ALERTS_ENABLED is not 'true')"))
     if monitor_enabled:
         log.info(
-            "The watcher is ON (every %g min). Alerts are recorded in the app; no chat channel is configured. Automatic research: %s.",
-            monitor_interval, f"up to {auto_per_day} games a day" if auto_per_day else "off",
+            "The watcher is ON (every %g min). Alerts are %s. Automatic research: %s.",
+            monitor_interval, "sent to Telegram and recorded in the app" if alerts_enabled else "only recorded in the app",
+            f"up to {auto_per_day} games a day" if auto_per_day else "off",
         )
     else:
         log.info("The watcher is off (MONITOR_ENABLED is not 'true'): no alerts are made and nothing is researched automatically.")

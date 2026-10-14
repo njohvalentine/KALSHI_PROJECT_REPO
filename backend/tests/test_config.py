@@ -87,3 +87,20 @@ def test_research_on_with_key_and_key_never_logged(caplog):
 def test_bad_research_settings_rejected(name, value):
     with pytest.raises(SettingsError, match=name.split("_")[0] if name != "PLANNER_MODEL" else "MODEL"):
         load_settings({**GOOD, name: value})
+
+
+def test_the_watcher_line_says_where_alerts_go_and_never_that_no_chat_channel_exists(caplog):
+    token = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"
+    import logging
+
+    base = {**GOOD, "MONITOR_ENABLED": "true"}
+    with caplog.at_level(logging.INFO, logger="app.config"):
+        load_settings({**base, "ALERTS_ENABLED": "true", "TELEGRAM_BOT_TOKEN": token, "TELEGRAM_CHAT_ID": "123456"})
+    on = next(m for m in caplog.messages if m.startswith("The watcher is ON"))
+    assert "sent to Telegram and recorded in the app" in on
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="app.config"):
+        load_settings(base)
+    off = next(m for m in caplog.messages if m.startswith("The watcher is ON"))
+    assert "only recorded in the app" in off
+    assert "no chat channel" not in on + off
