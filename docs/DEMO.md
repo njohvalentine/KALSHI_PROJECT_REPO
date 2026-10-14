@@ -6,8 +6,8 @@ The client asked for a demo before he gives feedback ("it will make more sense f
 
 - `docker compose up -d --build`, then check `docker compose ps` and `curl http://127.0.0.1:8000/health`.
 - Kalshi must be reachable (it needed a VPN during development) and the OpenAI account must have credit (a run costs about 0.35 to 0.65 USD).
-- Research 3 or 4 games that start in the next few hours (press Research on the Games page, about 90 seconds each, two at a time), so the Opportunities page and the Approval screen have live content. Prefer games with a lot of volume: tour-level tennis, a Premier League or Champions League game, an MLB game.
-- Run `docker compose exec backend uv run --no-sync python -m app.cli resolve-records` and `score-records` and note the numbers; if fewer than 30 games are finished, say so before he asks.
+- Research 3 or 4 games that start in the next few hours (the forecast must be less than 12 hours old, or a ticket cannot be prepared from it) (press Research on the Games page, about 90 seconds each, two at a time), so the Opportunities page and the Approval screen have live content. Prefer games with a lot of volume: tour-level tennis, a Premier League or Champions League game, an MLB game.
+- Run `docker compose exec backend uv run --no-sync python -m app.cli resolve-records` and `score-records` and note the numbers; if fewer than 30 games are finished, say so before he asks. Status on 2026-10-14: 30 games researched, 15 scored (first scores: ours 0.19, plain AI 0.22, Kalshi 0.15 on the Brier score, lower is better; flagged bets lost money so far); the rest finish by the morning of 2026-10-15.
 - Sign in with the demo account and leave the browser on the Games page. Hide other tabs and any window showing `.env` or keys.
 
 ## The walk (what to show, what to say)
@@ -17,16 +17,21 @@ The client asked for a demo before he gives feedback ("it will make more sense f
 3. **More markets** (1 min). Total goals or runs, both teams to score, margin of victory, shown as separate tables; tie and no tie are the two sides of the Tie market.
 4. **Opportunities** (2 min). Researched games ranked by the gap at today's prices, one row per game, the risks in words; the recent alerts section; "alerts will go to Telegram".
 5. **Approval** (3 min). Prepare an order from a flagged row; show the exact order in words, the checks, Approve, then Place in the simulation; show that pressing Place again is refused. "Nothing is ever sent to Kalshi. A real order is a later milestone and needs your decisions on limits."
-6. **Tickets (combos)** (only if built by then). Otherwise: "You asked for tickets of several games; here is how we plan it: pick games from this ranked list, see the combined chance and price, approve them as one." Show `docs/specs/FEAT-20261013-1838-bet-tickets.md` only if he wants details.
+6. **Tickets (combos)** (4 min). He builds combos of up to 17 bets, so show his way of working. On Opportunities press "Add" on a few games; the ticket panel at the bottom shows the combined chance and price, and keeps the legs while you move to a run page. On a run page add "yes" or "no" on any market (winner, total goals, both teams to score), including two markets of one game: the panel then says the combined numbers are rough because bets on the same game move together. Press Prepare ticket and go to Approval: each leg is listed with its own checks. Say plainly: "The ticket price here is the legs multiplied. A real Kalshi combo is quoted when you ask for it, and it is usually worse." Up to 20 legs; from 15 legs it says "wins about 1 time in N".
 7. **Results and scores** (1 min). The Results page, and the numbers from `score-records` if there are enough games.
 
 ## Questions to ask him during the demo
 
 - Which leagues and tours, and which US state (still open).
 - The most he wants to risk on one bet and in one day (the screen uses placeholders: 10 contracts, 5 dollars, 20 dollars).
-- How many games he usually puts in one combo, and whether he ever combines two bets on the same game.
+- Which basketball leagues he means (he said combos can include basketball; not built, we first need to know whether our forecasts beat the market on the three sports we have).
+- Whether he adds only flagged games to a ticket or any game from the ranking (his example slip had mostly favourites at 78% to 96%, which we do not flag).
 - What he wants on the Opportunities page that is not there.
 - Whether he wants alerts for every kind of event or only when something is worth a look.
+
+## Already answered by him (2026-10-13)
+
+- A combo has up to 17 markets, may hold several bets on one game (winner, total goals, both teams to score) and may mix sports.
 
 ## Things not to say or show
 
