@@ -145,3 +145,29 @@ def test_a_voided_leg_returns_the_stake(client, make_client):
     with DbSession(e) as db:
         o = db.get(Order, oid)
         assert o.won is None and float(o.paper_result) == 0
+
+
+def test_the_games_of_a_ticket_are_read_at_the_same_time_and_once_each(client, make_client):
+    import threading
+    import time
+
+    kalshi = client.app.state.kalshi
+    seen = {"now": 0, "max": 0, "calls": []}
+    lock = threading.Lock()
+    original = kalshi.get_event
+
+    def slow(ticker):
+        with lock:
+            seen["now"] += 1
+            seen["max"] = max(seen["max"], seen["now"])
+            seen["calls"].append(ticker)
+        time.sleep(0.2)
+        with lock:
+            seen["now"] -= 1
+        return original(ticker)
+
+    kalshi.get_event = slow
+    t = ticket(client, make_client.engine, [("run-KX-1", "KX-1-H"), ("run-KX-1", "KXTTOTAL-1-1"), ("run-KX-3", "KX-3-H")])
+    assert t["state"] == "proposed"
+    assert seen["max"] >= 2, "the games were read one after the other"
+    assert seen["calls"].count("KX-3") == 1 and seen["calls"].count("KX-1") == 1

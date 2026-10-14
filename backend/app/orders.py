@@ -105,18 +105,37 @@ def _close_legs(db: DbSession, order_id: int) -> None:
     db.execute(update(OrderLeg).where(OrderLeg.order_id == order_id).values(open=False))
 
 
+async def _read_run(app, run_id: str) -> tuple[dict, dict]:
+    """The stored game of a run and today's comparison of it."""
+    state = app.state
+    game = await asyncio.to_thread(load_game, state.engine, run_id)
+    if game is None:
+        raise OrderError(404, "There is no forecast for that run.")
+    return game, await evaluate_game(state.kalshi, state.settings, state.fee_cache, game)
+
+
+async def fresh_markets(app, pairs: list[tuple[str, str]]) -> list[dict]:
+    """`fresh_market` for each (run_id, market_ticker): every distinct game is read once and the games are read at the same time
+    (at most SPORTS_FETCH_CONCURRENCY at once, as on the Opportunities page)."""
+    run_ids = list(dict.fromkeys(r for r, _ in pairs))
+    gate = asyncio.Semaphore(app.state.settings.sports_fetch_concurrency)
+
+    async def one(run_id: str):
+        async with gate:
+            return await _read_run(app, run_id)
+
+    cache = dict(zip(run_ids, await asyncio.gather(*(one(r) for r in run_ids))))
+    return [await fresh_market(app, pair, cache) for pair in pairs]
+
+
 async def fresh_market(app, order_or_run: tuple[str, str], cache: dict | None = None) -> dict:
     """Today's prices for one market of a stored forecast: {"market": comparison outcome or None, "game": stored game data}.
     `cache` holds one reading per run, so the many legs of one game cost one read of Kalshi."""
     run_id, market_ticker = order_or_run
-    state = app.state
     if cache is not None and run_id in cache:
         game, comparison = cache[run_id]
     else:
-        game = await asyncio.to_thread(load_game, state.engine, run_id)
-        if game is None:
-            raise OrderError(404, "There is no forecast for that run.")
-        comparison = await evaluate_game(state.kalshi, state.settings, state.fee_cache, game)
+        game, comparison = await _read_run(app, run_id)
         if cache is not None:
             cache[run_id] = (game, comparison)
     if "unavailable" in comparison:
@@ -204,8 +223,7 @@ async def prepare_ticket(app, user_id: int, contracts: int, legs_in: list[tuple]
         raise OrderError(422, "The same market is in the ticket twice.")
     if len({_event_of(m) for _, m, _ in legs_in}) != len(legs_in):
         raise OrderError(422, "Two legs are from the same group of markets (for example both outcomes of the winner, or two lines of the same total). They cannot both be useful, so a ticket may hold one leg from each group.")
-    cache: dict = {}
-    fresh_all = [await fresh_market(app, (r, m), cache) for r, m, _ in legs_in]
+    fresh_all = await fresh_markets(app, [(r, m) for r, m, _ in legs_in])
     prepared = []
     for (run_id, market_ticker, wanted), fresh in zip(legs_in, fresh_all):
         game, market = fresh["game"], fresh["market"]
@@ -309,8 +327,7 @@ async def _checked(app, order_id: int, now: datetime):
             return order, legs
 
     order, legs = await asyncio.to_thread(load)
-    cache: dict = {}
-    fresh_all = [await fresh_market(app, (g.run_id, g.market_ticker), cache) for g in legs]
+    fresh_all = await fresh_markets(app, [(g.run_id, g.market_ticker) for g in legs])
 
     def run_checks():
         with DbSession(app.state.engine) as db:

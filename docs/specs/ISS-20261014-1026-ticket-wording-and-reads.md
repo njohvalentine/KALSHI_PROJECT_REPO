@@ -23,3 +23,9 @@ A test with a fake Kalshi that counts concurrent calls: a 4-game ticket reads th
 ## Checks to state at close
 
 Lateral spread: every caller of `fresh_market` (prepare, checks, approve, place, the Approval page via `order_with_checks`), and the other places that say "game" for a leg (Results page, ticket panel). Causal depth: the slowness has two parts (sequential games, repeated reads per page load); the second is not changed here: an Approval page load still reads prices once, which is wanted because the checks must show today's prices.
+
+## Result (2026-10-14)
+
+Built as specified. Wording says "leg" on the Approval page (sentence and check labels), the Results page and the ticket panel. `fresh_markets` in `backend/app/orders.py` reads each distinct game once and the games at the same time (limit `SPORTS_FETCH_CONCURRENCY`); prepare and the checks use it. A new test fails on the old code (reads one after the other) and passes now. 490 backend tests pass; lint and build are clean. Measured live: reading 6 games for a ticket took 4.3 s (the 3-game ticket took 10 to 20 s before); that ticket was then refused for a combined price below one cent, which is the intended message.
+
+Checks done: lateral spread (callers of `fresh_market`: prepare, the checks used by the Approval page, approve and place all go through `_checked`; the other uses of the word "game" for a leg: Approval, Results, ticket panel); causal depth (the repeated read on every page load stays, by design: the checks must show today's prices).

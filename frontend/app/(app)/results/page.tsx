@@ -71,7 +71,7 @@ function Orders({ data }: { data: OrdersResponse }) {
                 </ul>
               ) : null}
               <p>
-                {o.legs.length > 1 ? `Ticket of ${o.legs.length} games` : o.title}: {o.fill_contracts} {o.legs.length > 1 ? "tickets" : `“${o.side}” on ${o.outcome}`} at {cents(o.fill_price)}, fee ${o.fill_fee?.toFixed(2)}. {o.paper_result === null ? "The result is known when the game ends." : `Paper result ${dollars(o.paper_result)}.`}
+                {o.legs.length > 1 ? `Ticket of ${o.legs.length} legs` : o.title}: {o.fill_contracts} {o.legs.length > 1 ? "tickets" : `“${o.side}” on ${o.outcome}`} at {cents(o.fill_price)}, fee ${o.fill_fee?.toFixed(2)}. {o.paper_result === null ? "The result is known when the game ends." : `Paper result ${dollars(o.paper_result)}.`}
               </p>
             </li>
           ))}

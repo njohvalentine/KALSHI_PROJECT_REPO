@@ -11,7 +11,7 @@ import type { OrdersResponse, SimOrder } from "@/lib/types";
 
 function orderSentence(o: SimOrder): string {
   if (o.legs.length > 1) {
-    return `Buy ${o.contracts} ticket${o.contracts === 1 ? "" : "s"} of ${o.legs.length} games at ${cents(o.price)} each. It pays only if every game wins. Cost up to $${o.max_cost.toFixed(2)} including a fee of about $${o.fee_estimate.toFixed(2)}.`;
+    return `Buy ${o.contracts} ticket${o.contracts === 1 ? "" : "s"} of ${o.legs.length} legs at ${cents(o.price)} each. It pays only if every leg wins. Cost up to $${o.max_cost.toFixed(2)} including a fee of about $${o.fee_estimate.toFixed(2)}.`;
   }
   return `Buy ${o.contracts} “${o.side}” contract${o.contracts === 1 ? "" : "s"} on ${o.outcome} (${o.title}) at ${cents(o.price)} each. Cost up to $${o.max_cost.toFixed(2)} including a fee of about $${o.fee_estimate.toFixed(2)}.`;
 }
@@ -45,7 +45,7 @@ function Waiting({ order }: { order: SimOrder }) {
         <ul className="mt-3 grid gap-1 text-sm" aria-label="Checks">
           {checks.map((c) => (
             <li key={`${c.leg}-${c.name}`} className={c.ok ? "text-good" : c.blocking ? "text-destructive" : "text-warn"}>
-              {c.ok ? "✓" : c.blocking ? "✗" : "!"} {c.leg === null || order.legs.length < 2 ? "" : `Game ${c.leg + 1}: `}{CHECK_NAME[c.name] ?? c.name}
+              {c.ok ? "✓" : c.blocking ? "✗" : "!"} {c.leg === null || order.legs.length < 2 ? "" : `Leg ${c.leg + 1}: `}{CHECK_NAME[c.name] ?? c.name}
               <span className="text-muted-foreground"> — {c.detail}</span>
             </li>
           ))}

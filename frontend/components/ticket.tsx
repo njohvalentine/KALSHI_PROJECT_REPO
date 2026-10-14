@@ -124,7 +124,7 @@ function TicketPanel({ clear }: { clear: () => void }) {
         ))}
       </ul>
       <p className="mt-2 text-sm">
-        The ticket pays only if <strong>every</strong> game wins. Together: price {cents(price)} each, our chance {pct(probability)}.
+        The ticket pays only if <strong>every</strong> leg wins. Together: price {cents(price)} each, our chance {pct(probability)}.
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
         The price is the legs multiplied, as in the simulation. A real combo on Kalshi is quoted on request and is usually worse. Each leg adds the model’s error, so more legs means a less
