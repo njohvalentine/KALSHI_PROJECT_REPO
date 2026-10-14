@@ -27,3 +27,9 @@ No test message from inside the running app (the script sends from the host). No
 ## Checks to state at close
 
 Lateral spread: the other places that handle the token (the sender, the chat-id helper, the settings check) are unchanged; the script uses the sender, not a copy of it. Causal depth: the need is "know that delivery works"; the script proves it once, and the first real alert and the alert history on the Opportunities page ("Sent" or "Could not be sent") show it from then on.
+
+## Result (2026-10-14)
+
+Built as specified: `scripts/telegram_hello.py` (uses `TelegramNotifier.send`, prints only set or not set, no logging set up, named failures, exit 0, 1 or 2) and `backend/tests/test_telegram_script.py` (5 tests plus parametrized failures, 11 cases in all); RUNBOOK step 5 in section 6. Run for real on 2026-10-14 with the user's `.env` loaded in my shell: with the two values unset it stopped with exit 2 and sent nothing; with them loaded it printed "Sent: check Telegram." (exit 0). Whether the message was read in Telegram is for the user to confirm; the script only knows Telegram accepted it.
+
+Checks done: lateral spread (the sender, the chat-id helper and the settings check are unchanged; the script reuses the sender; the output was checked for the token and chat id by the test); causal depth (it proves delivery once; the alert history on the Opportunities page shows it from now on).

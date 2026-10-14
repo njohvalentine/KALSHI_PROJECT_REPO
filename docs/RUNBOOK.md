@@ -70,6 +70,8 @@ The watcher is off unless `MONITOR_ENABLED=true`. When on, it looks every `MONIT
 3. Put `TELEGRAM_BOT_TOKEN=<the token>` in `.env`, then run `docker compose up -d` and `docker compose exec backend uv run --no-sync python -m app.cli telegram-chat-id`. It prints `TELEGRAM_CHAT_ID=<number>`.
 4. Put that line in `.env` too, add `ALERTS_ENABLED=true` and `MONITOR_ENABLED=true`, and run `docker compose up -d` again. If a value is missing or wrong the backend refuses to start and says which.
 
+5. To check that delivery works without waiting for a real alert, send one hello message: `cd backend && set -a; source ../.env; set +a; uv run python ../scripts/telegram_hello.py`. It prints whether each value is set (never the values), says "Sent: check Telegram." or names what is wrong (wrong token, wrong chat id or Start not pressed, bot blocked, Telegram not reachable). It uses the same sender as the alerts.
+
 The Opportunities page then shows "Alerts are also sent to Telegram" and each alert in the history is marked Sent, or "Could not be sent" with the kind of error (`TelegramUnauthorized`: wrong token; `TelegramChatNotFound`: wrong chat id or Start not pressed; `TelegramBotBlocked`; `TelegramRateLimited`; `TelegramNetworkError`). The token is hidden from the logs and never shown on a page.
 
 ## 7. Looking at results
