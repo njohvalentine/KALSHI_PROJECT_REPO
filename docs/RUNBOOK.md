@@ -104,6 +104,20 @@ On the Opportunities page or on a run page, **Add “yes” / Add “no”** on 
 
 Off by default. To switch on, put `ODDS_ENABLED=true` and `ODDS_API_KEY=<your key>` in `.env` (the key is a secret) and run `docker compose up -d`; the app refuses to start if the key is missing or odd. Each researched game then saves, with its forecast, the consensus of the bookmakers (margin removed, exchanges left out) and Pinnacle's price, for winner markets in the leagues the feed lists (Premier League, Champions League, Europa League, MLS, La Liga, Serie A, Bundesliga, Ligue 1, MLB, NPB, KBO and the ATP and WTA tournaments that are running; **not Challengers**). A game that does not match, or a feed error, saves the reason and never fails the run. One read of a league costs one credit per region and is shared by the games researched within `ODDS_CACHE_MINUTES`; the free plan has 500 credits a month and the log warns below 50. `score-records` prints how many outcomes have a bookmaker price and the scores of ours, the plain AI, Kalshi and the bookmakers on the same outcomes.
 
+### Replaying the forecasts on saved evidence
+
+To try an idea (more forecasters, another model or effort, other flag limits) without waiting for new games, re-run only the forecasting step and the flag rule on the evidence and prices saved before each finished game. A fresh run on a finished game would let the web search find the result; a replay cannot, because everything it reads was saved before the game. Nothing is written back.
+
+```
+docker compose exec backend uv run --no-sync python -m app.cli replay-forecasts --rules-only                       # free: only the flag rule, current or changed limits
+docker compose exec backend uv run --no-sync python -m app.cli replay-forecasts --forecaster-count 5               # prints the model calls and an estimate, spends nothing
+docker compose exec backend uv run --no-sync python -m app.cli replay-forecasts --forecaster-count 5 --yes         # spends it (about 0.01 to 0.03 USD per forecaster call)
+docker compose exec backend uv run --no-sync python -m app.cli replay-forecasts --tune-until 2026-10-14T12:00 --yes # only the games made up to then
+docker compose exec backend uv run --no-sync python -m app.cli replay-forecasts --tune-until 2026-10-14T12:00 --final --yes  # later games only: the test set, once the settings are fixed
+```
+
+Other options: `--forecaster-model`, `--forecaster-effort`, `--edge-min`, `--min-supported-claims`, `--min-research-shift`, `--edge-plausible-max`, `--min-ask-size`, `--created-after`, `--created-before`. It prints the Brier scores of the replay, the original forecast, the plain AI call and Kalshi on the same outcomes, and what the flagged markets would have paid. Models are not deterministic and a few games fit noise: choose the candidate settings on the early games, write them down, then look at the held-back games once.
+
 ## 9. Backups
 
 The database holds everything (runs, sources, forecasts, records, alerts, accounts). A backup:

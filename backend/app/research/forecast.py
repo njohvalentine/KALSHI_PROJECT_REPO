@@ -47,12 +47,13 @@ class ForecastModel(Protocol):
 
 
 class OpenAIForecastModel:
-    def __init__(self, settings: Settings, client=None):
+    def __init__(self, settings: Settings, client=None, today: str | None = None):
         self._s = settings
         self._client = client or openai_client(settings)
+        self._today = today  # a replay shows the forecasters the day the run was made, not today
 
     async def forecast(self, game, claims, framing):
-        today = _today()
+        today = self._today or _today()
         try:
             response = await self._client.responses.parse(
                 model=self._s.forecaster_model,

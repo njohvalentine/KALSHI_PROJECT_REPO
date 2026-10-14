@@ -96,6 +96,76 @@ def _records_command(args) -> int:
     return 0
 
 
+def _moment(text: str | None, name: str):
+    from datetime import UTC, datetime
+
+    if not text:
+        return None
+    try:
+        value = datetime.fromisoformat(text)
+    except ValueError:
+        raise CliError(f"{name} must look like 2026-10-13 or 2026-10-13T18:00") from None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _replay_command(args) -> int:
+    import asyncio
+
+    from app.config import SettingsError, load_settings
+    from app.research.forecast import OpenAIForecastModel
+    from app.research.model import openai_client
+    from app.research.replay import estimate, format_summary, load_candidates, replay, split_test_set, summarize
+
+    try:
+        after, before, tune = _moment(args.created_after, "--created-after"), _moment(args.created_before, "--created-before"), _moment(args.tune_until, "--tune-until")
+        if args.final and tune is None:
+            raise CliError("--final needs --tune-until: it shows the games made after that moment")
+        overrides = {k: v for k, v in vars(args).items() if k.isupper() and v is not None}
+        settings = load_settings({**os.environ, **overrides})
+    except (CliError, SettingsError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    engine = create_engine(settings.sqlalchemy_url)
+    items, held = split_test_set(load_candidates(engine, after, before), tune, args.final)
+    if not items:
+        print("No finished game with a saved forecast, claims and a result matches.")
+        return 0
+    label = ("final test set" if args.final else "tuning set" if tune else "all games") + (" (rules only)" if args.rules_only else "")
+    if not args.rules_only:
+        if not settings.research_enabled:
+            print("Error: OPENAI_API_KEY is not set, so no model can be called. Use --rules-only to replay the flag rule alone.", file=sys.stderr)
+            return 2
+        calls, usd = estimate(items, settings)
+        print(f"{len(items)} games x {settings.forecaster_count} forecasters = {calls} model calls with {settings.forecaster_model} "
+              f"({settings.forecaster_reasoning_effort} effort), about {usd:.2f} USD at the default price per call (a rough estimate).")
+        if not args.yes:
+            print("Nothing was called. Run again with --yes to spend it.")
+            return 0
+
+    async def go():
+        from app.checkpoint import open_checkpointer
+
+        if args.rules_only:
+            return await replay(engine, settings, items, rules_only=True, model_factory=None, load_game=None)
+        pool, saver = await open_checkpointer(settings.database_url)
+        client = openai_client(settings)
+
+        async def load_game(run_id):
+            found = await saver.aget_tuple({"configurable": {"thread_id": run_id}})
+            return found.checkpoint["channel_values"].get("game") if found else None
+
+        try:
+            return await replay(engine, settings, items, rules_only=False,
+                                model_factory=lambda day: OpenAIForecastModel(settings, client=client, today=day), load_game=load_game)
+        finally:
+            await pool.close()
+
+    result = asyncio.run(go())
+    result.held_back, result.held_back_is_early = held, bool(args.final)
+    print(format_summary(summarize(result), label))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -111,7 +181,21 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("telegram-chat-id", help="Print the chat id of the people who pressed Start on the Telegram bot (needs TELEGRAM_BOT_TOKEN)")
     score = sub.add_parser("score-records", help="Print how the recorded forecasts did against what happened")
     score.add_argument("--since", help="Only records made on or after this date (YYYY-MM-DD)")
+    rp = sub.add_parser("replay-forecasts", help="Re-run the forecasting step and the flag rule on the evidence saved before each finished game")
+    rp.add_argument("--created-after", help="Only runs made on or after this moment (YYYY-MM-DD or YYYY-MM-DDTHH:MM)")
+    rp.add_argument("--created-before", help="Only runs made on or before this moment")
+    rp.add_argument("--tune-until", help="Use only runs made up to this moment; later games are held back as the test set")
+    rp.add_argument("--final", action="store_true", help="With --tune-until: show only the held-back test set (do this once, after the settings are fixed)")
+    rp.add_argument("--rules-only", action="store_true", help="No model call: replay only the flag rule on the original forecasts")
+    rp.add_argument("--yes", action="store_true", help="Spend money on model calls (without it only the estimate is printed)")
+    for flag, setting in (("--forecaster-count", "FORECASTER_COUNT"), ("--forecaster-model", "FORECASTER_MODEL"), ("--forecaster-effort", "FORECASTER_REASONING_EFFORT"),
+                          ("--edge-min", "EDGE_MIN"), ("--min-supported-claims", "MIN_SUPPORTED_CLAIMS"), ("--min-research-shift", "MIN_RESEARCH_SHIFT"),
+                          ("--edge-plausible-max", "EDGE_PLAUSIBLE_MAX"), ("--min-ask-size", "MIN_ASK_SIZE")):
+        rp.add_argument(flag, dest=setting, metavar=setting, help=f"Replay with this value of {setting} instead of the current setting")
     args = parser.parse_args(argv)
+
+    if args.command == "replay-forecasts":
+        return _replay_command(args)
 
     if args.command == "check-kalshi-key":
         try:
