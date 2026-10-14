@@ -136,7 +136,9 @@ cd backend && TEST_DATABASE_URL=postgresql://USER:PASSWORD@127.0.0.1:55432/valen
 cd frontend && BACKEND_INTERNAL_URL=http://127.0.0.1:8000 npm run lint && BACKEND_INTERNAL_URL=http://127.0.0.1:8000 npm run build
 ```
 
-Use the values from your `.env` for USER, PASSWORD and the host port (`DB_HOST_PORT`). Each test makes and drops its own throwaway database. The web app has no automated tests yet, only lint, build and manual checks.
+Use the values from your `.env` for USER, PASSWORD and the host port (`DB_HOST_PORT`). Each test makes and drops its own throwaway database.
+
+The web app has browser tests (Playwright) that drive the running stack: sign-in, the ticket builder, the Approval flow. Once: `cd frontend && npm ci && npx playwright install chromium`. Make a test account (`docker compose exec -T backend uv run --no-sync python -m app.cli create-user e2e@example.com --password-stdin`, then type the password into stdin), start the stack (`docker compose up -d`) and run `E2E_EMAIL=e2e@example.com E2E_PASSWORD=... npm run test:e2e` from `frontend/`. The tests prepare a real simulated ticket and reject it; nothing is placed and nothing reaches Kalshi. A test that needs a game open for a ticket skips itself with the reason when there is none.
 
 ## 12. Before this is used for anything real
 
