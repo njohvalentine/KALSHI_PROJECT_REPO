@@ -83,7 +83,8 @@ def _records_command(args) -> int:
             except ValueError:
                 print("Error: --since must look like 2026-10-13", file=sys.stderr)
                 return 2
-        print(format_report(score_records(engine, since)))
+        series = {e.ticker: (e.sport, e.league) for e in settings.sports_series}
+        print(format_report(score_records(engine, since, series, settings.min_supported_claims)))
         return 0
     client = KalshiClient(settings.kalshi_api_base)
     try:

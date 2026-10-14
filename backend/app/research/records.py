@@ -23,6 +23,7 @@ FINAL_STATUSES = ("determined", "finalized", "settled")  # Kalshi market states 
 BATCH = 100
 UNKNOWN_START_WAIT = timedelta(hours=24)  # a record with no game start is looked up this long after it was made
 MIN_GAMES = 30
+MIN_GROUP_GAMES = 5  # a sport, league or evidence group with fewer games than this is printed with a warning
 
 
 def _dec(value) -> Decimal | None:
@@ -154,11 +155,11 @@ def _paper(records: list[OutcomeRecord]) -> dict:
     }
 
 
-def _kind_scores(used: list[OutcomeRecord]) -> dict:
-    """The same numbers per kind of market: the forecasts may be good for one kind and poor for another."""
+def _group_scores(used: list[OutcomeRecord], key) -> dict:
+    """The same numbers per group (kind of market, sport, league, amount of evidence): the forecasts may be good for one group and poor for another."""
     out = {}
-    for kind in sorted({r.market_kind for r in used}):
-        rows = [r for r in used if r.market_kind == kind]
+    for kind in sorted({key(r) for r in used}):
+        rows = [r for r in used if key(r) == kind]
         both = [r for r in rows if r.baseline_probability is not None and _mid(r) is not None]
         out[kind] = {
             "outcomes": len(rows), "games": len({r.event_ticker for r in rows}),
@@ -174,7 +175,18 @@ def _kind_scores(used: list[OutcomeRecord]) -> dict:
     return out
 
 
-def score_records(engine, since: datetime | None = None) -> dict:
+def _evidence_bucket(flag_claims: int):
+    """none, a few, enough: the edge is the number of supported claims a flag needs (MIN_SUPPORTED_CLAIMS)."""
+    def bucket(r: OutcomeRecord) -> str:
+        if r.supported_claims == 0:
+            return "none"
+        return f"1 to {flag_claims - 1} supported claims" if r.supported_claims < flag_claims else f"{flag_claims} or more supported claims"
+    return bucket
+
+
+def score_records(engine, since: datetime | None = None, series: dict[str, tuple[str, str]] | None = None, flag_claims: int = 5) -> dict:
+    """`series` maps a series ticker to (sport, league), from SPORTS_SERIES; without it the sport and league groups are left out.
+    A game's records, whatever the market, carry the game's event ticker, so the game's series gives their sport."""
     with DbSession(engine) as db:
         query = select(OutcomeRecord)
         if since:
@@ -214,7 +226,10 @@ def score_records(engine, since: datetime | None = None) -> dict:
         },
         "without_two_sided_quote": sum(1 for r in used if _mid(r) is None),
         "without_baseline": sum(1 for r in used if r.baseline_probability is None),
-        "by_kind": _kind_scores(used),
+        "by_kind": _group_scores(used, lambda r: r.market_kind),
+        "by_sport": None if series is None else _group_scores(used, lambda r: series.get(r.event_ticker.split("-")[0], ("unknown", "unknown"))[0]),
+        "by_league": None if series is None else _group_scores(used, lambda r: series.get(r.event_ticker.split("-")[0], ("unknown", "unknown"))[1]),
+        "by_evidence": _group_scores(used, _evidence_bucket(flag_claims)),
         "paper_all": _paper(used),
         "paper_flagged": _paper([r for r in used if r.meaningful]),
         "enough_games": len({r.event_ticker for r in used}) >= MIN_GAMES,
@@ -233,13 +248,19 @@ def format_report(s: dict) -> str:
         f"plain AI call {f(s['same_records']['baseline'])}, Kalshi price (bid-ask middle) {f(s['same_records']['market'])}",
         f"Not in that comparison: {s['without_two_sided_quote']} without a two-sided quote, {s['without_baseline']} without a baseline.",
     ]
-    for kind, k in s.get("by_kind", {}).items():
-        same = k["same_records"]
-        lines.append(
-            f"  {kind}: {k['outcomes']} outcomes in {k['games']} games, Brier ours {f(k['brier_ours'])}; on the {same['n']} with all three: "
-            f"ours {f(same['ours'])}, plain AI {f(same['baseline'])}, Kalshi {f(same['market'])}; chosen side at the ask: "
-            f"{k['paper_all']['bets']} bets, average {f(k['paper_all']['average_result'])} dollars"
-        )
+    for heading, groups in (("By kind of market", s.get("by_kind")), ("By sport", s.get("by_sport")), ("By league", s.get("by_league")),
+                            ("By amount of confirmed evidence", s.get("by_evidence"))):
+        if not groups:
+            continue
+        lines.append(f"{heading}:")
+        for kind, k in groups.items():
+            same = k["same_records"]
+            lines.append(
+                f"  {kind}: {k['outcomes']} outcomes in {k['games']} games, Brier ours {f(k['brier_ours'])}; on the {same['n']} with all three: "
+                f"ours {f(same['ours'])}, plain AI {f(same['baseline'])}, Kalshi {f(same['market'])}; chosen side at the ask: "
+                f"{k['paper_all']['bets']} bets, average {f(k['paper_all']['average_result'])} dollars"
+                + (f" (too few games: fewer than {MIN_GROUP_GAMES})" if k["games"] < MIN_GROUP_GAMES else "")
+            )
     for key, label in (("paper_all", "Chosen side at the ask, all"), ("paper_flagged", "Chosen side at the ask, flagged as meaningful")):
         p = s[key]
         lines.append(

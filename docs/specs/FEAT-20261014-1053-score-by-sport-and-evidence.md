@@ -32,3 +32,9 @@ Hand-worked set with two sports and two evidence levels (extends `test_scores_on
 ## Checks to state at close
 
 Lateral spread: every consumer of `score_records` output (the command, `format_report`, tests; nothing else reads it). Causal depth: the need is "see what carries the result"; sport, league and evidence are three views of it, and kind of market already existed; one more factor, the number of forecasters that stayed valid, is already near-constant (3) so it is not split.
+
+## Result (2026-10-14)
+
+Built as specified: `_group_scores` replaces `_kind_scores`; `score_records(engine, since, series, flag_claims)` adds `by_sport`, `by_league` and `by_evidence` (buckets "none", "1 to 4", "5 or more" supported claims, the edge taken from `MIN_SUPPORTED_CLAIMS`); the command passes the series map from `SPORTS_SERIES`; groups with fewer than 5 games are printed with a warning. 491 backend tests pass (1 new). Run live on the 15 scored games, the report shows for example tennis 10 games (ours 0.200, plain AI about 0.258, Kalshi 0.176) and games with 5 or more supported claims 9 games (ours 0.189, plain AI 0.212, Kalshi 0.145): every group is still too small to decide anything.
+
+Checks done: lateral spread (the only consumers of the score output are the command, `format_report` and the tests); causal depth (kind of market already existed; sport, league and evidence added; the number of valid forecasters is near constant so not split).

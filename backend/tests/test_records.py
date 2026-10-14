@@ -308,6 +308,32 @@ def test_scores_are_also_shown_per_kind_of_market(fresh_db):
 
 
 @needs_db
+def test_scores_are_also_shown_per_sport_league_and_amount_of_evidence(fresh_db):
+    command.upgrade(alembic_config(), "head")
+    a = scored_record("KXATPMATCH-X1", 0.8, True, 0.6, 0.50, 0.54, "yes")        # tennis, ATP, 0 claims: Brier 0.04
+    b = scored_record("KXATPCHALLENGERMATCH-X2", 0.3, False, 0.5, 0.40, 0.44, "no", no_ask=0.60)  # tennis, Challenger, 3 claims: 0.09
+    c = scored_record("KXMLBGAME-X3", 0.6, False, 0.7, 0.50, 0.55, "yes")        # baseball, MLB, 7 claims: 0.36
+    d = scored_record("KXNEWGAME-X4", 0.5, True, 0.5, 0.45, 0.50, "yes")         # a series that is not configured: 0.25
+    a.supported_claims, b.supported_claims, c.supported_claims, d.supported_claims = 0, 3, 7, 7
+    with DbSession(fresh_db) as db:
+        db.add_all([a, b, c, d])
+        db.commit()
+    series = {"KXATPMATCH": ("Tennis", "ATP"), "KXATPCHALLENGERMATCH": ("Tennis", "ATP Challenger"), "KXMLBGAME": ("Baseball", "MLB")}
+    s = score_records(fresh_db, series=series, flag_claims=5)
+    assert set(s["by_sport"]) == {"Tennis", "Baseball", "unknown"}
+    assert s["by_sport"]["Tennis"]["games"] == 2 and s["by_sport"]["Tennis"]["brier_ours"] == pytest.approx((0.04 + 0.09) / 2)
+    assert s["by_sport"]["Baseball"]["brier_ours"] == pytest.approx(0.36) and s["by_sport"]["unknown"]["brier_ours"] == pytest.approx(0.25)
+    assert set(s["by_league"]) == {"ATP", "ATP Challenger", "MLB", "unknown"}
+    assert set(s["by_evidence"]) == {"none", "1 to 4 supported claims", "5 or more supported claims"}
+    assert s["by_evidence"]["none"]["brier_ours"] == pytest.approx(0.04) and s["by_evidence"]["5 or more supported claims"]["games"] == 2
+    report = format_report(s)
+    assert "By sport:" in report and "  Tennis: 2 outcomes in 2 games" in report and "By amount of confirmed evidence:" in report
+    assert "too few games: fewer than 5" in report
+    without = score_records(fresh_db)  # no series map: the sport and league groups are left out, the rest stays
+    assert without["by_sport"] is None and without["by_league"] is None and "By sport:" not in format_report(without)
+
+
+@needs_db
 def test_several_forecasts_of_one_market_score_as_the_latest_before_the_start_and_the_first_is_compared(fresh_db):
     command.upgrade(alembic_config(), "head")
     first = scored_record("E1", 0.20, True, 0.5, 0.50, 0.54, "yes")
