@@ -163,6 +163,12 @@ class OutcomeRecord(Base):
     fee_type: Mapped[str | None] = mapped_column(String(32))
     fee_multiplier: Mapped[Decimal | None] = mapped_column(Numeric(6, 3))
     fee_source: Mapped[str | None] = mapped_column(String(64))
+    # Bookmaker benchmark at that moment (winner markets only): consensus with the margin removed, Pinnacle alone, how many books
+    book_probability: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    book_pinnacle: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    book_count: Mapped[int | None] = mapped_column(Integer)
+    book_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    book_note: Mapped[str | None] = mapped_column(Text)  # why there is no bookmaker price
     # What our rule said then
     side: Mapped[str | None] = mapped_column(String(3))
     net_edge: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))

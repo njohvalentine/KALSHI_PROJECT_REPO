@@ -66,7 +66,7 @@ def _finish(engine, run_id: str, fields: dict, finished_at: datetime, prediction
 
 async def execute_run(
     *, engine, graph, settings: Settings, run_id: str, game: dict, judge=None, forecaster=None, kalshi=None,
-    fetch_options: dict | None = None,
+    fetch_options: dict | None = None, odds=None,
 ) -> None:
     await asyncio.to_thread(_update, engine, run_id, status="running", started_at=datetime.now(UTC), stage="research")
     config = {
@@ -88,7 +88,7 @@ async def execute_run(
 
             later = await run_later_stages(
                 engine=engine, run_id=run_id, game=GameInfo(**game), findings=findings, settings=settings, judge=judge,
-                forecaster=forecaster, kalshi=kalshi, fetch_options=fetch_options, set_stage=set_stage,
+                forecaster=forecaster, kalshi=kalshi, fetch_options=fetch_options, set_stage=set_stage, odds=odds,
             )
             prediction = later.prediction
             fields = summarize(state, settings, later.usages)

@@ -20,6 +20,7 @@ from app.research.compare import compare_run
 from app.research.fetch import fetch_run_sources
 from app.research.forecast import ForecastModel, run_baseline, run_forecasters, save_forecasts
 from app.research.predict import build_prediction
+from app.odds import book_for_game
 from app.research.records import build_records, save_records
 from app.research.schemas import GameInfo
 
@@ -52,6 +53,13 @@ async def _stage(name: str, set_stage: Callable[[str], Awaitable[None]], work):
         raise StageFailed(name, type(exc).__name__) from exc
 
 
+def _start(game: GameInfo) -> datetime | None:
+    try:
+        return datetime.fromisoformat(game.starts_at.replace("Z", "+00:00")) if game.starts_at else None
+    except ValueError:
+        return None
+
+
 def _supported(engine, run_id: str, findings: list[dict]) -> list[dict]:
     with DbSession(engine) as db:
         checks = db.scalars(select(ClaimCheck).where(ClaimCheck.run_id == run_id)).all()
@@ -60,7 +68,7 @@ def _supported(engine, run_id: str, findings: list[dict]) -> list[dict]:
 
 async def run_later_stages(
     *, engine, run_id: str, game: GameInfo, findings: list[dict], settings: Settings, judge: ClaimJudge | None,
-    forecaster: ForecastModel | None, kalshi, set_stage: Callable[[str], Awaitable[None]], fetch_options: dict | None = None,
+    forecaster: ForecastModel | None, kalshi, set_stage: Callable[[str], Awaitable[None]], fetch_options: dict | None = None, odds=None,
 ) -> PipelineResult:
     result = PipelineResult(prediction={})
     if not (settings.fetch_enabled and settings.check_enabled):
@@ -94,7 +102,11 @@ async def run_later_stages(
             await asyncio.to_thread(save_forecasts, engine, run_id, forecast_set)
             prediction["comparison"] = await _stage("compare", set_stage, compare_run(
                 kalshi, game.event_ticker, prediction, settings, [(g.event_ticker, g.series_ticker) for g in game.groups], baseline))
-            records = build_records(run_id, game, prediction, prediction["comparison"], baseline, datetime.now(UTC))
+            # One read of the odds feed per league (cached); it never fails the run: a failure is a note on the record.
+            book = await book_for_game(
+                odds, event_ticker=game.event_ticker, title=game.title, starts_at=_start(game),
+                outcome_names=game.outcome_names, outcome_tickers=game.outcome_tickers)
+            records = build_records(run_id, game, prediction, prediction["comparison"], baseline, datetime.now(UTC), book)
             await asyncio.to_thread(save_records, engine, records)
         result.prediction = prediction
     except StageFailed as failed:

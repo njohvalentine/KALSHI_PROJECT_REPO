@@ -100,6 +100,10 @@ The limits are settings in `.env.example` (`ORDER_MAX_CONTRACTS`, `ORDER_MAX_COS
 
 On the Opportunities page or on a run page, **Add “yes” / Add “no”** on up to `TICKET_MAX_LEGS` (20) markets, then **Prepare ticket** in the panel at the bottom (it stays while you move between pages). A ticket pays only if every leg wins. It may hold several markets of one game (winner, total, both teams to score) but only one from each group of markets; when it does, its combined numbers are marked rough because those legs move together. Its price and chance are the legs multiplied, and the fee uses the dearest leg's fee type. This is the simulation's price; a real Kalshi combo is quoted on request and is usually worse. The Approval page shows each game with its own checks. A ticket is lost as soon as one game is lost; if a game is voided the stake is returned.
 
+### Bookmaker benchmark (The Odds API)
+
+Off by default. To switch on, put `ODDS_ENABLED=true` and `ODDS_API_KEY=<your key>` in `.env` (the key is a secret) and run `docker compose up -d`; the app refuses to start if the key is missing or odd. Each researched game then saves, with its forecast, the consensus of the bookmakers (margin removed, exchanges left out) and Pinnacle's price, for winner markets in the leagues the feed lists (Premier League, Champions League, Europa League, MLS, La Liga, Serie A, Bundesliga, Ligue 1, MLB, NPB, KBO and the ATP and WTA tournaments that are running; **not Challengers**). A game that does not match, or a feed error, saves the reason and never fails the run. One read of a league costs one credit per region and is shared by the games researched within `ODDS_CACHE_MINUTES`; the free plan has 500 credits a month and the log warns below 50. `score-records` prints how many outcomes have a bookmaker price and the scores of ours, the plain AI, Kalshi and the bookmakers on the same outcomes.
+
 ## 9. Backups
 
 The database holds everything (runs, sources, forecasts, records, alerts, accounts). A backup:

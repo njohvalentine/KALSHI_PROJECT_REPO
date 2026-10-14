@@ -132,7 +132,7 @@ async def _run_and_release(request_app, run_id: str, game: GameInfo) -> None:
         await execute_run(
             engine=state.engine, graph=state.research_graph, settings=state.settings,
             run_id=run_id, game=asdict(game), judge=state.judge, forecaster=state.forecaster, kalshi=state.kalshi,
-            fetch_options=state.fetch_options,
+            fetch_options=state.fetch_options, odds=state.odds,
         )
     finally:
         state.active_runs -= 1

@@ -67,6 +67,9 @@ The web pages: Games, Opportunities, Prediction (runs and results), Approval and
 - Checks on citation quality and on safety (no order without approval).
 - **Done when:** a short report is delivered and you decide whether to continue. This may show the system is a good research assistant but cannot beat the market; that is a valid result.
 
+## Bookmaker benchmark (built, switched on with a key)
+- Bookmaker odds are saved next to each forecast so the accuracy test can compare our probability with Kalshi's price and with the bookmakers, on the same games. Winner markets only; Challenger tennis is not covered by the odds feed.
+
 ## Milestone 5: Approval screen (built, simulated)
 - A person prepares an order from an opportunity: the market, whether to buy "yes" or "no", the price at that moment, the number of contracts and the most it can cost. It expires after 10 minutes.
 - The Approval page shows the exact order in words and the checks before approving: not expired, game not started, forecast recent, within the betting limits, price has not moved against us, enough contracts offered, still worth a look. A failed check blocks approving.

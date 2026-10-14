@@ -334,6 +334,37 @@ def test_scores_are_also_shown_per_sport_league_and_amount_of_evidence(fresh_db)
 
 
 @needs_db
+def test_scores_compare_with_the_bookmakers_where_they_have_a_price(fresh_db):
+    command.upgrade(alembic_config(), "head")
+    a = scored_record("E1", 0.8, True, 0.6, 0.50, 0.54, "yes")   # ours 0.04, plain AI 0.16, Kalshi 0.52 -> 0.2304
+    b = scored_record("E2", 0.3, False, 0.5, 0.40, 0.44, "no", no_ask=0.60)  # ours 0.09, plain AI 0.25, Kalshi 0.42 -> 0.1764
+    c = scored_record("E3", 0.6, False, 0.7, 0.50, 0.55, "yes")  # no bookmaker price
+    a.book_probability, a.book_pinnacle, a.book_count = Decimal("0.7"), Decimal("0.72"), 40   # 0.09 and 0.0784
+    b.book_probability, b.book_count = Decimal("0.2"), 40                                      # 0.04, no Pinnacle
+    c.book_note = "no game of the odds feed matched by team names and start time"
+    with DbSession(fresh_db) as db:
+        db.add_all([a, b, c])
+        db.commit()
+    bk = score_records(fresh_db)["bookmakers"]
+    assert (bk["winner_outcomes"], bk["covered_outcomes"], bk["covered_games"], bk["n"]) == (3, 2, 2, 2)
+    assert bk["ours"] == pytest.approx((0.04 + 0.09) / 2) and bk["baseline"] == pytest.approx((0.16 + 0.25) / 2)
+    assert bk["market"] == pytest.approx((0.48 ** 2 + 0.42 ** 2) / 2) and bk["book"] == pytest.approx((0.09 + 0.04) / 2)
+    assert bk["pinnacle_n"] == 1 and bk["pinnacle"] == pytest.approx(0.0784) and bk["pinnacle_ours"] == pytest.approx(0.04)
+    report = format_report(score_records(fresh_db))
+    assert "Bookmakers (winner markets only): 2 of 3 scored winner outcomes (2 of 3 games)" in report and "bookmaker consensus 0.0650" in report
+    assert "Pinnacle alone, on the 1 that have it: Pinnacle 0.0784 against ours 0.0400" in report
+
+
+@needs_db
+def test_scores_say_so_when_no_outcome_has_a_bookmaker_price(fresh_db):
+    command.upgrade(alembic_config(), "head")
+    with DbSession(fresh_db) as db:
+        db.add(scored_record("E1", 0.8, True, 0.6, 0.50, 0.54, "yes"))
+        db.commit()
+    assert "no scored outcome has a bookmaker price yet" in format_report(score_records(fresh_db))
+
+
+@needs_db
 def test_several_forecasts_of_one_market_score_as_the_latest_before_the_start_and_the_first_is_compared(fresh_db):
     command.upgrade(alembic_config(), "head")
     first = scored_record("E1", 0.20, True, 0.5, 0.50, 0.54, "yes")

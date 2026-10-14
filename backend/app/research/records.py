@@ -38,7 +38,8 @@ def _parse_time(value: str | None) -> datetime | None:
 
 
 def build_records(
-    run_id: str, game: GameInfo, prediction: dict, comparison: dict, baseline: dict[str, float] | None, created_at: datetime
+    run_id: str, game: GameInfo, prediction: dict, comparison: dict, baseline: dict[str, float] | None, created_at: datetime,
+    book: dict | None = None,
 ) -> list[OutcomeRecord]:
     """One record per outcome from a finished prediction and its comparison. No prediction, no records."""
     if "outcomes" not in prediction:
@@ -48,9 +49,12 @@ def build_records(
     priced = {o["market_ticker"]: o for o in comparison.get("outcomes", [])}
     fee = comparison.get("fee") or {}
     why_no_market = comparison.get("unavailable")
+    book = book or {"at": None, "by_ticker": {}, "note": "no bookmaker price was looked for"}
     records = []
     for o in prediction["outcomes"]:
         c = priced.get(o["market_ticker"])
+        kind = o.get("kind", "winner")
+        b = book["by_ticker"].get(o["market_ticker"])
         yes, no = (c or {}).get("yes"), (c or {}).get("no")
         records.append(OutcomeRecord(
             run_id=run_id, event_ticker=game.event_ticker, market_ticker=o["market_ticker"], outcome=o["outcome"],
@@ -67,6 +71,9 @@ def build_records(
             fee_source=((c or {}).get("fee") or fee).get("source"), market_kind=o.get("kind", "winner"),
             side=(c or {}).get("side"), net_edge=_dec((c or {}).get("net_edge")), worst_case_edge=_dec((c or {}).get("worst_case_edge")),
             meaningful=bool((c or {}).get("meaningful")),
+            book_probability=_dec(round(b["probability"], 4)) if b else None, book_pinnacle=_dec(round(b["pinnacle"], 4)) if b and b["pinnacle"] is not None else None,
+            book_count=b["count"] if b else None, book_at=book.get("at") if b else None,
+            book_note=None if b else ("bookmaker prices are only read for winner markets" if kind != "winner" else book.get("note")),
             reasons=c["reasons"] if c is not None else ([f"no market snapshot: {why_no_market}"] if why_no_market else ["no market snapshot"]),
         ))
     return records
@@ -209,6 +216,9 @@ def score_records(engine, since: datetime | None = None, series: dict[str, tuple
 
     ours = [(r.probability, r.resolved_yes) for r in used]
     with_all = [r for r in used if r.baseline_probability is not None and _mid(r) is not None]
+    winners = [r for r in used if r.market_kind == "winner"]
+    with_book = [r for r in with_all if r.book_probability is not None]
+    with_pinnacle = [r for r in with_book if r.book_pinnacle is not None]
     return {
         "records": len(records), "used": len(used), "games": len({r.event_ticker for r in used}),
         "updated": {
@@ -223,6 +233,19 @@ def score_records(engine, since: datetime | None = None, series: dict[str, tuple
             "ours": _brier([(r.probability, r.resolved_yes) for r in with_all]),
             "baseline": _brier([(r.baseline_probability, r.resolved_yes) for r in with_all]),
             "market": _brier([(_mid(r), r.resolved_yes) for r in with_all]),
+        },
+        "bookmakers": {
+            "winner_outcomes": len(winners), "winner_games": len({r.event_ticker for r in winners}),
+            "covered_outcomes": sum(1 for r in winners if r.book_probability is not None),
+            "covered_games": len({r.event_ticker for r in winners if r.book_probability is not None}),
+            "n": len(with_book), "games": len({r.event_ticker for r in with_book}),
+            "ours": _brier([(r.probability, r.resolved_yes) for r in with_book]),
+            "baseline": _brier([(r.baseline_probability, r.resolved_yes) for r in with_book]),
+            "market": _brier([(_mid(r), r.resolved_yes) for r in with_book]),
+            "book": _brier([(r.book_probability, r.resolved_yes) for r in with_book]),
+            "pinnacle_n": len(with_pinnacle),
+            "pinnacle": _brier([(r.book_pinnacle, r.resolved_yes) for r in with_pinnacle]),
+            "pinnacle_ours": _brier([(r.probability, r.resolved_yes) for r in with_pinnacle]),
         },
         "without_two_sided_quote": sum(1 for r in used if _mid(r) is None),
         "without_baseline": sum(1 for r in used if r.baseline_probability is None),
@@ -248,6 +271,16 @@ def format_report(s: dict) -> str:
         f"plain AI call {f(s['same_records']['baseline'])}, Kalshi price (bid-ask middle) {f(s['same_records']['market'])}",
         f"Not in that comparison: {s['without_two_sided_quote']} without a two-sided quote, {s['without_baseline']} without a baseline.",
     ]
+    bk = s.get("bookmakers")
+    if bk and bk["covered_outcomes"]:
+        lines.append(
+            f"Bookmakers (winner markets only): {bk['covered_outcomes']} of {bk['winner_outcomes']} scored winner outcomes ({bk['covered_games']} of {bk['winner_games']} games) have a bookmaker price. "
+            f"On the {bk['n']} that also have the other three: ours {f(bk['ours'])}, plain AI {f(bk['baseline'])}, Kalshi {f(bk['market'])}, bookmaker consensus {f(bk['book'])}."
+        )
+        if bk["pinnacle_n"]:
+            lines.append(f"  Pinnacle alone, on the {bk['pinnacle_n']} that have it: Pinnacle {f(bk['pinnacle'])} against ours {f(bk['pinnacle_ours'])}.")
+    elif bk:
+        lines.append("Bookmakers: no scored outcome has a bookmaker price yet (the benchmark records only forecasts made while it is on, for winner markets in the leagues the feed lists).")
     for heading, groups in (("By kind of market", s.get("by_kind")), ("By sport", s.get("by_sport")), ("By league", s.get("by_league")),
                             ("By amount of confirmed evidence", s.get("by_evidence"))):
         if not groups:

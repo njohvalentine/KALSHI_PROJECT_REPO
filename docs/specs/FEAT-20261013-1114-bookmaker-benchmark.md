@@ -41,3 +41,11 @@ Hand-worked margin removal and consensus (median, exchanges excluded, Pinnacle k
 ## Checks to state at close
 
 Lateral spread: every place that creates or reads `outcome_records` (record step, resolve, score, the compact forecast and the alerts do not read it). Causal depth: the need is "is Kalshi or are we closer to the truth"; the bookmaker benchmark covers winner markets in leagues the feed lists; Challenger tennis and the other market kinds stay uncovered and the scores must say so.
+
+## Result (2026-10-14)
+
+Built as specified: `app/odds.py` (client, cache, name matching, margin removal, consensus), settings `ODDS_ENABLED`, `ODDS_API_KEY`, `ODDS_REGIONS`, `ODDS_CACHE_MINUTES` (the app refuses to start with the benchmark on and a missing or odd key), five nullable columns on `outcome_records` (migration `7d4328e17695`), the record step reads the odds once per league and saves the price or the reason, `score-records` prints the four-way comparison and Pinnacle alone. 515 backend tests pass (25 new or changed). Live check with the real key on 2026-10-14: Roma–Real Madrid, Bodoe/Glimt–Dortmund and Man City–PSG matched (20 bookmakers each in region eu; Pinnacle within 1 point of the consensus) and Medvedev–Tsitsipas matched through the active ATP tournament key; 6 credits used of 500 in all.
+
+A defect found on the way: the log filter that hides a secret from the HTTP library's own log lines did not work with the real library (it logs the address as an object, not a string). The odds filter masks the finished message and is tested with a real request. The same flaw in the Telegram filter is BUG-20261014-1225 (spec written, waiting for approval).
+
+Checks done: lateral spread (every creator and reader of `outcome_records`: the record step, resolve, scoring; alerts and the Opportunities page do not read it; every secret that travels in an address: the Telegram token only); causal depth (the feed lists no Challenger tennis, so most tennis games get no bookmaker price and `score-records` says how many are covered; totals, spreads and both teams to score have no bookmaker price in this version).

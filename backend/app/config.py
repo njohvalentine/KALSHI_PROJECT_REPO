@@ -120,6 +120,10 @@ class Settings:
     ticket_max_legs: int
     alerts_enabled: bool
     telegram_bot_token: str | None
+    odds_enabled: bool
+    odds_api_key: str | None
+    odds_regions: str
+    odds_cache_minutes: float
     telegram_chat_id: str | None
     record_baseline: bool
     resolve_after_hours: float
@@ -311,6 +315,17 @@ def load_settings(env: Mapping[str, str]) -> Settings:
             problems.append("TELEGRAM_BOT_TOKEN does not look like a Telegram bot token (digits, a colon, then letters and digits)")
         if telegram_chat and not re.fullmatch(r"-?\d+", telegram_chat):
             problems.append("TELEGRAM_CHAT_ID must be a number (the chat id printed by the telegram-chat-id command)")
+    odds_enabled = _parse_bool("ODDS_ENABLED", env.get("ODDS_ENABLED", "false"), problems)
+    odds_api_key = env.get("ODDS_API_KEY", "").strip() or None
+    odds_regions = env.get("ODDS_REGIONS", "eu").strip()
+    odds_cache_minutes = _parse_positive_float("ODDS_CACHE_MINUTES", env.get("ODDS_CACHE_MINUTES", "10"), problems)
+    if odds_enabled:
+        if not odds_api_key:
+            problems.append("ODDS_ENABLED=true needs ODDS_API_KEY")
+        elif not re.fullmatch(r"[A-Za-z0-9]{16,64}", odds_api_key):
+            problems.append("ODDS_API_KEY does not look like a The Odds API key (letters and digits)")
+        if not re.fullmatch(r"(us|us2|uk|eu|au)(,(us|us2|uk|eu|au))*", odds_regions):
+            problems.append("ODDS_REGIONS must be a comma separated list of us, us2, uk, eu, au")
     record_baseline = _parse_bool("RECORD_BASELINE", env.get("RECORD_BASELINE", "true"), problems)
     resolve_after_hours = _parse_positive_float("RESOLVE_AFTER_HOURS", env.get("RESOLVE_AFTER_HOURS", "3"), problems)
 
@@ -327,6 +342,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     else:
         log.warning("Research is OFF: OPENAI_API_KEY is not set. Starting a run will be refused.")
 
+    log.info("The bookmaker benchmark is %s." % (f"ON (regions {odds_regions})" if odds_enabled else "off (ODDS_ENABLED is not 'true')"))
     log.info("Alerts are %s." % ("sent to a Telegram chat" if alerts_enabled else "only recorded in the app (ALERTS_ENABLED is not 'true')"))
     if monitor_enabled:
         log.info(
@@ -401,6 +417,10 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         ticket_max_legs=ticket_max_legs,
         alerts_enabled=alerts_enabled,
         telegram_bot_token=telegram_token,
+        odds_enabled=odds_enabled,
+        odds_api_key=odds_api_key,
+        odds_regions=odds_regions,
+        odds_cache_minutes=odds_cache_minutes,
         telegram_chat_id=telegram_chat,
         record_baseline=record_baseline,
         resolve_after_hours=resolve_after_hours,
