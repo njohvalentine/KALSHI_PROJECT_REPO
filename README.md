@@ -82,4 +82,5 @@ The browser tests need extra steps (a test account and a browser download). They
 - `docs/ARCHITECTURE.md`: how it works.
 - `docs/MILESTONES.md`: what is built and what is not.
 - `docs/ACCURACY-REPORT-2026-10-15.md`: how good the forecasts are.
+- `docs/HOW-IT-WORKS.md`: what the system does, its agents, strategies and every term explained.
 - `docs/DEMO.md`: a script for showing the app.
