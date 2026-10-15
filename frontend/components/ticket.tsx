@@ -5,7 +5,7 @@ import { createContext, useContext, useMemo, useState, useSyncExternalStore, typ
 import { Button } from "@/components/ui/button";
 import { cents, pct } from "@/lib/format";
 
-export type TicketLeg = { runId: string; eventTicker: string; marketTicker: string; title: string; market: string; side: "yes" | "no"; price: number; probability: number };
+export type TicketLeg = { runId: string; eventTicker: string; marketTicker: string; title: string; market: string; side: "yes" | "no"; price: number; probability: number; flagged?: boolean };
 type Ctx = { legs: TicketLeg[]; toggle: (leg: TicketLeg) => void };
 const STORE = "ticket-legs";
 // Kalshi groups the markets of one question in one event (the winner, one total, both teams to score); a ticket takes one leg from each group.
@@ -80,6 +80,7 @@ function TicketPanel({ clear }: { clear: () => void }) {
   if (legs.length === 0) return null;
   const price = legs.reduce((a, l) => a * l.price, 1);
   const probability = legs.reduce((a, l) => a * l.probability, 1);
+  const notFlagged = legs.filter((l) => l.flagged === false).length; // legs saved before this field existed are not counted
   const runs = legs.map((l) => l.runId);
   const linked = new Set(runs.filter((r) => runs.indexOf(r) !== runs.lastIndexOf(r))).size;
 
@@ -131,6 +132,11 @@ function TicketPanel({ clear }: { clear: () => void }) {
         certain ticket.{legs.length >= 3 ? " Three or more legs: take extra care." : ""}
         {legs.length >= 15 ? ` This ticket wins about 1 time in ${Math.max(1, Math.round(1 / probability))}.` : ""}
       </p>
+      {notFlagged > 0 ? (
+        <p className="mt-1 text-sm text-warn">
+          {notFlagged === 1 ? "One of these legs is" : `${notFlagged} of these legs are`} not marked worth a look: our estimate there is not better than the market’s price.
+        </p>
+      ) : null}
       {linked > 0 ? (
         <p className="mt-1 text-sm text-warn">
           {linked === 1 ? "One game has" : `${linked} games have`} several bets on this ticket. Those bets move together, so the combined chance and price here are rough, and a real Kalshi

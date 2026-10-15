@@ -30,3 +30,11 @@ Playwright (the tests added on 2026-10-14): on the "All researched games" view, 
 ## Checks to state at close
 
 Lateral spread: every place that renders an add button (Opportunities row, run page markets) carries `flagged`, and the panel is the only reader. Causal depth: the need is "let me choose any game"; the button on the ranking answers it, the link to the run page answers "choose another market or side", and the note keeps the "not flagged" signal visible instead of hiding the game.
+
+## Result (2026-10-15)
+
+Built as specified, frontend only: every Opportunities row with a price and a fresh forecast has the add button (best market and side) and a link "Other markets and the other side: open the game"; a row with an old forecast says to research the game again; each leg carries `flagged` (the row's flag on the Opportunities page; `meaningful` and the same side on a run page) and the ticket panel says "N of these legs are not marked worth a look: our estimate there is not better than the market's price." Lint and build clean; the frontend image was rebuilt (the `npm ci` that stalled on 2026-10-14 finished this time).
+
+Browser tests: 2 new (a non-flagged row can be added and the ticket shows the note; a row with an old forecast has the text and no button). Run live on 2026-10-15: with every forecast older than 12 hours the first skipped itself (as designed) and the second passed; after researching one upcoming game (Zverev vs de Minaur, about 0.45 USD) the first one ran and passed too. Total: 9 browser tests, 8 pass and 1 (a prepared ticket on the Approval page) skips itself when no game is open for a ticket.
+
+Checks done: lateral spread (the two places that render an add button, the Opportunities row and the run page markets, both carry `flagged`; the panel is the only reader; legs saved earlier without the field are not counted); causal depth (the button answers "let me choose any game", the link answers "another market or side", the note keeps the not-flagged signal visible).

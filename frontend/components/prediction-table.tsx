@@ -20,7 +20,7 @@ function TicketButtons({ outcome, market, run }: { outcome: PredictionOutcome; m
         s.price === null ? null : (
           <AddToTicket
             key={s.side}
-            leg={{ runId: run.id, eventTicker: run.event_ticker, marketTicker: market.market_ticker, title: run.event_title, market: outcome.outcome, side: s.side, price: s.price, probability: s.probability }}
+            leg={{ runId: run.id, eventTicker: run.event_ticker, marketTicker: market.market_ticker, title: run.event_title, market: outcome.outcome, side: s.side, price: s.price, probability: s.probability, flagged: market.meaningful && market.side === s.side }}
           />
         ),
       )}

@@ -65,13 +65,21 @@ function Row({ o }: { o: Opportunity }) {
               <dd className="tabular-nums">{o.supported_claims}</dd>
             </div>
           </dl>
-          {o.flagged && !o.stale ? (
-            <div className="mt-2">
+          {o.stale ? (
+            <p className="mt-2 text-sm text-muted-foreground">The forecast is old: research the game again to add it to a ticket.</p>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
               <AddToTicket
-                leg={{ runId: o.run_id, eventTicker: o.event_ticker, marketTicker: b.market_ticker, title: o.title, market: b.market, side: b.side, price: b.price, probability: b.our_probability }}
+                leg={{
+                  runId: o.run_id, eventTicker: o.event_ticker, marketTicker: b.market_ticker, title: o.title, market: b.market, side: b.side, price: b.price,
+                  probability: b.our_probability, flagged: o.flagged,
+                }}
               />
+              <Link href={`/prediction/${o.run_id}`} className="text-sm text-primary underline underline-offset-4">
+                Other markets and the other side: open the game
+              </Link>
             </div>
-          ) : null}
+          )}
           {o.flagged && o.flagged_markets > 1 ? (
             <p className="mt-2 text-sm text-muted-foreground">
               {o.flagged_markets - 1} more market{o.flagged_markets - 1 === 1 ? "" : "s"} of this game {o.flagged_markets - 1 === 1 ? "is" : "are"} also worth a look.{" "}

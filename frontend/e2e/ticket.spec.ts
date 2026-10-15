@@ -79,3 +79,22 @@ test("the Results page loads", async ({ signedIn: page }) => {
   await page.goto("/results");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Results");
 });
+
+test("any researched game with a fresh forecast can be added from the Opportunities page, and the ticket says when it is not marked worth a look", async ({ signedIn: page }) => {
+  await page.goto("/opportunities?all=1");
+  await page.getByText(/researched games? that have not started/).waitFor();
+  const notFlagged = page.locator("li", { hasText: "Not flagged" }).filter({ has: page.getByRole("button", { name: ADD_BUTTON }) });
+  test.skip((await notFlagged.count()) === 0, "no row that is not flagged and has a fresh forecast (forecasts older than 12 hours cannot be added)");
+  await notFlagged.first().getByRole("button", { name: ADD_BUTTON }).click();
+  await expect(page.getByRole("region", { name: "Ticket" })).toContainText("not marked worth a look");
+  await page.getByRole("region", { name: "Ticket" }).getByRole("button", { name: "Remove" }).first().click();
+});
+
+test("a row with an old forecast says to research the game again and has no add button", async ({ signedIn: page }) => {
+  await page.goto("/opportunities?all=1");
+  await page.getByText(/researched games? that have not started/).waitFor();
+  const stale = page.locator("li", { hasText: "Forecast is old" });
+  test.skip((await stale.count()) === 0, "no row with an old forecast right now");
+  await expect(stale.first()).toContainText("research the game again");
+  await expect(stale.first().getByRole("button", { name: ADD_BUTTON })).toHaveCount(0);
+});
