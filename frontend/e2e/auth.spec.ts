@@ -15,6 +15,7 @@ plain("a wrong password shows the message and stays on the sign-in page", async 
 
 test("signing in reaches the Games page and signing out returns to the sign-in page", async ({ signedIn: page }) => {
   await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  await expect(page.getByText("Paper trading")).toBeVisible(); // the chip that replaced the orange bar
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login/);
   await page.goto("/approval");
