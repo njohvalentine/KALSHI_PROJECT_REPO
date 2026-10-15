@@ -36,6 +36,7 @@ function Row({ o }: { o: Opportunity }) {
         </div>
         <div className="flex items-center gap-2">
           {o.flagged ? <Badge className="bg-good-soft text-good">Worth a look</Badge> : <Badge variant="outline">Not flagged</Badge>}
+          {o.measured === false ? <Badge variant="outline" title="This sport has fewer scored games than needed, so the flag has not been tested here">Sport not yet measured</Badge> : null}
           {o.stale ? <Badge className="bg-warn-soft text-warn">Forecast is old</Badge> : null}
         </div>
       </div>

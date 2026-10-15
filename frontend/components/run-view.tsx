@@ -55,6 +55,14 @@ export function RunView({ initial }: { initial: Run }) {
   return (
     <>
       {/* The forecast and the comparison use the full width: the table has six columns. */}
+      {!isActive(run.status) && run.measured === false ? (
+        <Alert className="mb-6">
+          <AlertTitle>This sport is not yet measured</AlertTitle>
+          <AlertDescription>
+            We have no scored results for {run.sport ?? "this sport"} yet. The forecast and the “worth a look” flag have not been tested here: read them as research, not as a signal.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {!isActive(run.status) ? <PredictionSection run={run} /> : null}
       {!isActive(run.status) ? <ForecastersSection run={run} /> : null}
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">

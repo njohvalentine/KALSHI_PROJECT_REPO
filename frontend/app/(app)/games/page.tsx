@@ -13,7 +13,7 @@ import { ago, bidAsk, pct, RUN_COST_NOTE } from "@/lib/format";
 import type { GamesResponse, LatestForecast, LatestRun, RunSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Params = { sport?: string; q?: string; started?: string };
+type Params = { sport?: string; q?: string; started?: string; more?: string };
 
 function href(params: Params, change: Partial<Params>): string {
   const merged = { ...params, ...change };
@@ -28,6 +28,7 @@ async function GamesList({ params }: { params: Params }) {
   if (params.sport) query.set("sport", params.sport);
   if (params.q) query.set("q", params.q);
   if (params.started) query.set("include_started", "true");
+  if (params.more && params.sport) query.set("more", "true"); // also load the sport's other leagues found on Kalshi (slower)
   // Both lookups run together. The latest-run lookup only decorates the buttons; if it fails the
   // list still works and the buttons simply start fresh.
   const [res, latestRes] = await Promise.all([backendFetch(`/api/games?${query}`), backendFetch("/api/runs/latest")]);
@@ -69,6 +70,30 @@ async function GamesList({ params }: { params: Params }) {
         })}
       </nav>
 
+      {data.more_sports.length > 0 ? (
+        <div className="mb-4">
+          <p className="mb-2 text-sm text-muted-foreground">
+            More on Kalshi, found by the app. They load slower, and until a sport has {data.measured_min_games} scored games its forecasts are not yet measured.
+          </p>
+          <nav aria-label="More sports on Kalshi" className="flex flex-wrap gap-2">
+            {data.more_sports.map((m) => {
+              const active = params.sport === m.sport && Boolean(params.more);
+              return (
+                <Link
+                  key={m.sport}
+                  href={href(params, { sport: m.sport, more: "1" })}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(buttonVariants({ variant: active ? "default" : "outline", size: "sm" }))}
+                >
+                  {m.sport}
+                  {m.also_measured ? " (other leagues)" : ""} · {m.games}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      ) : null}
+
       {data.errors.length > 0 ? (
         <Alert className="mb-4">
           <AlertTitle>Some leagues could not be loaded</AlertTitle>
@@ -80,7 +105,7 @@ async function GamesList({ params }: { params: Params }) {
 
       {data.notes.length > 0 ? (
         <Alert className="mb-4">
-          <AlertTitle>Start times are missing</AlertTitle>
+          <AlertTitle>Please note</AlertTitle>
           <AlertDescription>{data.notes.join(" ")}</AlertDescription>
         </Alert>
       ) : null}
@@ -105,7 +130,14 @@ async function GamesList({ params }: { params: Params }) {
                 <TableRow key={g.event_ticker}>
                   <TableCell className="whitespace-normal px-4 py-3.5">
                     <span className="block max-w-[34ch] font-medium">{g.title}</span>
-                    <span className="block text-sm text-muted-foreground">{g.league}</span>
+                    <span className="block text-sm text-muted-foreground">
+                      {g.league}
+                      {!g.measured ? (
+                        <Badge variant="outline" className="ml-2" title={`${g.scored_games} scored games in ${g.sport} so far; ${data.measured_min_games} are needed`}>
+                          Not yet measured
+                        </Badge>
+                      ) : null}
+                    </span>
                     <span className="mt-1 block text-sm md:hidden">
                       <LocalTime iso={g.starts_at} />
                       {g.started ? <Badge className="ml-2 bg-warn-soft text-warn">Started</Badge> : null}

@@ -56,3 +56,29 @@ The same flag rule gave 4 flagged bets averaging -0.057 per contract with C0, 7 
 ## Next
 
 Once the 23 games researched on 2026-10-14 have finished and `resolve-records` has run: `replay-forecasts --tune-until 2026-10-14T00:00:00 --final --yes` for C0, and the same with `--forecaster-count 5` for C1, each once. C1 is kept only if it beats C0 on the test set by at least 0.005 on the all-markets score.
+
+## Results on the test set (43 finished games, 376 outcomes; run 2026-10-15 about 04:40 UTC)
+
+The test set is the games whose run was made after 2026-10-14T00:00:00 UTC and that had finished by then (15 early games were held back from these numbers; 58 outcomes of other games were still unresolved). Each candidate was run exactly once with `--final`.
+
+All-markets Brier (lower is better) on the 376 outcomes that have a plain-AI call and a two-sided price; plain AI 0.1955, Kalshi 0.1798, the original forecast 0.1973.
+
+| Id | All markets | Winner markets only | Flagged markets (paper result per contract) | Model calls, cost |
+|---|---|---|---|---|
+| C0 (current settings) | 0.1989 | 0.2180 | 23 (-0.096) | 129, 2.61 USD |
+| C1 (5 forecasters) | 0.1960 | 0.2181 | 20 (-0.278) | 215, 4.21 USD |
+
+## Decision rule applied
+
+- **Noise floor:** C0 against the original forecast differs by 0.0016 on all markets, below 0.005, so the threshold stays 0.005.
+- **C1 against C0:** better by 0.0029, **below 0.005: not kept.** On the tuning set it was better by 0.0127; on games it was not tuned on the gain shrank to 0.0029, which is what chance usually does. On winner markets alone the two are level (0.2180 and 0.2181), as on the tuning set.
+- **Decision: keep the current settings (3 forecasters, medium effort).** C2 (high effort) was never adopted. R1 and R2 (stricter flag rules) were reported only.
+- **Flagged bets:** 23 and 20 markets, fewer than the 30 the plan requires, so the numbers are noise as a measure of profit. The direction is the same in every setting: the original run -0.129, C0 -0.096, C1 -0.278 per contract.
+
+## What the test set says about the system
+
+On games it was not tuned on, the replayed forecast (0.1989) is **no better than the plain AI with no research (0.1955)** and clearly behind Kalshi (0.1798). Research did not add forecasting skill here. No tested change to the forecasters (more forecasters, more effort) closes the gap to Kalshi.
+
+## Cost
+
+The two replays cost 6.82 USD together (the plan's estimate was 4 to 5 USD): the test set grew to 43 finished games after the daily batch of 2026-10-14 and C1 needs 5 calls a game.

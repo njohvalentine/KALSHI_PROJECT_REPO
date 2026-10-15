@@ -98,3 +98,13 @@ test("a row with an old forecast says to research the game again and has no add 
   await expect(stale.first()).toContainText("research the game again");
   await expect(stale.first().getByRole("button", { name: ADD_BUTTON })).toHaveCount(0);
 });
+
+test("the Games page offers more sports found on Kalshi, marks them as not yet measured, and keeps the measured ones as before", async ({ signedIn: page }) => {
+  await page.goto("/games");
+  await expect(page.getByRole("navigation", { name: "Sport" })).toBeVisible();
+  const more = page.getByRole("navigation", { name: "More sports on Kalshi" });
+  test.skip((await more.count()) === 0, "no other sport found on Kalshi right now (or Kalshi could not be reached)");
+  await more.getByRole("link").first().click();
+  await expect(page).toHaveURL(/more=1/);
+  await expect(page.getByText("Not yet measured", { exact: true }).first()).toBeVisible({ timeout: 60_000 }); // the first load asks Kalshi about each series
+});

@@ -88,6 +88,8 @@ export type Run = RunSummary & {
   plan: { angles: { name: string; question: string }[]; cut_angles: number } | null;
   result: { findings: Finding[]; errors: RunError[]; costs?: Record<string, string | null> } | null;
   prediction: Prediction | null;
+  sport?: string | null;
+  measured?: boolean | null;
   pages: PageInfo[];
   claim_checks: ClaimCheck[];
   forecasts: ForecastRow[];
@@ -123,6 +125,8 @@ export type Game = {
   starts_at: string | null;
   closes_at: string | null;
   started: boolean;
+  measured: boolean; // false: the sport has fewer scored games than measured_min_games
+  scored_games: number;
   outcomes: Outcome[];
 };
 
@@ -133,6 +137,8 @@ export type GamesResponse = {
   sports: string[];
   errors: { series: string; league: string; error: string }[];
   notes: string[];
+  more_sports: { sport: string; games: number; series: number; also_measured: boolean }[];
+  measured_min_games: number;
   fetched_at: string;
 };
 
@@ -161,6 +167,9 @@ export type Opportunity = {
   evidence: string | null;
   flagged: boolean;
   flagged_markets: number;
+  sport: string | null;
+  league: string | null;
+  measured: boolean | null; // false: no scored results for this sport yet; null: sport unknown
   best: OpportunityBest | null;
   unavailable: string | null;
   risks: string[];
