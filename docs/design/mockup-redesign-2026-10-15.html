@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forecast desk: sample redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f5f7f9; --card:#fff; --text:#13212e; --muted:#5b6b7a; --line:#e3e8ee; --primary:#2446d6; --primary-soft:#e8edfc;
+          --good:#0f7a4a; --good-soft:#e2f5ec; --warn:#a15c07; --warn-soft:#fdf1dc; --bad:#b42318; --bar-ours:#2446d6; --bar-ai:#9aa8b8; --bar-kalshi:#13212e; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"Schibsted Grotesk",system-ui,sans-serif; line-height:1.45; }
+  header { background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  .bar { max-width:1120px; margin:auto; padding:0 20px; min-height:60px; display:flex; align-items:center; gap:24px; }
+  .brand { font-weight:700; font-size:18px; letter-spacing:-.01em; }
+  nav { display:flex; gap:4px; flex:1; flex-wrap:wrap; }
+  nav a { padding:7px 12px; border-radius:8px; color:var(--muted); text-decoration:none; font-weight:500; font-size:15px; cursor:pointer; }
+  nav a.on { background:var(--primary-soft); color:var(--primary); }
+  .chip { font-size:12.5px; padding:4px 10px; border-radius:999px; background:var(--warn-soft); color:var(--warn); font-weight:600; white-space:nowrap; }
+  .user { font-size:14px; color:var(--muted); }
+  main { max-width:1120px; margin:auto; padding:28px 20px 64px; }
+  section.page { display:none; } section.page.on { display:block; }
+  h1 { font-size:28px; margin:0 0 4px; letter-spacing:-.02em; }
+  .lead { color:var(--muted); margin:0 0 24px; max-width:60ch; }
+  .grid { display:grid; gap:16px; }
+  .stats { grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
+  .label { font-size:13px; color:var(--muted); font-weight:500; }
+  .big { font-size:34px; font-weight:700; letter-spacing:-.02em; margin-top:2px; }
+  .sub { font-size:13px; color:var(--muted); margin-top:2px; }
+  h2 { font-size:17px; margin:0 0 4px; } .card p.note { margin:0 0 14px; color:var(--muted); font-size:14px; }
+  .two { grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); }
+  .row { display:grid; grid-template-columns:130px 1fr 52px; gap:10px; align-items:center; font-size:14px; margin:7px 0; }
+  .track { background:#eef1f5; border-radius:6px; height:12px; overflow:hidden; } .fill { height:100%; border-radius:6px; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; color:var(--muted); }
+  .legend { display:flex; gap:16px; font-size:13px; color:var(--muted); margin:6px 0 10px; flex-wrap:wrap; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; }
+  .callout { background:var(--warn-soft); color:#5c3a04; border-radius:12px; padding:12px 16px; font-size:14.5px; margin-bottom:16px; }
+  table { width:100%; border-collapse:collapse; font-size:14.5px; }
+  th { text-align:left; font-size:12.5px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; padding:10px 12px; border-bottom:1px solid var(--line); }
+  td { padding:13px 12px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tr:last-child td { border-bottom:0; }
+  td.r, th.r { text-align:right; font-variant-numeric:tabular-nums; }
+  .game b { display:block; font-weight:600; } .game span { color:var(--muted); font-size:13px; }
+  .gap { font-weight:700; font-size:16px; color:var(--good); }
+  .pill { font-size:12.5px; padding:3px 9px; border-radius:999px; font-weight:600; background:var(--good-soft); color:var(--good); white-space:nowrap; }
+  .pill.grey { background:#eef1f5; color:var(--muted); }
+  .btn { border:1px solid var(--line); background:var(--card); border-radius:9px; padding:7px 12px; font:inherit; font-size:14px; font-weight:600; cursor:pointer; color:var(--text); }
+  .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .filters { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .seg { padding:7px 14px; border-radius:9px; border:1px solid var(--line); background:var(--card); font-size:14px; font-weight:600; cursor:pointer; }
+  .seg.on { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .tablewrap { overflow-x:auto; }
+  .foot { margin-top:28px; font-size:13px; color:var(--muted); }
+  @media (max-width:640px) { .user { display:none; } .row { grid-template-columns:100px 1fr 46px; } }
+</style>
+</head>
+<body>
+<header><div class="bar">
+  <span class="brand">Forecast desk</span>
+  <nav id="nav">
+    <a data-p="dash" class="on">Dashboard</a><a data-p="games">Games</a><a data-p="opps">Opportunities</a><a data-p="approval">Approval</a><a data-p="results">Results</a>
+  </nav>
+  <span class="chip">Paper trading</span><span class="user">demo@example.com</span><button class="btn">Sign out</button>
+</div></header>
+<main>
+
+<section class="page on" id="dash">
+  <h1>Dashboard</h1>
+  <p class="lead">How the system is doing against the Kalshi price, and what is worth a look today.</p>
+  <div class="callout"><b>No sign of an edge yet.</b> On 62 finished games our forecasts are not better than the Kalshi price. This is not a final verdict: the sample is small.</div>
+  <div class="grid stats">
+    <div class="card"><div class="label">Finished games scored</div><div class="big">62</div><div class="sub">485 outcomes · 8 games still to finish</div></div>
+    <div class="card"><div class="label">Worth a look today</div><div class="big">4</div><div class="sub">of 15 researched games not yet started</div></div>
+    <div class="card"><div class="label">Flagged bets so far</div><div class="big">13 / 35</div><div class="sub">won · paper result −12.8¢ per contract</div></div>
+    <div class="card"><div class="label">Research spend</div><div class="big">$35</div><div class="sub">all time · about 70 games</div></div>
+  </div>
+  <div class="grid two">
+    <div class="card">
+      <h2>Forecast error, all games</h2><p class="note">Brier score. Lower is better.</p>
+      <div class="legend"><span><i class="dot" style="background:var(--bar-ours)"></i>Ours</span><span><i class="dot" style="background:var(--bar-ai)"></i>Plain AI</span><span><i class="dot" style="background:var(--bar-kalshi)"></i>Kalshi price</span></div>
+      <div class="row"><span>Ours</span><div class="track"><div class="fill" style="width:77.8%;background:var(--bar-ours)"></div></div><span class="num">0.1945</span></div>
+      <div class="row"><span>Plain AI</span><div class="track"><div class="fill" style="width:78.8%;background:var(--bar-ai)"></div></div><span class="num">0.1970</span></div>
+      <div class="row"><span>Kalshi price</span><div class="track"><div class="fill" style="width:70.2%;background:var(--bar-kalshi)"></div></div><span class="num">0.1755</span></div>
+    </div>
+    <div class="card">
+      <h2>By sport</h2><p class="note">Ours against the Kalshi price. Smaller bar is better.</p>
+      <div class="row"><span>Soccer · 28</span><div class="track"><div class="fill" style="width:74.9%;background:var(--bar-ours)"></div></div><span class="num">0.187</span></div>
+      <div class="row"><span>&nbsp;</span><div class="track"><div class="fill" style="width:65.7%;background:var(--bar-kalshi)"></div></div><span class="num">0.164</span></div>
+      <div class="row"><span>Tennis · 29</span><div class="track"><div class="fill" style="width:94.4%;background:var(--bar-ours)"></div></div><span class="num">0.236</span></div>
+      <div class="row"><span>&nbsp;</span><div class="track"><div class="fill" style="width:89.8%;background:var(--bar-kalshi)"></div></div><span class="num">0.224</span></div>
+      <div class="row"><span>Baseball · 5</span><div class="track"><div class="fill" style="width:79.4%;background:var(--bar-ours)"></div></div><span class="num">0.198</span></div>
+      <div class="row"><span>&nbsp;</span><div class="track"><div class="fill" style="width:77.3%;background:var(--bar-kalshi)"></div></div><span class="num">0.193</span></div>
+      <div class="sub">Baseball: too few games to read.</div>
+    </div>
+  </div>
+  <div class="foot">Sample data for the design. The numbers are from the accuracy report of 2026-10-15.</div>
+</section>
+
+<section class="page" id="games"><h1>Games</h1><p class="lead">Sample page: the Games list keeps its content; it would get the same cards and spacing.</p><div class="card">Same layout as Opportunities below, with a sport filter on top.</div></section>
+
+<section class="page" id="opps">
+  <h1>Opportunities</h1>
+  <p class="lead">Researched games where today's price may be worth a closer look, best gap first. No new research is run here.</p>
+  <div class="filters"><span class="seg">Worth a look only</span><span class="seg on">All researched games</span></div>
+  <div class="card" style="padding:6px 8px">
+    <div class="tablewrap"><table>
+      <thead><tr><th>Game</th><th>Bet</th><th class="r">Our / market</th><th class="r">Gap after fees</th><th class="r">Claims</th><th></th><th></th></tr></thead>
+      <tbody>
+        <tr><td class="game"><b>DC United vs New York RB</b><span>Thu 5:00 AM · forecast under 1 h ago</span></td><td>Buy “no” on DC United at 50¢</td><td class="r">65% / 50%</td><td class="r gap">+13¢</td><td class="r">14</td><td><span class="pill">Worth a look</span></td><td class="r"><button class="btn">Add to ticket</button></td></tr>
+        <tr><td class="game"><b>Milwaukee vs Los Angeles D</b><span>Thu 5:30 AM · forecast under 1 h ago</span></td><td>Buy “no” on Over 10.5 runs at 76¢</td><td class="r">89% / 76%</td><td class="r gap">+13¢</td><td class="r">10</td><td><span class="pill">Worth a look</span></td><td class="r"><button class="btn">Add to ticket</button></td></tr>
+        <tr><td class="game"><b>Rodes/Climt vs Dortmund</b><span>Thu 10:00 AM · forecast 3 h ago</span></td><td>Buy “yes” on Rodes/Climt at 41¢</td><td class="r">49% / 41%</td><td class="r gap">+6¢</td><td class="r">9</td><td><span class="pill">Worth a look</span></td><td class="r"><button class="btn">Add to ticket</button></td></tr>
+        <tr><td class="game"><b>Seattle vs Portland</b><span>Thu 8:00 PM · forecast 14 h ago</span></td><td style="color:var(--muted)">Forecast is old: research again</td><td class="r">52% / 50%</td><td class="r" style="color:var(--muted)">–</td><td class="r">12</td><td><span class="pill grey">Not flagged</span></td><td class="r"><button class="btn primary">Research again</button></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="foot">Sample data. One row per game; the best market is shown and “See all” opens the rest. The gap is the one big number on the row.</div>
+</section>
+
+<section class="page" id="approval"><h1>Approval</h1><p class="lead">Sample page: tickets waiting for a person, in the same table style with Approve and Reject buttons.</p><div class="card">No tickets waiting.</div></section>
+
+<section class="page" id="results">
+  <h1>Results</h1>
+  <p class="lead">How the forecasts did once the games ended, and what simulated orders would have paid.</p>
+  <div class="grid stats">
+    <div class="card"><div class="label">Simulated orders settled</div><div class="big">1</div><div class="sub">1 won · paper result +$0.70</div></div>
+    <div class="card"><div class="label">Chosen side at the ask</div><div class="big">−6.3¢</div><div class="sub">average per contract · 485 bets</div></div>
+  </div>
+  <div class="card">
+    <h2>Simulated orders</h2><p class="note">These are simulations: nothing was sent to Kalshi. A handful of orders says almost nothing about whether the system works.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Placed</th><th>Game</th><th>Bet</th><th class="r">Price</th><th class="r">Fee</th><th class="r">Paper result</th><th></th></tr></thead>
+      <tbody><tr><td>Tue 2:31 PM</td><td class="game"><b>Cleveland vs Tampa Bay</b><span>Game 2 · ended</span></td><td>3 × “no” on Over 9.5 runs</td><td class="r">76¢</td><td class="r">$0.02</td><td class="r gap">+$0.70</td><td><span class="pill">Won</span></td></tr></tbody>
+    </table></div>
+  </div>
+  <div class="foot">Sample data.</div>
+</section>
+
+</main>
+<script>
+  const links = document.querySelectorAll('#nav a');
+  function show(id) { document.querySelectorAll('section.page').forEach(s => s.classList.toggle('on', s.id === id)); links.forEach(a => a.classList.toggle('on', a.dataset.p === id)); }
+  links.forEach(a => a.addEventListener('click', () => show(a.dataset.p)));
+</script>
+</body>
+</html>
