@@ -1,23 +1,20 @@
-import { PageContainer } from "@/components/page-container";
-import { PageHeader } from "@/components/page-header";
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
   return (
-    <>
-      <header className="border-b bg-card">
-        <PageContainer className="flex min-h-16 items-center">
-          <span className="text-lg font-bold tracking-tight">Forecast desk</span>
-        </PageContainer>
-      </header>
-      <main className="flex-1 pb-16 pt-10">
-        <PageContainer>
-          <PageHeader title="Sign in" description="Use the account the operator created for you." />
-          <div className="max-w-sm">
-            <LoginForm />
-          </div>
-        </PageContainer>
-      </main>
-    </>
+    <main className="flex flex-1 items-center justify-center px-(--gutter) py-12">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-bold tracking-tight">Forecast desk</h1>
+          <p className="mt-2 text-muted-foreground">AI research for Kalshi sports markets</p>
+        </div>
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <h2 className="text-xl font-semibold tracking-tight">Sign in</h2>
+          <p className="mb-6 mt-1 text-sm text-muted-foreground">Use the account your administrator gave you.</p>
+          <LoginForm />
+        </div>
+        <p className="mt-6 text-center text-sm text-muted-foreground">Paper trading only: nothing is ordered on Kalshi.</p>
+      </div>
+    </main>
   );
 }
