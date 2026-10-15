@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { backendFetch } from "@/lib/backend";
 import { ago, cents, gapCents, pct } from "@/lib/format";
 import { plainReason } from "@/lib/labels";
@@ -20,84 +21,76 @@ function buyText(o: Opportunity): string {
   return o.flagged ? `Buy “${b.side}” on ${b.market} at ${cents(b.price)}` : `Largest gap: buying “${b.side}” on ${b.market} at ${cents(b.price)}`;
 }
 
+function forecastAge(o: Opportunity): string {
+  return o.age_hours === null ? "at an unknown time" : o.age_hours < 1 ? "less than an hour ago" : `${Math.round(o.age_hours)} h ago`;
+}
+
 function Row({ o }: { o: Opportunity }) {
   const b = o.best;
   const risks = [...o.risks.map(plainReason)];
+  const noPrice = o.unavailable || !b;
+  const riskLine = risks.length > 0 ? <div className="mt-1.5 text-sm text-muted-foreground">{o.flagged ? "Take care: " : "Why not: "}{risks.join("; ")}.</div> : null;
   return (
-    <li className={cn("rounded-xl border bg-card p-4", o.stale && "opacity-70")}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <div>
-          <Link href={`/prediction/${o.run_id}`} className="font-medium text-primary underline-offset-4 hover:underline">
-            {o.title}
-          </Link>
-          <span className="ml-2 text-sm text-muted-foreground">
-            starts <LocalTime iso={o.starts_at} />
-          </span>
+    <TableRow className={cn("align-top", o.stale && "opacity-70")}>
+      <TableCell className="min-w-32 whitespace-normal">
+        <Link href={`/prediction/${o.run_id}`} className="font-semibold text-primary underline-offset-4 hover:underline">
+          {o.title}
+        </Link>
+        <div className="text-sm text-muted-foreground">
+          starts <LocalTime iso={o.starts_at} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="text-sm text-muted-foreground">forecast {forecastAge(o)}</div>
+      </TableCell>
+      {noPrice ? (
+        <TableCell colSpan={3} className="whitespace-normal text-muted-foreground">
+          {o.unavailable ?? "No price to compare with."}
+          {riskLine}
+        </TableCell>
+      ) : (
+        <>
+          <TableCell className="min-w-52 max-w-60 whitespace-normal">
+            <div>{buyText(o)}</div>
+            {o.flagged && o.flagged_markets > 1 ? (
+              <div className="mt-1 text-sm text-muted-foreground">
+                {o.flagged_markets - 1} more market{o.flagged_markets - 1 === 1 ? "" : "s"} of this game {o.flagged_markets - 1 === 1 ? "is" : "are"} also worth a look.{" "}
+                <Link href={`/prediction/${o.run_id}`} className="text-primary underline underline-offset-4">
+                  See all
+                </Link>
+              </div>
+            ) : null}
+            {riskLine}
+          </TableCell>
+          <TableCell className="text-right tabular-nums">
+            {pct(b.our_probability)} / {pct(b.market_probability)}
+            <div className="text-sm text-muted-foreground">range {Math.round(b.spread * 100)} points</div>
+          </TableCell>
+          <TableCell className={cn("text-right text-lg tabular-nums", o.flagged ? "font-bold text-good" : "font-semibold")}>{gapCents(b.gap)}</TableCell>
+        </>
+      )}
+      <TableCell className="text-right tabular-nums">{o.supported_claims}</TableCell>
+      <TableCell className="min-w-32 whitespace-normal">
+        <div className="flex flex-wrap gap-1.5">
           {o.flagged ? <Badge className="bg-good-soft text-good">Worth a look</Badge> : <Badge variant="outline">Not flagged</Badge>}
           {o.measured === false ? <Badge variant="outline" title="This sport has fewer scored games than needed, so the flag has not been tested here">Sport not yet measured</Badge> : null}
           {o.stale ? <Badge className="bg-warn-soft text-warn">Forecast is old</Badge> : null}
         </div>
-      </div>
-
-      {o.unavailable || !b ? (
-        <p className="mt-2 text-sm text-muted-foreground">{o.unavailable ?? "No price to compare with."}</p>
-      ) : (
-        <>
-          <p className="mt-2 font-medium">{buyText(o)}</p>
-          <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <div className="flex justify-between gap-3 sm:block">
-              <dt className="text-muted-foreground">Our probability / market</dt>
-              <dd className="tabular-nums">
-                {pct(b.our_probability)} / {pct(b.market_probability)}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3 sm:block">
-              <dt className="text-muted-foreground">Gap now, after fees</dt>
-              <dd className="text-lg font-semibold tabular-nums">{gapCents(b.gap)}</dd>
-            </div>
-            <div className="flex justify-between gap-3 sm:block">
-              <dt className="text-muted-foreground">Range of the forecasts</dt>
-              <dd className="tabular-nums">{Math.round(b.spread * 100)} points</dd>
-            </div>
-            <div className="flex justify-between gap-3 sm:block">
-              <dt className="text-muted-foreground">Supported claims</dt>
-              <dd className="tabular-nums">{o.supported_claims}</dd>
-            </div>
-          </dl>
+      </TableCell>
+      <TableCell className="whitespace-normal">
+        <div className="flex flex-col items-end gap-2">
           {o.stale ? (
-            <p className="mt-2 text-sm text-muted-foreground">The forecast is old: research the game again to add it to a ticket.</p>
-          ) : (
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-              <AddToTicket
-                leg={{
-                  runId: o.run_id, eventTicker: o.event_ticker, marketTicker: b.market_ticker, title: o.title, market: b.market, side: b.side, price: b.price,
-                  probability: b.our_probability, flagged: o.flagged,
-                }}
-              />
-              <Link href={`/prediction/${o.run_id}`} className="text-sm text-primary underline underline-offset-4">
-                Other markets and the other side: open the game
-              </Link>
-            </div>
-          )}
-          {o.flagged && o.flagged_markets > 1 ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              {o.flagged_markets - 1} more market{o.flagged_markets - 1 === 1 ? "" : "s"} of this game {o.flagged_markets - 1 === 1 ? "is" : "are"} also worth a look.{" "}
-              <Link href={`/prediction/${o.run_id}`} className="text-primary underline underline-offset-4">
-                See all
-              </Link>
-            </p>
+            <p className="text-right text-sm text-muted-foreground">The forecast is old: research the game again to add it to a ticket.</p>
+          ) : b && !noPrice ? (
+            <AddToTicket
+              leg={{
+                runId: o.run_id, eventTicker: o.event_ticker, marketTicker: b.market_ticker, title: o.title, market: b.market, side: b.side, price: b.price,
+                probability: b.our_probability, flagged: o.flagged,
+              }}
+            />
           ) : null}
-        </>
-      )}
-
-      {risks.length > 0 ? <p className="mt-2 text-sm text-muted-foreground">{o.flagged ? "Take care: " : "Why not: "}{risks.join("; ")}.</p> : null}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span>Forecast made {o.age_hours === null ? "at an unknown time" : o.age_hours < 1 ? "less than an hour ago" : `${Math.round(o.age_hours)} h ago`}. Prices are live.</span>
-        <AnalyzeButton eventTicker={o.event_ticker} latest={{ id: o.run_id, status: "done" }} />
-      </div>
-    </li>
+          <AnalyzeButton eventTicker={o.event_ticker} latest={{ id: o.run_id, status: "done" }} />
+        </div>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -210,11 +203,26 @@ async function List({ all }: { all: boolean }) {
           </AlertDescription>
         </Alert>
       ) : (
-        <ul className="grid gap-3">
-          {data.opportunities.map((o) => (
-            <Row key={o.event_ticker} o={o} />
-          ))}
-        </ul>
+        <div className="rounded-xl border bg-card p-1">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Game</TableHead>
+                <TableHead>Bet</TableHead>
+                <TableHead className="text-right">Our / market</TableHead>
+                <TableHead className="text-right">Gap after fees</TableHead>
+                <TableHead className="text-right">Claims</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.opportunities.map((o) => (
+                <Row key={o.event_ticker} o={o} />
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
       <p className="mt-4 text-sm text-muted-foreground">
         “Worth a look” is not a recommendation. The limits behind it are placeholders until we have scored real forecasts, and a gap that looks very large is
