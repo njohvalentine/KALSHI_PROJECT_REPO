@@ -2,7 +2,7 @@
 
 **Status: draft, not final.** This describes the system as it stands after Milestone 3 and the extras added at the client's request, and the plan for the rest. Items marked **Open** still need a decision or an answer from you. A step-by-step explanation of the agent graphs is in `docs/agent/GRAPHS.md`.
 
-Last updated: 2026-10-13.
+Last updated: 2026-10-15.
 
 ---
 
@@ -33,6 +33,10 @@ An AI research assistant for Kalshi prediction markets, focused on **soccer, bas
 | Real orders on Kalshi | Planned, last, only on your approval |
 
 **Important wording on the result page:** a claim marked "Supported" means the page itself says it. "Could not check" means the page could not be read, does not say it, or the claim was worked out rather than stated. Only supported claims are used. "Worth a look" is never a recommendation.
+
+### Update 2026-10-15
+
+Since the first draft: Telegram alerts are live; tickets of several games exist (simulated); the Games page can list every sport Kalshi offers, with the sports we have no scores for marked "not yet measured", and the NBA is supported; a replay tool tests ideas on saved evidence; 10 browser tests and 551 backend tests exist. The accuracy results (61 finished games) show no sign of an edge over Kalshi's price; see `docs/MILESTONES.md`, Milestone 4.
 
 ## 3. How it works
 

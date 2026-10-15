@@ -6,7 +6,7 @@
 
 **Ordering principle:** we answer the riskiest question first, which is whether the system predicts better than Kalshi's own price. Real bets come last, and only if the results justify them.
 
-Last updated: 2026-10-13.
+Last updated: 2026-10-15.
 
 ---
 
@@ -18,13 +18,13 @@ Last updated: 2026-10-13.
 | 1 | Foundation | Sign-in, Kalshi game list, database, tracing, Docker setup | None | **Built** |
 | 2 | Research stage | Research runs: planner, parallel researchers, cited findings, cost per run | None | **Built** |
 | 3 | Full prediction | Page checking, three forecasts, one probability per outcome, comparison with Kalshi's price | None | **Built** (tested on real games; forecast quality not yet known) |
-| 3+ | Extras you asked for | More markets (total goals or runs, both teams to score, margin), Opportunities page, alerts and optional automatic research | None | **Built**; chat alerts wait for your choice of application |
-| 4 | Evaluation | Scores against the market price and a plain AI call | None | Planned; needs about 30 or more finished games |
+| 3+ | Extras you asked for | More markets (total goals, runs or points, both teams to score, margin), Opportunities page, Telegram alerts, tickets of several games, all Kalshi sports with the NBA, a replay tool, browser tests | None | **Built** |
+| 4 | Evaluation | Scores against the market price and a plain AI call | None | **Report to write**: 61 finished games scored; no sign of an edge over Kalshi yet |
 | 5 | Approval screen | Where a person approves or rejects each bet (orders simulated) | None | **Built** (limits are placeholders until you agree yours) |
-| 6 | Live paper trading | Weeks of real predictions, scored as games finish | None | Started (every forecast is recorded) |
-| 7 | Go / no-go, then real bets | Decision based on results; optional limited launch | Only if you approve | Planned |
+| 6 | Live paper trading | Weeks of real predictions, scored as games finish | None | **Running** (daily batches of about 30 games; every forecast is recorded and scored) |
+| 7 | Go / no-go, then real bets | Decision based on results; optional limited launch | Only if you approve | Not started; the results so far point to no-go for real bets for now |
 
-The web pages: Games, Opportunities, Prediction (runs and results), Approval and Results. Approval and Results come later.
+The web pages: Games, Opportunities, Prediction (runs and results), Approval and Results.
 
 ---
 
@@ -59,12 +59,19 @@ The web pages: Games, Opportunities, Prediction (runs and results), Approval and
 - **Opportunities page:** researched games that have not started, ranked by the gap after fees at today's prices, one row per game, with the risks in plain words.
 - **Watcher and alerts:** alerts when a game is worth a look, when the market moves a lot since the forecast, when it stops being worth a look, and when a flagged game starts soon. For now they appear in the app; they go to a chat message once you tell us the application. Optional automatic research of upcoming games is off and capped.
 
+- **Telegram alerts (live since 2026-10-14):** the watcher sends a message when a game becomes worth a look, when a price moves 8 cents or more, or when a flagged game starts within an hour (at most 6 an hour); `scripts/telegram_hello.py` sends a test message.
+- **Tickets of several games (combos):** up to 20 bets, several markets of one game allowed, yes or no per bet, any game from the ranking or any market from a run page; the combined numbers are the legs multiplied and are marked rough when bets of one game are on the same ticket. Simulated only.
+- **All sports on Kalshi (2026-10-15):** the Games page offers every other sport and league Kalshi lists, loaded when picked; they are marked "not yet measured" until a sport has 20 scored games; the NBA has total points and spread markets.
+- **Replay tool (2026-10-14):** re-runs the forecasting step and the flag rule on evidence saved before each finished game, to test ideas without waiting and without a result leaking in (`replay-forecasts`).
+- **Browser tests (2026-10-14):** 10 tests for sign-in, the ticket builder, the Approval flow and the Games page.
+
 ## Milestone 4: Evaluation
 - Brier score; three-way comparison on the same outcomes: our forecast, a plain single AI call with no research, and Kalshi's price; shown per kind of market, with what buying the chosen side at the market price would have paid.
 - **Already built:** every live forecast is recorded before the game starts, the result is filled in afterwards, and the command `score-records` prints the scores. **What is missing is data:** about 30 or more finished games before the numbers mean anything.
 - Live forecasts are the test to trust (sports results are widely published, so a backtest on past games could be contaminated by what the AI already knows).
 - Experiments: showing the forecasters the price as a starting point; splitting evidence between forecasters; other ways of combining estimates; replacing the placeholder limits behind "worth a look" with values chosen from the scores.
 - Checks on citation quality and on safety (no order without approval).
+- **Status on 2026-10-15 (61 finished games, 479 outcomes; the report itself is still to be written):** Brier score (lower is better) ours 0.194, plain AI 0.197, Kalshi 0.175. Research does not add forecasting skill over a plain AI, and Kalshi's price is clearly better. Tennis is the one place where research beats the plain AI (28 games: 0.233 against 0.261, Kalshi 0.222). The 35 flagged bets averaged -12.8 cents per contract. Two tested changes (5 forecasters, high reasoning effort) did not help on games they were not tuned on. Too few games for a verdict, but there is no sign of an edge yet.
 - **Done when:** a short report is delivered and you decide whether to continue. This may show the system is a good research assistant but cannot beat the market; that is a valid result.
 
 ## Bookmaker benchmark (built, switched on with a key)
@@ -80,7 +87,7 @@ The web pages: Games, Opportunities, Prediction (runs and results), Approval and
 
 ## Milestone 6: Live paper trading
 - The system runs on live markets and records predictions. **No bets are placed.** This has started: every run records its forecast.
-- The Results page (to be built) shows forecast, Kalshi price and outcome as games finish.
+- The Results page shows the simulated orders and what they would have paid; `score-records` prints the scores of the forecasts.
 - The watcher can research upcoming games by itself within a daily cap you set (off by default; each run costs real credit).
 - Re-forecasting automatically when news, injuries or lineups change is not built; we first want the scores to show whether updating helps.
 
@@ -89,6 +96,7 @@ The web pages: Games, Opportunities, Prediction (runs and results), Approval and
 - **If no-go:** keep the system as a research tool, or stop.
 - **If go:** a limited launch in steps: Kalshi demo first, then small real bets, a person approving every bet.
 - Kalshi's Developer Agreement (terms for automated trading) has not been read yet; this must happen before any real order.
+- **State on 2026-10-15:** not started. It also needs the shared Kalshi key replaced, the betting limits and the go-live rule agreed, a real order step (including the combo price request, which Kalshi quotes on request), and the handover checklist. Given the results so far, the honest position is no-go for real bets until the scores show an edge.
 
 ---
 
