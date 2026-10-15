@@ -226,22 +226,23 @@ function GamesLoading() {
 export default async function GamesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const raw = await searchParams;
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
-  const params: Params = { sport: first(raw.sport), q: first(raw.q), started: first(raw.started) };
+  const params: Params = { sport: first(raw.sport), q: first(raw.q), started: first(raw.started), more: first(raw.more) };
   return (
     <>
       <PageHeader
         title="Games"
-        description={`Upcoming soccer, baseball and tennis games on Kalshi, soonest first. Press Research to look into a game and get our estimate for each outcome. An estimate is for the moment it was made; prices move. ${RUN_COST_NOTE}`}
+        description={`Upcoming games on Kalshi, soonest first. Press Research to look into a game and get our estimate for each outcome. An estimate is for the moment it was made; prices move. ${RUN_COST_NOTE}`}
       />
       <form action="/games" method="get" className="mb-4 flex max-w-md gap-2">
         {params.sport ? <input type="hidden" name="sport" value={params.sport} /> : null}
         {params.started ? <input type="hidden" name="started" value={params.started} /> : null}
+        {params.more ? <input type="hidden" name="more" value={params.more} /> : null}
         <Input name="q" defaultValue={params.q ?? ""} placeholder="Search by team, player or league" className="bg-card" aria-label="Search games" />
         <button type="submit" className={buttonVariants({ variant: "outline" })}>
           Search
         </button>
       </form>
-      <Suspense key={`${params.sport}|${params.q}|${params.started}`} fallback={<GamesLoading />}>
+      <Suspense key={`${params.sport}|${params.q}|${params.started}|${params.more}`} fallback={<GamesLoading />}>
         <GamesList params={params} />
       </Suspense>
     </>

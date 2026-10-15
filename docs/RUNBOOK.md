@@ -120,6 +120,10 @@ docker compose exec backend uv run --no-sync python -m app.cli replay-forecasts 
 
 Other options: `--forecaster-model`, `--forecaster-effort`, `--edge-min`, `--min-supported-claims`, `--min-research-shift`, `--edge-plausible-max`, `--min-ask-size`, `--created-after`, `--created-before`. It prints the Brier scores of the replay, the original forecast, the plain AI call and Kalshi on the same outcomes, and what the flagged markets would have paid. Models are not deterministic and a few games fit noise: choose the candidate settings on the early games, write them down, then look at the held-back games once.
 
+### Other sports on Kalshi
+
+The Games page shows the measured series (`SPORTS_SERIES`, the 15 we have scores for) as before, and a row "More on Kalshi" with every other sport or league Kalshi lists, with the number of games coming up. Picking one loads its games (the first load asks Kalshi about each series and takes up to about 20 seconds; at most 60 series at once, the busiest first). Those games can be researched like any other; they are marked **not yet measured** until the sport has `MEASURED_MIN_GAMES` (20) scored games, and the flag, the Opportunities row, the run page and the Telegram alert say so. The NBA has its total points and spread markets; other new sports get the winner market only. `SPORTS_DISCOVERY=false` gives the old list exactly; `SPORTS_EXCLUDE_TAGS` leaves out sport tags (default Esports, Video games, 4th of July, Other). Automatic research and the daily batch still use only the measured series.
+
 ## 9. Backups
 
 The database holds everything (runs, sources, forecasts, records, alerts, accounts). A backup:
