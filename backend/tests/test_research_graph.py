@@ -54,7 +54,7 @@ def test_planner_usage_is_recorded():
     assert state["usages"][0]["model"] == "gpt-5.4-mini" and state["usages"][0]["input_tokens"] == 1000
 
 
-def test_planner_instructions_are_written_for_the_clients_sports_and_forbid_predictions():
+def test_planner_instructions_are_written_for_any_sport_with_the_specific_lines_and_forbid_predictions():
     text = PLANNER_INSTRUCTIONS.format(max_angles=4, today="2026-10-12")
     for word in ("soccer", "baseball", "tennis", "starting pitchers", "surface", "lineups", "odds"):
         assert word in text

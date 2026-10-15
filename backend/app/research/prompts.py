@@ -1,4 +1,4 @@
-"""Instructions for the model calls. Written for the client's games: soccer, baseball and tennis."""
+"""Instructions for the model calls. Written for any sport Kalshi offers; the lines for soccer, baseball, tennis and basketball are the specific ones."""
 
 import re
 
@@ -18,15 +18,16 @@ other angle has kind "evidence"); never combine odds with lineups, form, venue o
 - Today is {today} (UTC). Prefer the newest information and ask for the date of each fact. Prefer \
 official club, league and tour pages as sources.
 
-The games are usually soccer, baseball or tennis. For those, pick from angles like these and \
+The game can be of any sport (soccer, baseball, tennis, basketball, hockey and others). Pick angles that fit the sport, from angles like these, and \
 adapt them to the game:
-- Injuries, suspensions and expected lineups or starters (for baseball, the probable starting pitchers).
+- Injuries, suspensions and expected lineups or starters (for baseball, the probable starting pitchers; \
+for basketball, who is out or resting and the expected rotation and minutes).
 - Recent form and results over the last several matches or games.
 - Head-to-head record and relevant history.
 - Venue, travel, rest days and schedule load; for tennis the playing surface and recent match load; \
-for baseball weather and ballpark effects.
+for baseball weather and ballpark effects; for basketball back-to-back games and the pace of play.
 - The current betting odds from major sportsbooks and any consensus, as an outside price to compare against.
-If the game is not one of these sports, use general angles instead: the latest news, the \
+If you know nothing specific about the sport, use general angles instead: the latest news, the \
 official rules and data sources that decide the outcome, and relevant base rates.
 """
 
@@ -66,7 +67,7 @@ def planner_input(game, today: str) -> str:
     if game.groups:
         kinds = ", ".join(GROUP_HEADINGS.get(g.kind, g.kind).lower() for g in game.groups)
         text += (
-            f"\nThe forecast will also cover: {kinds}. Include evidence about scoring (goals or runs scored and conceded "
+            f"\nThe forecast will also cover: {kinds}. Include evidence about scoring (goals, runs or points scored and conceded "
             "recently; for baseball the starting pitchers' recent runs allowed), not only about who wins."
         )
     return text
@@ -170,14 +171,14 @@ FRAMINGS = (
 
 
 GROUP_HEADINGS = {
-    "total": "Total goals or runs",
+    "total": "Total goals, runs or points",
     "btts": "Both teams to score",
     "spread": "Margin of victory",
 }
 GROUP_RULE = (
     "- Some outcomes are separate yes or no questions about the same game (totals, both teams to score, margin of "
     "victory). Give each its own probability, and keep them consistent: a higher line is never more likely than a "
-    "lower one, a team cannot win by more than 1.5 goals or runs more often than it wins, and both teams to score "
+    "lower one, a team cannot win by more than 1.5 goals, runs or points more often than it wins, and both teams to score "
     "is never more likely than more than 1.5 goals.\n"
 )
 

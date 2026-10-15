@@ -39,20 +39,24 @@ def _age(finished_at: datetime | None, now: datetime) -> str:
     return "less than an hour ago" if hours < 1 else f"{round(hours)} h ago"
 
 
+UNTESTED = " This sport has no scored results yet: the flag has not been tested here."
+
+
 def alert_text(kind: str, game: dict, row: dict, now: datetime, detail: dict) -> str:
     title, claims, age = game["title"], row["supported_claims"], _age(game["finished_at"], now)
+    untested = UNTESTED if row.get("measured") is False else ""
     if kind == "run_flagged":
         b = detail["best"]
         more = f" {b['count'] - 1} more market(s) of this game are also worth a look." if b["count"] > 1 else ""
         return (f"Worth a look: {title}. Buy “{b['side']}” on {b['market']} at {_cents(b['price'])}, gap {round(b['gap'] * 100):+d}¢ after fees."
-                f"{more} {claims} supported claims. Forecast made {age}. {NOT_ADVICE}")
+                f"{more} {claims} supported claims. Forecast made {age}.{untested} {NOT_ADVICE}")
     if kind == "market_moved":
         return (f"The market moved {detail['cents']}¢ on {detail['market']} since our forecast of {title} ({age}). The forecast may be out of date: "
                 f"the market may know something we do not. Consider researching again. {NOT_ADVICE}")
     if kind == "no_longer_flagged":
         return f"No longer worth a look: {title}. The markets we flagged no longer show a gap at today's prices (forecast made {age}). {NOT_ADVICE}"
     return (f"Starting soon: {title}, worth a look at today's prices, but the forecast was made {age} and lineups may have changed. "
-            f"Consider researching again. {NOT_ADVICE}")
+            f"Consider researching again.{untested} {NOT_ADVICE}")
 
 
 class Monitor:

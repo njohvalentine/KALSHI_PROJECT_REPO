@@ -33,13 +33,23 @@ class FakeKalshi:
     """Stands in for Kalshi. Unless `milestones` is given, kickoff times are derived from the fixtures'
     occurrence_datetime (a test shortcut; the real service never does that)."""
 
-    def __init__(self, by_series, fail=(), delay=0.0, pages=None, milestones=None, milestone_fail=False, milestone_pages=None):
+    def __init__(self, by_series, fail=(), delay=0.0, pages=None, milestones=None, milestone_fail=False, milestone_pages=None, series=None):
+        self.series = series or []  # what GET /series?category=Sports returns: [{"ticker", "title", "tags"}]
         self.by_series, self.fail, self.delay, self.pages = by_series, set(fail), delay, pages or {}
         self.milestones, self.milestone_fail, self.milestone_pages = milestones, milestone_fail, milestone_pages
         self.milestone_calls = []
         self.calls = []
         self.running = self.max_running = 0
         self._lock = threading.Lock()
+
+    series_fail = False
+    series_calls = 0
+
+    def list_series(self, *, category=None):
+        self.series_calls += 1
+        if self.series_fail:
+            raise RuntimeError("Kalshi request failed: series boom")
+        return {"series": self.series}
 
     def list_milestones(self, *, limit, category=None, minimum_start_date=None, related_event_ticker=None, cursor=None):
         with self._lock:

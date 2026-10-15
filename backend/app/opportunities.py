@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.auth import require_user
 from app.config import Settings
+from app.measured import scored_games_by_sport
 from app.kalshi import KalshiClient
 from app.models import OutcomeRecord, Run
 from app.research.compare import compare_run
@@ -41,6 +42,7 @@ def _game_inputs(db: DbSession, run: Run) -> dict:
     records = db.scalars(select(OutcomeRecord).where(OutcomeRecord.run_id == run.id)).all()
     return {
         "run_id": run.id, "event_ticker": run.event_ticker, "title": run.event_title,
+        "sport": next((r.sport for r in records if r.sport), None), "league": next((r.league for r in records if r.league), None),
         "start": next((r.game_start for r in records if r.game_start), None),
         "finished_at": run.finished_at, "prediction": run.prediction,
         "baseline": {r.market_ticker: float(r.baseline_probability) for r in records if r.baseline_probability is not None},
@@ -92,7 +94,7 @@ def _normal(reason: str) -> str:
     return re.sub(r"[-+]?\d+(?:\.\d+)?", "#", reason)
 
 
-def build_row(game: dict, comparison: dict, settings: Settings, now: datetime) -> dict:
+def build_row(game: dict, comparison: dict, settings: Settings, now: datetime, scored: dict[str, int] | None = None) -> dict:
     """One row for one game from its fresh comparison. The row shows the single best market."""
     prediction = game["prediction"]
     finished = game["finished_at"]
@@ -102,6 +104,9 @@ def build_row(game: dict, comparison: dict, settings: Settings, now: datetime) -
         "run_id": game["run_id"], "event_ticker": game["event_ticker"], "title": game["title"],
         "starts_at": game["start"].isoformat() if game["start"] else None,
         "forecast_at": finished.isoformat() if finished else None, "age_hours": None if age_hours is None else round(age_hours, 1),
+        "sport": game.get("sport"), "league": game.get("league"),
+        # False when the sport has fewer scored games than MEASURED_MIN_GAMES: the flag has not been tested there; None when the sport is unknown
+        "measured": None if not game.get("sport") else (scored or {}).get(game["sport"], 0) >= settings.measured_min_games,
         "stale": stale, "supported_claims": prediction.get("supported_claims", 0), "evidence": prediction.get("evidence"),
         "flagged": False, "flagged_markets": 0, "best": None, "unavailable": None, "risks": [],
     }
@@ -133,6 +138,8 @@ def build_row(game: dict, comparison: dict, settings: Settings, now: datetime) -
         },
     )
     risks = list(best["reasons"]) if not flagged else []
+    if row["measured"] is False:
+        risks.append("this sport has no scored results yet, so the flag has not been tested here")
     if stale:
         risks.insert(0, f"the forecast is {age_hours:.0f} hours old; the facts it rests on may be out of date")
     if (best.get("fee") or {}).get("source", "series") != "series":
@@ -144,12 +151,13 @@ def build_row(game: dict, comparison: dict, settings: Settings, now: datetime) -
 async def collect(engine, client: KalshiClient, settings: Settings, fee_cache: dict, now: datetime) -> list[tuple[dict, dict, dict]]:
     """For each game with a forecast that has not started: (stored game data, fresh comparison, row)."""
     games = await asyncio.to_thread(_load, engine, now)
+    scored = await asyncio.to_thread(scored_games_by_sport, engine)
     semaphore = asyncio.Semaphore(settings.sports_fetch_concurrency)
 
     async def one(game: dict) -> tuple[dict, dict, dict]:
         async with semaphore:
             comparison = await evaluate_game(client, settings, fee_cache, game)
-        return game, comparison, build_row(game, comparison, settings, now)
+        return game, comparison, build_row(game, comparison, settings, now, scored)
 
     return list(await asyncio.gather(*(one(g) for g in games)))
 

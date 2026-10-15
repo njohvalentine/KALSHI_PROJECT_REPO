@@ -76,7 +76,7 @@ export function sideText(o: ComparisonOutcome): string {
 
 export const KIND_HEADING: Record<string, string> = {
   winner: "Who wins",
-  total: "Total goals or runs",
+  total: "Total goals, runs or points",
   btts: "Both teams to score",
   spread: "Margin of victory",
 };

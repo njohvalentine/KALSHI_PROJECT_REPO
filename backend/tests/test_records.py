@@ -329,8 +329,14 @@ def test_scores_are_also_shown_per_sport_league_and_amount_of_evidence(fresh_db)
     report = format_report(s)
     assert "By sport:" in report and "  Tennis: 2 outcomes in 2 games" in report and "By amount of confirmed evidence:" in report
     assert "too few games: fewer than 5" in report
-    without = score_records(fresh_db)  # no series map: the sport and league groups are left out, the rest stays
-    assert without["by_sport"] is None and without["by_league"] is None and "By sport:" not in format_report(without)
+    without = score_records(fresh_db)  # no series map and no sport column on these records: everything is "unknown"
+    assert set(without["by_sport"]) == {"unknown"} and set(without["by_league"]) == {"unknown"}
+    own = scored_record("KXNEW-X1", 0.5, True, 0.5, 0.4, 0.45, "yes")  # a record with its own sport and league needs no map
+    own.sport, own.league = "Basketball", "NBA"
+    with DbSession(fresh_db) as db:
+        db.add(own)
+        db.commit()
+    assert score_records(fresh_db)["by_sport"]["Basketball"]["games"] == 1 and "NBA" in score_records(fresh_db)["by_league"]
 
 
 @needs_db

@@ -137,6 +137,10 @@ class KalshiClient:
 
     # Milestones carry the real start time of a game (a market's occurrence time is the expected
     # settlement time instead). Kalshi requires `limit`.
+    def list_series(self, *, category: str | None = None) -> dict[str, Any]:
+        """Returns {"series": [...]}: each series has its tags (the sport), title, fee type and multiplier."""
+        return self._get("/series", dict(category=category))
+
     def list_milestones(
         self,
         *,

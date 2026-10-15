@@ -16,8 +16,9 @@ log = logging.getLogger("app.research.markets")
 COMPANIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "Soccer": (("total", "TOTAL"), ("btts", "BTTS"), ("spread", "SPREAD")),
     "Baseball": (("total", "TOTAL"), ("spread", "SPREAD")),
+    "Basketball": (("total", "TOTAL"), ("spread", "SPREAD")),  # NBA read live 2026-10-15; other leagues are tried by the same rule
 }
-KIND_NAMES = {"total": "total goals or runs", "btts": "both teams to score", "spread": "margin of victory"}
+KIND_NAMES = {"total": "total goals, runs or points", "btts": "both teams to score", "spread": "margin of victory"}
 OPEN = (None, "active", "open")
 
 

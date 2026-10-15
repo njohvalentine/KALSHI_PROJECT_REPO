@@ -36,6 +36,8 @@ class GameInfo:
     groups: list[MarketGroup] = field(default_factory=list)  # companion markets found for this game
     group_notes: list[str] = field(default_factory=list)  # companion markets not offered or not readable
     rules: str | None = None
+    sport: str | None = None  # Kalshi's sport tag and the league label of the game's series; saved on its records
+    league: str | None = None
     # Prices are deliberately not part of what the agents are shown (avoids anchoring on the market).
 
     def __post_init__(self):

@@ -13,6 +13,7 @@ from app.games import router as games_router
 from app.alerts import router as alerts_router
 from app.monitor import Monitor
 from app.opportunities import router as opportunities_router
+from app.measured import scored_games_by_sport
 from app.odds import OddsClient, hide_key_in_logs
 from app.telegram import TelegramNotifier, hide_token_in_logs
 from app.orders import router as orders_router
@@ -36,7 +37,7 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
         app.state.settings = settings or load_settings(os.environ)
         app.state.engine = create_engine(app.state.settings.sqlalchemy_url, pool_pre_ping=True)
         app.state.kalshi = KalshiClient(app.state.settings.kalshi_api_base)
-        app.state.games = GamesService(lambda: app.state.kalshi, app.state.settings)
+        app.state.games = GamesService(lambda: app.state.kalshi, app.state.settings, measured=lambda: scored_games_by_sport(app.state.engine))
         # Fails here if the database is unreachable, instead of starting half-working.
         app.state.checkpoint_pool, app.state.checkpointer = await open_checkpointer(
             app.state.settings.database_url

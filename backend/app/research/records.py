@@ -57,7 +57,7 @@ def build_records(
         b = book["by_ticker"].get(o["market_ticker"])
         yes, no = (c or {}).get("yes"), (c or {}).get("no")
         records.append(OutcomeRecord(
-            run_id=run_id, event_ticker=game.event_ticker, market_ticker=o["market_ticker"], outcome=o["outcome"],
+            run_id=run_id, event_ticker=game.event_ticker, market_ticker=o["market_ticker"], outcome=o["outcome"], sport=game.sport, league=game.league,
             game_start=start, created_at=created_at, before_start=None if start is None else created_at < start,
             probability=_dec(o["probability"]), prob_min=_dec(o["min"]), prob_max=_dec(o["max"]),
             forecasters_valid=prediction["forecasters_valid"], evidence=prediction["evidence"],
@@ -182,6 +182,13 @@ def _group_scores(used: list[OutcomeRecord], key) -> dict:
     return out
 
 
+def _where(r: OutcomeRecord, series: dict[str, tuple[str, str]] | None) -> tuple[str, str]:
+    """The sport and league of a record: its own columns, else the configured series of its game, else unknown."""
+    if r.sport:
+        return r.sport, r.league or r.sport
+    return (series or {}).get(r.event_ticker.split("-")[0], ("unknown", "unknown"))
+
+
 def _evidence_bucket(flag_claims: int):
     """none, a few, enough: the edge is the number of supported claims a flag needs (MIN_SUPPORTED_CLAIMS)."""
     def bucket(r: OutcomeRecord) -> str:
@@ -192,8 +199,8 @@ def _evidence_bucket(flag_claims: int):
 
 
 def score_records(engine, since: datetime | None = None, series: dict[str, tuple[str, str]] | None = None, flag_claims: int = 5) -> dict:
-    """`series` maps a series ticker to (sport, league), from SPORTS_SERIES; without it the sport and league groups are left out.
-    A game's records, whatever the market, carry the game's event ticker, so the game's series gives their sport."""
+    """A record has its own sport and league (set when it was made). `series` maps a series ticker to (sport, league), from
+    SPORTS_SERIES, for records made before those columns existed and without a backfill; otherwise they are "unknown"."""
     with DbSession(engine) as db:
         query = select(OutcomeRecord)
         if since:
@@ -250,8 +257,8 @@ def score_records(engine, since: datetime | None = None, series: dict[str, tuple
         "without_two_sided_quote": sum(1 for r in used if _mid(r) is None),
         "without_baseline": sum(1 for r in used if r.baseline_probability is None),
         "by_kind": _group_scores(used, lambda r: r.market_kind),
-        "by_sport": None if series is None else _group_scores(used, lambda r: series.get(r.event_ticker.split("-")[0], ("unknown", "unknown"))[0]),
-        "by_league": None if series is None else _group_scores(used, lambda r: series.get(r.event_ticker.split("-")[0], ("unknown", "unknown"))[1]),
+        "by_sport": _group_scores(used, lambda r: _where(r, series)[0]),
+        "by_league": _group_scores(used, lambda r: _where(r, series)[1]),
         "by_evidence": _group_scores(used, _evidence_bucket(flag_claims)),
         "paper_all": _paper(used),
         "paper_flagged": _paper([r for r in used if r.meaningful]),

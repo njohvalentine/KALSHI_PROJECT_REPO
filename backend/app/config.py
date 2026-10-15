@@ -38,6 +38,10 @@ DEFAULT_SPORTS_SERIES = ",".join([
 ])
 
 
+# Kalshi sport tags that are left out of discovery: not sports in the usual sense (the person can change this).
+DEFAULT_EXCLUDE_TAGS = "Esports,Video games,4th of July,Other"
+
+
 def parse_sports_series(raw: str, problems: list[str]) -> tuple[SeriesEntry, ...]:
     entries: list[SeriesEntry] = []
     seen: set[str] = set()
@@ -82,6 +86,9 @@ class Settings:
     sports_series: tuple[SeriesEntry, ...]
     games_cache_seconds: int
     sports_fetch_concurrency: int
+    sports_discovery: bool
+    sports_exclude_tags: tuple[str, ...]
+    measured_min_games: int
     fetch_enabled: bool
     fetch_max_pages_per_run: int
     fetch_concurrency: int
@@ -229,6 +236,10 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     fetch_concurrency = _parse_positive_int(
         "SPORTS_FETCH_CONCURRENCY", env.get("SPORTS_FETCH_CONCURRENCY", "6"), problems
     )
+    sports_discovery = _parse_bool("SPORTS_DISCOVERY", env.get("SPORTS_DISCOVERY", "true"), problems)
+    raw_exclude = env.get("SPORTS_EXCLUDE_TAGS")
+    sports_exclude_tags = tuple(t.strip() for t in (DEFAULT_EXCLUDE_TAGS if raw_exclude is None or not raw_exclude.strip() else raw_exclude).split(",") if t.strip())
+    measured_min_games = _parse_positive_int("MEASURED_MIN_GAMES", env.get("MEASURED_MIN_GAMES", "20"), problems)
 
     fetch_enabled = _parse_bool("FETCH_ENABLED", env.get("FETCH_ENABLED", "true"), problems)
     fetch_max_pages = _parse_positive_int(
@@ -354,8 +365,9 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         log.info("The watcher is off (MONITOR_ENABLED is not 'true'): no alerts are made and nothing is researched automatically.")
 
     log.info(
-        "Games list: %d series configured (%s).", len(sports_series),
+        "Games list: %d measured series configured (%s); discovery of all other Kalshi sports is %s.", len(sports_series),
         "from SPORTS_SERIES" if raw_series is not None else "default list; set SPORTS_SERIES to change it",
+        "ON (SPORTS_EXCLUDE_TAGS: %s)" % ", ".join(sports_exclude_tags) if sports_discovery else "off (SPORTS_DISCOVERY is not 'true')",
     )
 
     return Settings(
@@ -380,6 +392,9 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         sports_series=sports_series,
         games_cache_seconds=cache_seconds,
         sports_fetch_concurrency=fetch_concurrency,
+        sports_discovery=sports_discovery,
+        sports_exclude_tags=sports_exclude_tags,
+        measured_min_games=measured_min_games,
         fetch_enabled=fetch_enabled,
         fetch_max_pages_per_run=fetch_max_pages,
         fetch_concurrency=page_fetch_concurrency,

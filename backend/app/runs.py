@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.auth import require_requested_with, require_user
 from app.db import get_db
 from app.kalshi import KalshiError, KalshiNotFound
+from app.measured import scored_games_in
 from app.models import ClaimCheck, Forecast, OutcomeRecord, Run, SourcePage, User
 from app.research.markets import attach_companions
 from app.research.runner import execute_run
@@ -35,7 +36,7 @@ def _flagged(run: Run) -> int | None:
     return None if outcomes is None else sum(1 for o in outcomes if o.get("meaningful"))
 
 
-def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None) -> dict:
+def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None, measured_min_games: int | None = None) -> dict:
     def iso(value: datetime | None):
         return value.isoformat() if value else None
 
@@ -83,6 +84,10 @@ def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None) -> dic
                 if r.baseline_probability is not None
             }
             summary["baseline"] = baseline or None  # the plain AI call with no research, per outcome
+            sport = db.scalar(select(OutcomeRecord.sport).where(OutcomeRecord.run_id == run.id, OutcomeRecord.sport.is_not(None)).limit(1))
+            summary["sport"] = sport
+            # False when the sport has fewer scored games than MEASURED_MIN_GAMES (the flag has not been tested there); None when unknown
+            summary["measured"] = None if not sport or measured_min_games is None else scored_games_in(db).get(sport, 0) >= measured_min_games
             summary["forecasts"] = [
                 {"forecaster_index": f.forecaster_index, "variant": f.variant, "market_ticker": f.market_ticker,
                  "probability": float(f.probability), "reasoning": f.reasoning, "model": f.model}
@@ -167,7 +172,11 @@ async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: s
             starts_at = await run_in_threadpool(_kickoff, state.kalshi, event_ticker)
             game = GameInfo.from_kalshi_event(raw, starts_at=starts_at)  # the server's copy of the game
             series = (raw.get("event") or {}).get("series_ticker")
-            sport = next((e.sport for e in state.settings.sports_series if e.ticker == series), None)
+            entry = await run_in_threadpool(state.games.entry_of, series)
+            sport = entry.sport if entry else None
+            if not game.exclusive or len(game.outcomes) not in (2, 3):
+                raise RunStartError(422, "This game has an unusual market structure (not two or three exclusive outcomes), so it cannot be researched yet.")
+            game = GameInfo(**(game.__dict__ | {"sport": sport, "league": entry.league if entry else None}))
             game = await run_in_threadpool(attach_companions, game, raw, sport, state.kalshi)  # total, btts, spread if offered
         except ValueError as exc:
             raise RunStartError(502, "Kalshi returned game data we cannot use") from exc
@@ -222,11 +231,11 @@ def latest_per_game(db: Annotated[DbSession, Depends(get_db)]):
 
 
 @router.get("/{run_id}")
-def get_run(run_id: str, db: Annotated[DbSession, Depends(get_db)]):
+def get_run(run_id: str, request: Request, db: Annotated[DbSession, Depends(get_db)]):
     run = db.get(Run, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return run_to_dict(run, db=db)
+    return run_to_dict(run, db=db, measured_min_games=request.app.state.settings.measured_min_games)
 
 
 @router.get("")

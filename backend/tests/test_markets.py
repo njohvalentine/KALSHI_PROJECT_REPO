@@ -102,7 +102,7 @@ def test_the_game_survives_being_stored_as_plain_data():
 def test_the_prompt_numbers_every_market_in_groups_and_carries_no_prices():
     text = forecaster_input(full_game(), [], "2026-10-13")
     assert "1. Atletico wins" in text and "3. Tie is the result" in text
-    assert "Total goals or runs (each line is a separate yes or no question about this game):\n4. Over 0.5 goals scored\n5. Over 1.5" in text
+    assert "Total goals, runs or points (each line is a separate yes or no question about this game):\n4. Over 0.5 goals scored\n5. Over 1.5" in text
     assert "7. Both Teams To Score" in text and "Both teams to score (each line" in text and "Margin of victory" in text
     assert "8. Atletico wins by more than 1.5 goals" in text and "10. Manchester United wins by more than 1.5 goals" in text
     assert "KX" not in text and "¢" not in text

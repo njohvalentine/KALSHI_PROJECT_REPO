@@ -142,6 +142,8 @@ class OutcomeRecord(Base):
     market_ticker: Mapped[str] = mapped_column(String(128))
     outcome: Mapped[str] = mapped_column(Text)
     market_kind: Mapped[str] = mapped_column(String(10), default="winner", server_default="winner")  # winner, total, btts, spread
+    sport: Mapped[str | None] = mapped_column(String(40))  # Kalshi's sport tag of the game's series, set when the record is made
+    league: Mapped[str | None] = mapped_column(String(80))
     game_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     before_start: Mapped[bool | None] = mapped_column(Boolean)  # null when the start time is unknown

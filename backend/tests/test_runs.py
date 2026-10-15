@@ -32,7 +32,7 @@ def kalshi_mock(missing=(), broken=(), no_ticker=(), milestone_broken=False, mil
         if ticker in no_ticker:
             return httpx2.Response(200, json={"event": {}, "markets": []})
         return httpx2.Response(200, json={
-            "event": {"event_ticker": ticker, "title": f"Game {ticker}", "sub_title": "Group stage"},
+            "event": {"event_ticker": ticker, "title": f"Game {ticker}", "sub_title": "Group stage", "mutually_exclusive": True},
             "markets": [
                 {"ticker": f"{ticker}-H", "title": "Home wins", "yes_sub_title": "Home", "occurrence_datetime": "2026-10-20T18:00:00Z", "rules_primary": "If Home wins ...", "yes_bid_dollars": "0.4800"},
                 {"ticker": f"{ticker}-A", "title": "Away wins", "yes_sub_title": "Away", "occurrence_datetime": "2026-10-20T18:00:00Z"},
