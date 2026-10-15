@@ -19,7 +19,7 @@ Last updated: 2026-10-15.
 | 2 | Research stage | Research runs: planner, parallel researchers, cited findings, cost per run | None | **Built** |
 | 3 | Full prediction | Page checking, three forecasts, one probability per outcome, comparison with Kalshi's price | None | **Built** (tested on real games; forecast quality not yet known) |
 | 3+ | Extras you asked for | More markets (total goals, runs or points, both teams to score, margin), Opportunities page, Telegram alerts, tickets of several games, all Kalshi sports with the NBA, a replay tool, browser tests | None | **Built** |
-| 4 | Evaluation | Scores against the market price and a plain AI call | None | **Report to write**: 61 finished games scored; no sign of an edge over Kalshi yet |
+| 4 | Evaluation | Scores against the market price and a plain AI call | None | **Report written** (`docs/ACCURACY-REPORT-2026-10-15.md`): 62 finished games scored; no sign of an edge over Kalshi yet |
 | 5 | Approval screen | Where a person approves or rejects each bet (orders simulated) | None | **Built** (limits are placeholders until you agree yours) |
 | 6 | Live paper trading | Weeks of real predictions, scored as games finish | None | **Running** (daily batches of about 30 games; every forecast is recorded and scored) |
 | 7 | Go / no-go, then real bets | Decision based on results; optional limited launch | Only if you approve | Not started; the results so far point to no-go for real bets for now |
@@ -71,7 +71,7 @@ The web pages: Games, Opportunities, Prediction (runs and results), Approval and
 - Live forecasts are the test to trust (sports results are widely published, so a backtest on past games could be contaminated by what the AI already knows).
 - Experiments: showing the forecasters the price as a starting point; splitting evidence between forecasters; other ways of combining estimates; replacing the placeholder limits behind "worth a look" with values chosen from the scores.
 - Checks on citation quality and on safety (no order without approval).
-- **Status on 2026-10-15 (61 finished games, 479 outcomes; the report itself is still to be written):** Brier score (lower is better) ours 0.194, plain AI 0.197, Kalshi 0.175. Research does not add forecasting skill over a plain AI, and Kalshi's price is clearly better. Tennis is the one place where research beats the plain AI (28 games: 0.233 against 0.261, Kalshi 0.222). The 35 flagged bets averaged -12.8 cents per contract. Two tested changes (5 forecasters, high reasoning effort) did not help on games they were not tuned on. Too few games for a verdict, but there is no sign of an edge yet.
+- **Status on 2026-10-15 (62 finished games, 481 outcomes with all three; report: `docs/ACCURACY-REPORT-2026-10-15.md`):** Brier score (lower is better) ours 0.194, plain AI 0.197, Kalshi 0.175. Research does not add forecasting skill over a plain AI, and Kalshi's price is clearly better. Tennis is the one place where research beats the plain AI (28 games: 0.233 against 0.261, Kalshi 0.222). The 35 flagged bets averaged -12.8 cents per contract. Two tested changes (5 forecasters, high reasoning effort) did not help on games they were not tuned on. Too few games for a verdict, but there is no sign of an edge yet.
 - **Done when:** a short report is delivered and you decide whether to continue. This may show the system is a good research assistant but cannot beat the market; that is a valid result.
 
 ## Bookmaker benchmark (built, switched on with a key)
