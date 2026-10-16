@@ -207,13 +207,13 @@ async function List({ all }: { all: boolean }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Game</TableHead>
-                <TableHead>Bet</TableHead>
-                <TableHead className="text-right">Our / market</TableHead>
-                <TableHead className="text-right">Gap after fees</TableHead>
-                <TableHead className="text-right">Claims</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="whitespace-normal">Game</TableHead>
+                <TableHead className="whitespace-normal">Bet</TableHead>
+                <TableHead className="whitespace-normal text-right">Our / market</TableHead>
+                <TableHead className="whitespace-normal text-right">Gap after fees</TableHead>
+                <TableHead className="whitespace-normal text-right">Claims</TableHead>
+                <TableHead className="whitespace-normal">Status</TableHead>
+                <TableHead className="whitespace-normal text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

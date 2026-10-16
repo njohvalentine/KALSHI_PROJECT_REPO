@@ -4,6 +4,7 @@ import { OrderActions } from "@/components/order-actions";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { backendFetch } from "@/lib/backend";
 import { cents, gapCents, pct } from "@/lib/format";
 import { CHECK_NAME, ORDER_STATE } from "@/lib/labels";
@@ -113,18 +114,32 @@ export default async function ApprovalPage() {
         {recent.length === 0 ? (
           <p className="text-sm text-muted-foreground">None yet.</p>
         ) : (
-          <ul className="grid gap-2">
-            {recent.map((o) => (
-              <li key={o.id} className="rounded-xl border bg-card p-3 text-sm">
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">{ORDER_STATE[o.state]}</Badge>
-                  <LocalTime iso={o.created_at} />
-                </div>
-                <p>{orderSentence(o)}</p>
-                {o.reason ? <p className="mt-1 text-muted-foreground">Why: {o.reason}</p> : null}
-              </li>
-            ))}
-          </ul>
+          <div className="rounded-xl border bg-card p-1">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Order</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Why</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recent.map((o) => (
+                  <TableRow key={o.id} className="align-top">
+                    <TableCell className="whitespace-normal">
+                      <LocalTime iso={o.created_at} />
+                    </TableCell>
+                    <TableCell className="min-w-72 whitespace-normal">{orderSentence(o)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{ORDER_STATE[o.state]}</Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-normal text-muted-foreground">{o.reason ?? ""}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </section>
     </>
