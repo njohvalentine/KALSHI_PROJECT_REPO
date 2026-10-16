@@ -47,7 +47,7 @@ A run takes about one to one and a half minutes. In the real runs it cost betwee
 |---|---|---|
 | Database (PostgreSQL) | The only place where data is kept: runs, saved page texts, claim checks, forecasts, the frozen records, alerts, simulated orders and accounts. | In Docker, on your computer or server |
 | Backend (FastAPI, Python) | Serves the web app, runs the research in the background, reads Kalshi, runs the watcher and sends alerts. | In Docker, port 8000 |
-| Web app (Next.js) | The pages a person uses: Games, Opportunities, Prediction (the research results), Approval and Results. | In Docker, port 3000 |
+| Web app (Next.js) | The pages a person uses: Dashboard (how the forecasts compare with Kalshi), Games, Opportunities, Prediction (the research results), Approval and Results. | In Docker, port 3000 |
 | Watcher | A background loop inside the backend. Every 10 minutes it re-reads prices for the games that were researched and raises alerts. | Inside the backend, switched on with a setting |
 | Telegram alerts | Short messages sent to a Telegram chat when the watcher finds something. | Switched on with settings and a bot token |
 | OpenAI | The AI models for planning, research, checking and forecasting. Paid per use. | OpenAI's servers |

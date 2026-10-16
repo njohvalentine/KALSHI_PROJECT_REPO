@@ -76,9 +76,12 @@ The Opportunities page then shows "Alerts are also sent to Telegram" and each al
 
 ## 7. Looking at results
 
+- **Dashboard** (the page after sign-in): how the forecasts compare with the Kalshi price. Four cards (finished games scored, researched games worth a look today, flagged bets, research spend) and two bar charts (all games, and by sport; Brier score, lower is better). The line at the top is written by the app from the scores: "too few to say anything yet" below 30 finished games; "ahead of the Kalshi price" only when our score is at least 0.005 better than Kalshi's (a smaller gap counts as noise, and the line still says it is not proof); otherwise "No sign of an edge yet". The numbers come from the same code as `score-records`. The research spend is the app's own calculation from the tokens used, not the OpenAI bill; compare it with the OpenAI usage page now and then.
 - **Games**: upcoming games with prices and, where researched, our estimate.
 - **Opportunities**: researched games ranked by the gap after fees at today's prices. "Worth a look" is not a recommendation.
-- **Prediction**: every run; open one for the forecast, the comparison with the market, the forecasts, the evidence with each claim's check result, and the pages that could not be read.
+- **Prediction**: every run; open one. A finished run opens with an "At a glance" box (how many markets are worth a look and the best ones, how many facts their pages supported, time and cost), then the forecast and the market (the first kind of market open, the others folded with a count of the markets worth a look), and folded sections for how the flag is decided, the forecasts side by side, the evidence with each claim's check result, the pages we tried to read, and what was researched. Nothing is removed; open a section to read it.
+- **Approval**: orders waiting for a person (with their checks, Approve and Reject) and a table of the recent orders.
+- **Results**: simulated orders and what they would have paid, with cards for the settled orders, the chosen side at the ask over all scored outcomes, and the flagged bets.
 
 ## 8. Scoring the forecasts
 

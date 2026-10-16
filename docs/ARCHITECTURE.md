@@ -112,7 +112,7 @@ We considered two ways to organize the AI agents.
 | Evidence gathering | OpenAI web search tool, then our own safe download of each cited page (public addresses only, size and time limits, every redirect checked) | The search tool returns a link but no page text; we need the text to check claims |
 | Market data | Kalshi public API (no key needed to read) | Games, outcomes, prices, rules, fees. Kalshi has no sports filter, so the Games page reads a configured list of series (leagues and tours) |
 | Backend | FastAPI (Python) | Runs research in the background and serves the web app |
-| Web app | Next.js with shadcn/ui, light theme | Pages: Games, Opportunities, Prediction (runs and results), Approval, Results |
+| Web app | Next.js with shadcn/ui, light theme | Pages: Dashboard, Games, Opportunities, Prediction (runs and results), Approval, Results |
 | Database | PostgreSQL | Runs, saved sources and page text, claim checks, forecasts, a record of every forecast, alerts, accounts |
 | Packaging | Docker Compose: database, backend and web app start together | One command to run everything |
 | Tracing | LangSmith (free tier; consent given) | Shows what every agent did and what it cost |

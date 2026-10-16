@@ -8,7 +8,7 @@ The client asked for a demo before he gives feedback ("it will make more sense f
 - Kalshi must be reachable (it needed a VPN during development) and the OpenAI account must have credit (a run costs about 0.35 to 0.65 USD).
 - Research 3 or 4 games that start in the next few hours (the forecast must be less than 12 hours old, or a ticket cannot be prepared from it) (press Research on the Games page, about 90 seconds each, two at a time), so the Opportunities page and the Approval screen have live content. Prefer games with a lot of volume: tour-level tennis, a Premier League or Champions League game, an MLB game.
 - Run `docker compose exec backend uv run --no-sync python -m app.cli resolve-records` and `score-records` and note the numbers; if fewer than 30 games are finished, say so before he asks. Status on 2026-10-14: 30 games researched, 15 scored (first scores: ours 0.19, plain AI 0.22, Kalshi 0.15 on the Brier score, lower is better; flagged bets lost money so far); the rest finish by the morning of 2026-10-15.
-- Sign in with the demo account and leave the browser on the Games page. Hide other tabs and any window showing `.env` or keys.
+- Sign in with the demo account and you land on the Dashboard; open the Games page and leave the browser there. Hide other tabs and any window showing `.env` or keys.
 
 ## The walk (what to show, what to say)
 

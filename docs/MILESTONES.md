@@ -24,7 +24,7 @@ Last updated: 2026-10-15.
 | 6 | Live paper trading | Weeks of real predictions, scored as games finish | None | **Running** (daily batches of about 30 games; every forecast is recorded and scored) |
 | 7 | Go / no-go, then real bets | Decision based on results; optional limited launch | Only if you approve | Not started; the results so far point to no-go for real bets for now |
 
-The web pages: Games, Opportunities, Prediction (runs and results), Approval and Results.
+The web pages: Dashboard, Games, Opportunities, Prediction (runs and results), Approval and Results. The look of the app was redesigned on 2026-10-15 and 2026-10-16 (a Dashboard, tables, a run page with folded sections, a header chip instead of the orange bar), following `docs/design/mockup-redesign-2026-10-15.html`; screenshots are in `docs/design/screenshots-2026-10-16/`.
 
 ---
 
