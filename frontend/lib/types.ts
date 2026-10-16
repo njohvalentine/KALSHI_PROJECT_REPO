@@ -266,6 +266,7 @@ export type DashboardResponse = {
   message: { kind: "too_few" | "ahead" | "no_edge"; text: string };
   scores: { n: number; ours: number | null; baseline: number | null; market: number | null };
   by_sport: DashboardGroup[];
+  chosen_side: { bets: number; won: number; average_result: number | null; total_result: number | null };
   flagged: { bets: number; won: number; average_result: number | null; total_result: number | null; too_few: boolean };
   spend: { total_usd: number; runs: number; note: string };
 };

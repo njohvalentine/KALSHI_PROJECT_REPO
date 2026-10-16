@@ -1,22 +1,13 @@
 import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
+import { Stat } from "@/components/stat";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { backendFetch } from "@/lib/backend";
-import { cents } from "@/lib/format";
+import { centsPrecise } from "@/lib/format";
 import type { DashboardResponse, OpportunitiesResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const score = (x: number | null) => (x === null ? "–" : x.toFixed(4));
-
-function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border bg-card p-5">
-      <div className="text-sm font-medium text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-3xl font-bold tracking-tight">{value}</div>
-      <div className="mt-0.5 text-sm text-muted-foreground">{sub}</div>
-    </div>
-  );
-}
 
 /** One bar. The longest possible bar is a Brier score of 0.25, what always saying 50% scores. */
 function Bar({ label, value, color }: { label: string; value: number | null; color: string }) {
@@ -67,7 +58,7 @@ export default async function DashboardPage() {
         <Stat
           label="Flagged bets so far"
           value={`${f.won} / ${f.bets}`}
-          sub={f.bets === 0 ? "none yet" : `won · paper result ${cents(f.average_result ?? 0)} per contract${f.too_few ? " (too few to read)" : ""}`}
+          sub={f.bets === 0 ? "none yet" : `won · paper result ${centsPrecise(f.average_result)} per contract${f.too_few ? " (too few to read)" : ""}`}
         />
         <Stat label="Research spend" value={`$${d.spend.total_usd.toFixed(2)}`} sub={`all time · ${d.spend.runs} runs · estimated`} />
       </div>

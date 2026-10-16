@@ -48,6 +48,7 @@ def build(score: dict, spend: dict) -> dict:
             for sport, g in sorted(score["by_sport"].items(), key=lambda kv: -kv[1]["games"])
             if g["same_records"]["n"] > 0
         ],
+        "chosen_side": score["paper_all"],
         "flagged": {**flagged, "too_few": flagged["bets"] < MIN_FLAGGED_BETS},
         "spend": spend,
     }

@@ -57,4 +57,5 @@ def test_the_numbers_are_the_ones_score_records_gives(make_client):
                               "baseline": expected["same_records"]["baseline"], "market": expected["same_records"]["market"]}
     sport = body["by_sport"][0]
     assert sport["sport"] == "Tennis" and sport["games"] == 6 and sport["too_few"] is False  # 6 games: enough to show
+    assert body["chosen_side"] == expected["paper_all"] and body["chosen_side"]["bets"] == 12
     assert body["message"]["kind"] == "too_few"  # 6 games is below the 30 needed

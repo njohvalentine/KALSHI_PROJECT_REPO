@@ -78,6 +78,7 @@ test("a prepared ticket waits on the Approval page with its checks and is reject
 test("the Results page loads", async ({ signedIn: page }) => {
   await page.goto("/results");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Results");
+  for (const label of ["Simulated orders settled", "Chosen side at the ask", "Flagged bets"]) await expect(page.getByText(label, { exact: true })).toBeVisible();
 });
 
 test("any researched game with a fresh forecast can be added from the Opportunities page, and the ticket says when it is not marked worth a look", async ({ signedIn: page }) => {

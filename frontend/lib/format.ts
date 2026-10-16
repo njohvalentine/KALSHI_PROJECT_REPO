@@ -65,3 +65,10 @@ export function ago(iso: string | null, now: number = Date.now()): string {
 
 /** What a run costs, from the real runs of 2026-10-13 (0.35 to 0.65 USD per game). Shown before the button is pressed. */
 export const RUN_COST_NOTE = "Each run spends about $0.35 to $0.65 of OpenAI credit.";
+
+/** An average result in dollars per contract (-0.0626) as "−6.3¢", one decimal, so it matches the accuracy report. */
+export function centsPrecise(dollars: number | null): string {
+  if (dollars === null || !Number.isFinite(dollars)) return "–";
+  const c = Math.round(dollars * 1000) / 10;
+  return `${c < 0 ? "−" : c > 0 ? "+" : ""}${Math.abs(c).toFixed(1)}¢`;
+}
