@@ -110,3 +110,11 @@ test("the Games page offers more sports found on Kalshi, marks them as not yet m
   await expect(page).toHaveURL(/more=1/);
   await expect(page.getByText("Not yet measured", { exact: true }).first()).toBeVisible({ timeout: 60_000 }); // the first load asks Kalshi about each series
 });
+
+test("the Dashboard shows the message about the scores, the cards and the charts", async ({ signedIn: page }) => {
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Dashboard");
+  await expect(page.getByRole("status").filter({ hasText: /finished|edge|ahead/ })).toBeVisible();
+  for (const label of ["Finished games scored", "Worth a look today", "Flagged bets so far", "Research spend"]) await expect(page.getByText(label, { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Forecast error, all games" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "By sport" })).toBeVisible();
+});

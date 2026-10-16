@@ -256,3 +256,16 @@ export type SimOrder = {
   checks?: OrderCheck[];
 };
 export type OrdersResponse = { orders: SimOrder[]; totals: { settled: number; won: number; paper_result: number } };
+
+export type DashboardGroup = { sport: string; games: number; ours: number | null; baseline: number | null; market: number | null; too_few: boolean };
+export type DashboardResponse = {
+  games: number;
+  outcomes: number;
+  unresolved: number;
+  games_needed: number;
+  message: { kind: "too_few" | "ahead" | "no_edge"; text: string };
+  scores: { n: number; ours: number | null; baseline: number | null; market: number | null };
+  by_sport: DashboardGroup[];
+  flagged: { bets: number; won: number; average_result: number | null; total_result: number | null; too_few: boolean };
+  spend: { total_usd: number; runs: number; note: string };
+};

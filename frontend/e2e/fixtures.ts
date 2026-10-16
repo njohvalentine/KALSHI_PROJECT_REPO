@@ -21,7 +21,7 @@ export const ADD_BUTTON = /^Add “(yes|no)” at \d+¢/;
 export const test = base.extend<{ signedIn: Page }>({
   signedIn: async ({ page }, provide) => {
     await signIn(page);
-    await expect(page).toHaveURL(/\/games/);
+    await expect(page).toHaveURL(/\/dashboard/);
     await provide(page); // (named provide, not use: a function named use looks like a React hook to the linter)
   },
 });

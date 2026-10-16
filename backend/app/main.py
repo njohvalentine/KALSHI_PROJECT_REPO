@@ -11,6 +11,7 @@ from app.checkpoint import open_checkpointer
 from app.games import GamesService
 from app.games import router as games_router
 from app.alerts import router as alerts_router
+from app.dashboard import router as dashboard_router
 from app.monitor import Monitor
 from app.opportunities import router as opportunities_router
 from app.measured import scored_games_by_sport
@@ -93,6 +94,7 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
     app.include_router(opportunities_router)
     app.include_router(alerts_router)
     app.include_router(orders_router)
+    app.include_router(dashboard_router)
 
     @app.get("/health")
     def health(response: Response):

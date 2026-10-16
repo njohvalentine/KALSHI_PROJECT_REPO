@@ -10,8 +10,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <>
       <header className="sticky top-0 z-10 border-b bg-card">
-        <PageContainer className="flex min-h-16 flex-wrap items-center gap-x-8 gap-y-2 py-2">
-          <Link href="/games" className="text-lg font-bold tracking-tight">
+        <PageContainer className="flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 py-2">
+          <Link href="/dashboard" className="text-lg font-bold tracking-tight">
             Forecast desk
           </Link>
           <Nav />
