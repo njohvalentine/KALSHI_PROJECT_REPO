@@ -1,3 +1,4 @@
+import { Fold } from "@/components/fold";
 import { Badge } from "@/components/ui/badge";
 import { host } from "@/lib/format";
 import { fetchLabel, isMarketFinding, VERDICT } from "@/lib/labels";
@@ -60,10 +61,11 @@ export function EvidenceSection({ run }: { run: Run }) {
   const checked = run.claim_checks.length > 0;
 
   return (
-    <section className="mb-8" aria-labelledby="evidence-heading">
-      <h2 id="evidence-heading" className="mb-1 text-xl font-semibold tracking-tight">
-        The evidence
-      </h2>
+    <Fold
+      id="evidence"
+      title="The evidence"
+      summary={checked && supported !== undefined ? `${supported} of ${cited} cited facts were supported by their page` : `${cited} cited facts`}
+    >
       <p className="mb-4 text-sm text-muted-foreground">
         {checked && supported !== undefined
           ? `${supported} of ${cited} cited facts were supported by their page and went to the forecasters.`
@@ -74,17 +76,14 @@ export function EvidenceSection({ run }: { run: Run }) {
       {findings.map((f, i) => (
         <FindingBlock key={f.angle} finding={f} index={i} checks={run.claim_checks} />
       ))}
-    </section>
+    </Fold>
   );
 }
 
 export function PagesSection({ pages }: { pages: PageInfo[] }) {
   if (pages.length === 0 || pages.every((p) => p.fetch_status === "not_fetched")) return null;
   return (
-    <section className="mb-8" aria-labelledby="pages-heading">
-      <h2 id="pages-heading" className="mb-3 text-xl font-semibold tracking-tight">
-        Pages we tried to read
-      </h2>
+    <Fold id="pages" title="Pages we tried to read" summary={`${pages.length} pages, ${pages.filter((p) => p.fetch_status === "ok").length} read`}>
       <ul className="grid gap-2 text-sm">
         {pages.map((p) => (
           <li key={p.url} className="flex flex-wrap justify-between gap-x-4 gap-y-0.5 border-b pb-2 last:border-b-0">
@@ -95,6 +94,6 @@ export function PagesSection({ pages }: { pages: PageInfo[] }) {
           </li>
         ))}
       </ul>
-    </section>
+    </Fold>
   );
 }

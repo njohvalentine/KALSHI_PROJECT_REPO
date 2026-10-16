@@ -1,3 +1,4 @@
+import { Fold } from "@/components/fold";
 import { pct } from "@/lib/format";
 import { FRAMING, KIND_HEADING } from "@/lib/labels";
 import type { Run } from "@/lib/types";
@@ -25,10 +26,11 @@ export function ForecastersSection({ run }: { run: Run }) {
   const kinds = [...new Set(outcomes.map((o) => o.kind ?? "winner"))];
 
   return (
-    <section className="mb-8" aria-labelledby="forecasters-heading">
-      <h2 id="forecasters-heading" className="mb-1 text-xl font-semibold tracking-tight">
-        The forecasts
-      </h2>
+    <Fold
+      id="forecasts"
+      title="The forecasts"
+      summary={`${forecasters.length} forecasters, our middle probability${run.baseline ? " and the plain AI call" : ""}, side by side`}
+    >
       <p className="mb-3 text-sm text-muted-foreground">
         Each forecaster saw only the checked facts. The plain AI call saw no facts at all, so the difference shows what the research added.
       </p>
@@ -82,6 +84,6 @@ export function ForecastersSection({ run }: { run: Run }) {
           </details>
         ))}
       </div>
-    </section>
+    </Fold>
   );
 }

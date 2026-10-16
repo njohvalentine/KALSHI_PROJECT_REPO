@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { EvidenceSection, PagesSection } from "@/components/evidence";
+import { Fold } from "@/components/fold";
+import { RunGlance } from "@/components/run-glance";
 import { ForecastersSection } from "@/components/forecasters";
 import { PredictionSection } from "@/components/prediction-table";
 import { StatusBadge } from "@/components/status-badge";
@@ -63,6 +65,7 @@ export function RunView({ initial }: { initial: Run }) {
           </AlertDescription>
         </Alert>
       ) : null}
+      {!isActive(run.status) ? <RunGlance run={run} /> : null}
       {!isActive(run.status) ? <PredictionSection run={run} /> : null}
       {!isActive(run.status) ? <ForecastersSection run={run} /> : null}
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -88,8 +91,7 @@ export function RunView({ initial }: { initial: Run }) {
         <PagesSection pages={run.pages ?? []} />
 
         {angles.length > 0 ? (
-          <section className="mb-8">
-            <h2 className="mb-3 text-xl font-semibold tracking-tight">What was researched</h2>
+          <Fold id="researched" title="What was researched" summary={`${angles.length} angle${angles.length === 1 ? "" : "s"}`}>
             <ul className="grid gap-3">
               {angles.map((a) => (
                 <li key={a.name}>
@@ -103,7 +105,7 @@ export function RunView({ initial }: { initial: Run }) {
                 The planner proposed {run.plan.cut_angles} more angle(s); they were dropped to stay within the researcher limit.
               </p>
             ) : null}
-          </section>
+          </Fold>
         ) : null}
 
         {errors.length > 0 ? (

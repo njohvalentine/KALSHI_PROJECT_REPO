@@ -30,6 +30,9 @@ test("two markets of one game make the combined numbers rough, and a second mark
     }
   }
   test.skip(!found, "no finished run with more than one kind of market");
+  // the kinds of market after the first are folded: open them, as a person would
+  const closed = page.locator('section[aria-labelledby="prediction-heading"] details:not([open]) > summary');
+  for (let n = await closed.count(); n > 0; n--) await closed.first().click();
   const add = page.getByRole("button", { name: ADD_BUTTON });
   await add.first().click(); // the first group (the winner)
   await add.last().click(); // the last group (another kind of market)
@@ -118,4 +121,16 @@ test("the Dashboard shows the message about the scores, the cards and the charts
   for (const label of ["Finished games scored", "Worth a look today", "Flagged bets so far", "Research spend"]) await expect(page.getByText(label, { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Forecast error, all games" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "By sport" })).toBeVisible();
+});
+
+test("a finished run opens with an At a glance box, and the evidence is folded until it is opened", async ({ signedIn: page }) => {
+  await page.goto("/prediction");
+  const done = page.locator("tr", { hasText: "Done" });
+  test.skip((await done.count()) === 0, "no finished run yet");
+  await done.first().getByRole("link").first().click();
+  await expect(page.getByRole("heading", { name: "At a glance" })).toBeVisible();
+  const text = page.getByText("“Supported” means the page itself says it");
+  await expect(text).toBeHidden(); // folded
+  await page.getByRole("heading", { name: "The evidence" }).click();
+  await expect(text).toBeVisible();
 });

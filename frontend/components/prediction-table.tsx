@@ -1,5 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Fold } from "@/components/fold";
 import { PrepareOrder } from "@/components/prepare-order";
 import { AddToTicket } from "@/components/ticket";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -179,12 +180,24 @@ export function PredictionSection({ run }: { run: Run }) {
         {p.evidence === "none" ? " No claim could be checked against its page, so they worked from general knowledge of the sport." : ""}
       </p>
 
-      {groups.map(([kind, groupRows]) => (
-        <div key={kind} className="mb-5">
-          {groups.length > 1 ? <h3 className="mb-2 text-lg font-semibold tracking-tight">{KIND_HEADING[kind] ?? kind}</h3> : null}
-          <GroupRows rows={groupRows} run={run} />
-        </div>
-      ))}
+      {groups.map(([kind, groupRows], i) => {
+        const flagged = groupRows.filter((r) => r.market?.meaningful).length;
+        return groups.length > 1 ? (
+          <Fold
+            key={kind}
+            level="h3"
+            title={KIND_HEADING[kind] ?? kind}
+            defaultOpen={i === 0}
+            summary={`${groupRows.length} market${groupRows.length === 1 ? "" : "s"}${flagged > 0 ? `, ${flagged} worth a look` : ""}`}
+          >
+            <GroupRows rows={groupRows} run={run} />
+          </Fold>
+        ) : (
+          <div key={kind} className="mb-5">
+            <GroupRows rows={groupRows} run={run} />
+          </div>
+        );
+      })}
 
       <div className="mt-3 grid gap-1 text-sm text-muted-foreground">
         {comparison?.unavailable ? <p>Market prices could not be read for this run: {comparison.unavailable}</p> : null}
@@ -200,12 +213,16 @@ export function PredictionSection({ run }: { run: Run }) {
           </p>
         ) : null}
         {twoWay ? <p>In a game with two outcomes, buying “yes” on one side is almost the same bet as buying “no” on the other.</p> : null}
-        <p>
-          A market is marked “Worth a look” only when the gap after fees is large enough but not suspiciously large, the research moved our probability
+      </div>
+      <div className="mt-4">
+        <Fold title="How a market gets the flag" summary="The tests behind “Worth a look”" level="h3">
+          <p className="text-sm text-muted-foreground">
+            A market is marked “Worth a look” only when the gap after fees is large enough but not suspiciously large, the research moved our probability
           away from what the same AI says with no facts (toward the gap), the forecasters agree, enough claims were supported, and enough contracts are on offer.
           “Worth a look” is not a recommendation. The limits that decide it are placeholders until we have scored real forecasts, and the fee
           formula is taken from public descriptions of Kalshi’s fees.
-        </p>
+          </p>
+        </Fold>
       </div>
     </section>
   );
