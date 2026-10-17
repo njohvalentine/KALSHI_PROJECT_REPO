@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session as DbSession
 
-from app.auth import require_user
+from app.auth import require_requested_with, require_user
 from app.config import Settings
 from app.models import Screening
 from app.odds import OddsClient, OddsError, find_game, prices_by_ticker, sport_keys_for
@@ -167,7 +167,7 @@ def _verdict(best) -> dict:
     return _answer("not_promising", f"Not promising: the best gap against the bookmakers is {cents:+d}¢ after fees{why}.", detail)
 
 
-@router.get("/screen")
+@router.post("/screen", dependencies=[Depends(require_requested_with)])  # a POST with the guard header: it spends odds credits and saves rows
 async def screen(
     request: Request,
     sport: Annotated[str | None, Query(max_length=40)] = None,

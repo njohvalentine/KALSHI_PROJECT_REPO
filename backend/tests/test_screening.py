@@ -136,9 +136,12 @@ def test_the_endpoint_saves_one_row_per_outcome_and_the_list_alone_reads_nothing
         client.app.state.odds, client.app.state.kalshi = odds, FakeKalshi()
         client.app.state.games.query = lambda sport, q, limit, include_started, more: {"games": [game(start=datetime.now(UTC) + timedelta(hours=5))]}
         assert odds.calls == []
-        body = client.get("/api/games/screen").json()
+        assert client.post("/api/games/screen").status_code == 403  # no X-Requested-With header: nothing was read
+        assert client.get("/api/games/screen").status_code == 405  # a GET no longer does the work
+        assert odds.calls == []
+        body = client.post("/api/games/screen", headers=H).json()
         assert odds.calls == ["soccer_epl"] and list(body["results"]) == ["KXEPLGAME-26OCT17ARSCHE"]
     with make_client.engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM screenings")).scalar_one() == 3
     with make_client() as anonymous:
-        assert anonymous.get("/api/games/screen").status_code == 401
+        assert anonymous.post("/api/games/screen", headers=H).status_code == 401

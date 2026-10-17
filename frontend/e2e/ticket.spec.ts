@@ -162,8 +162,22 @@ test("Research on a game with a fresh forecast asks first, and confirming sends 
   ]);
 });
 
-test("the Games page offers the free bookmaker check as a link and does not run it by itself", async ({ signedIn: page }) => {
-  await page.goto("/games");
-  await expect(page.getByRole("link", { name: "Check these games against the bookmakers" })).toBeVisible(); // needs the odds feed on (ODDS_ENABLED)
-  await expect(page.getByText("Checked against the bookmakers")).toHaveCount(0); // only after the person asks (screen=1): it spends odds credits
+test("the free bookmaker check is a button that sends a POST: nothing runs on load or from the address, and the labels appear after the press", async ({ signedIn: page }) => {
+  const calls: string[] = [];
+  await page.route("**/api/games/screen**", async (route) => {
+    calls.push(route.request().method());
+    return route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ results: {}, notes: ["a note from the test"], credits: { remaining: 400, used: 3 } }),
+    });
+  });
+  await page.goto("/games?screen=1"); // an old-style address: it must not run anything
+  const button = page.getByRole("button", { name: "Check these games against the bookmakers" });
+  await expect(button).toBeVisible(); // needs the odds feed on (ODDS_ENABLED)
+  await expect(page.getByText("Checked against the bookmakers")).toHaveCount(0);
+  expect(calls).toEqual([]);
+  await button.click();
+  await expect(page.getByText(/Checked against the bookmakers: 3 odds credits used, 400 left this month/)).toBeVisible();
+  await expect(page.getByText("a note from the test")).toBeVisible();
+  expect(calls).toEqual(["POST"]); // the browser sent a POST, once
 });
