@@ -92,6 +92,8 @@ export const ORDER_STATE: Record<string, string> = {
 };
 
 export const CHECK_NAME: Record<string, string> = {
+  within_game_limit: "Not too much on one game (all its orders together)",
+  within_open_limit: "Not too much open at one time",
   not_paused: "No stop rule has triggered (the simulated losses are below the limits)",
   not_expired: "Still within its time limit",
   game_not_started: "The game has not started",

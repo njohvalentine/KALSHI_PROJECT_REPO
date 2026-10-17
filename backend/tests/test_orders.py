@@ -148,7 +148,7 @@ def test_checks_show_each_result_and_a_failed_blocking_check_stops_approval(clie
         from app.orders import order_with_checks
         shown = asyncio.run(order_with_checks(client.app, order["id"], NOW))
         names = {c["name"]: c for c in shown["checks"]}
-        assert set(names) == {"not_paused", "not_expired", "game_not_started", "forecast_fresh", "within_limits", "legs_ok", "price_ok", "enough_contracts", "still_worth_a_look"}
+        assert set(names) == {"within_game_limit", "within_open_limit", "not_paused", "not_expired", "game_not_started", "forecast_fresh", "within_limits", "legs_ok", "price_ok", "enough_contracts", "still_worth_a_look"}
         assert all(c["ok"] for c in shown["checks"]) and names["still_worth_a_look"]["blocking"] is False
         # the price moved 5 cents against us: approval is blocked, the order stays
         client.app.state.kalshi = FakeKalshi({

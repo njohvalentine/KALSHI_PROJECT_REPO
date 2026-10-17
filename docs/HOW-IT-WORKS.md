@@ -172,6 +172,7 @@ An order is prepared, then waits for a person. A person approves or rejects it, 
 - each leg's forecast is recent (12 hours or less)
 - the price has not moved against us by more than 2 cents
 - enough contracts are offered
+- the open orders of each game of the order, together with this one, are within the limit per game (all the markets of one game count as one risk, because they move together), and all open orders together are within the overall limit (both off until the client approves a value)
 - no stop rule has triggered: after the simulated results of the last 24 hours, or since a review date, lose more than a set limit, no new order is allowed (off until the client approves a value; see `docs/RISK-FRAMEWORK.md`)
 - the leg is still worth a look (this one only warns)
 

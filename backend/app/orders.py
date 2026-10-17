@@ -10,6 +10,7 @@ change is written to an append-only history."""
 import asyncio
 import logging
 import uuid
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -22,7 +23,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.auth import require_requested_with, require_user
 from app.config import Settings
-from app.models import Order, OrderEvent, OrderLeg, OutcomeRecord, User
+from app.models import Order, OrderEvent, OrderLeg, OutcomeRecord, Run, User
 from app.opportunities import _event_of, evaluate_game, load_game
 from app.research.compare import FEE_RATE
 
@@ -67,6 +68,50 @@ def day_cost(db: DbSession, now: datetime, exclude_id: int | None = None) -> Dec
     for o in db.scalars(query):
         total += o.max_cost if o.state == "approved" else (o.fill_price or o.price) * (o.fill_contracts or 0) + (o.fill_fee or 0)
     return total
+
+
+def _open_cost(o: Order) -> Decimal:
+    """What an open order may cost: its maximum cost while approved, what it cost once placed."""
+    return o.max_cost if o.state == "approved" else (o.fill_price or o.price) * (o.fill_contracts or 0) + (o.fill_fee or 0)
+
+
+def open_exposure(db: DbSession, exclude_id: int | None = None) -> tuple[Decimal, dict[str, Decimal]]:
+    """(the cost of all open orders, the cost of the open orders of each game). Open means approved or placed, not yet settled, rejected or
+    expired. The game of a leg is the game of its run (every market researched in one run, winner, total, margin, is the same game); a
+    ticket's cost counts in full against every game it touches, the conservative reading (one failed leg loses the whole ticket)."""
+    query = select(Order).where(Order.state.in_(("approved", "placed")))
+    if exclude_id is not None:
+        query = query.where(Order.id != exclude_id)
+    orders = db.scalars(query).all()
+    if not orders:
+        return Decimal(0), {}
+    games_of: dict[int, set[str]] = defaultdict(set)
+    for order_id, event in db.execute(select(OrderLeg.order_id, Run.event_ticker).join(Run, Run.id == OrderLeg.run_id).where(OrderLeg.order_id.in_([o.id for o in orders]))):
+        games_of[order_id].add(event)
+    total, per_game = Decimal(0), defaultdict(Decimal)
+    for o in orders:
+        cost = _open_cost(o)
+        total += cost
+        for game in games_of.get(o.id) or {o.event_ticker}:  # an order without legs (made before tickets existed) is its own game
+            per_game[game] += cost
+    return total, dict(per_game)
+
+
+def exposure_checks(db: DbSession, s: Settings, games: dict[str, str], cost: Decimal, exclude_id: int | None = None) -> list[dict]:
+    """The two risk checks of an order: the open orders of each of its games together, and all open orders together, with this order
+    added. `games` maps a game's event ticker to its title. A limit of 0 is off."""
+    total, per_game = open_exposure(db, exclude_id)
+    game_limit, open_limit = _dec(s.order_max_game_cost_usd), _dec(s.order_max_open_cost_usd)
+    lines = [f"{title}: ${per_game.get(ticker, Decimal(0)) + cost:.2f} on this game together" + (f" (limit ${game_limit:.2f})" if game_limit else "")
+             for ticker, title in games.items()]
+    game_ok = not game_limit or all(per_game.get(t, Decimal(0)) + cost <= game_limit for t in games)
+    open_ok = not open_limit or total + cost <= open_limit
+    return [
+        {"name": "within_game_limit", "leg": None, "ok": game_ok, "blocking": True,
+         "detail": "; ".join(lines) if game_limit else "no limit per game is set (ORDER_MAX_GAME_COST_USD)"},
+        {"name": "within_open_limit", "leg": None, "ok": open_ok, "blocking": True,
+         "detail": f"${total + cost:.2f} open together" + (f" (limit ${open_limit:.2f})" if open_limit else "") if open_limit else "no limit on all open orders is set (ORDER_MAX_OPEN_COST_USD)"},
+    ]
 
 
 def simulated_loss(db: DbSession, s: Settings, now: datetime) -> tuple[Decimal, Decimal]:
@@ -197,6 +242,7 @@ def checks_for(order: Order, legs: list[OrderLeg], fresh_by_leg: list[dict], s: 
     out.append({"name": "not_paused", "leg": None, "ok": paused is None, "blocking": True,
                 "detail": paused or ("no stop rule is set (ORDER_PAUSE_DAY_LOSS_USD, ORDER_PAUSE_TOTAL_LOSS_USD)"
                                      if not (s.order_pause_day_loss_usd or s.order_pause_total_loss_usd) else "the simulated losses are below the stop rules")})
+    out += exposure_checks(db, s, {f["game"]["event_ticker"]: f["game"]["title"] for f in fresh_by_leg}, order.max_cost, order.id)
     events = [g.event_ticker for g in legs]
     legs_ok = len(legs) <= s.ticket_max_legs and len(set(events)) == len(events)
     out.append({"name": "legs_ok", "leg": None, "ok": legs_ok, "blocking": True,
@@ -297,6 +343,10 @@ async def prepare_ticket(app, user_id: int, contracts: int, legs_in: list[tuple]
             paused = pause_reason(db, s, now)
             if paused:
                 raise OrderError(422, paused)
+            for check in exposure_checks(db, s, {p["game"]["event_ticker"]: p["game"]["title"] for p in prepared}, max_cost):
+                if not check["ok"]:
+                    raise OrderError(422, ("This would put more on one game than the limit allows: " if check["name"] == "within_game_limit"
+                                           else "This would take the open orders above the limit: ") + check["detail"] + ".")
             if max_cost > _dec(s.order_max_cost_usd):
                 raise OrderError(422, f"This ticket could cost ${max_cost:.2f}, above the limit of ${s.order_max_cost_usd:.2f} per order.")
             if day_cost(db, now) + max_cost > _dec(s.order_max_day_cost_usd):

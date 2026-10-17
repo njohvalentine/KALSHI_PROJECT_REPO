@@ -124,6 +124,8 @@ class Settings:
     order_max_contracts: int
     order_max_cost_usd: float
     order_max_day_cost_usd: float
+    order_max_game_cost_usd: float  # the most the open orders of one game may cost together; 0 = off
+    order_max_open_cost_usd: float  # the most all open orders may cost together; 0 = off
     order_pause_day_loss_usd: float  # stop new orders when the simulated results of the last 24 hours lose this much; 0 = off
     order_pause_total_loss_usd: float  # stop new orders when the simulated results since order_loss_since lose this much; 0 = off
     order_loss_since: datetime | None  # results before this moment do not count towards the total loss (a restart after a review)
@@ -334,6 +336,8 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     order_max_contracts = _parse_positive_int("ORDER_MAX_CONTRACTS", env.get("ORDER_MAX_CONTRACTS", "10"), problems)
     order_max_cost = _parse_positive_float("ORDER_MAX_COST_USD", env.get("ORDER_MAX_COST_USD", "5.00"), problems)
     order_max_day_cost = _parse_positive_float("ORDER_MAX_DAY_COST_USD", env.get("ORDER_MAX_DAY_COST_USD", "20.00"), problems)
+    max_game_cost = _parse_nonnegative_float("ORDER_MAX_GAME_COST_USD", env.get("ORDER_MAX_GAME_COST_USD", "0"), problems)
+    max_open_cost = _parse_nonnegative_float("ORDER_MAX_OPEN_COST_USD", env.get("ORDER_MAX_OPEN_COST_USD", "0"), problems)
     pause_day = _parse_nonnegative_float("ORDER_PAUSE_DAY_LOSS_USD", env.get("ORDER_PAUSE_DAY_LOSS_USD", "0"), problems)
     pause_total = _parse_nonnegative_float("ORDER_PAUSE_TOTAL_LOSS_USD", env.get("ORDER_PAUSE_TOTAL_LOSS_USD", "0"), problems)
     raw_since = env.get("ORDER_LOSS_SINCE", "").strip()
@@ -473,6 +477,8 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         order_max_contracts=order_max_contracts,
         order_max_cost_usd=order_max_cost,
         order_max_day_cost_usd=order_max_day_cost,
+        order_max_game_cost_usd=max_game_cost,
+        order_max_open_cost_usd=max_open_cost,
         order_pause_day_loss_usd=pause_day,
         order_pause_total_loss_usd=pause_total,
         order_loss_since=loss_since,

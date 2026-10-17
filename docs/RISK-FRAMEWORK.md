@@ -17,7 +17,7 @@ The client asked for this on 2026-10-16: "I will start with $100 and increase la
 
 **Small flat stakes, not a betting formula.** A well-known formula (the Kelly formula) says how much to bet when you know your edge. Our forecasts have not beaten the Kalshi price on the finished games (see the Dashboard), so we do not know that we have an edge, and the formula would say to bet nothing. Small, equal stakes limit what a wrong belief can cost, and they let the paper test run long enough to learn something.
 
-**Bets on the same game are one risk.** A winner bet, a total bet and a margin bet on the same game move together: one surprise result can lose all of them. So the limit on a game counts all orders and all legs of that game together (this rule is built as its own item, "same game, one risk").
+**Bets on the same game are one risk.** A winner bet, a total bet and a margin bet on the same game move together: one surprise result can lose all of them. So the limit on a game counts all orders and all legs of that game together.
 
 **Stop rules.** Two rules stop new orders after losses, because a long losing run is the best sign that a belief is wrong:
 - *The day rule:* after the simulated results of the last 24 hours lose the limit, no new order is made until the oldest of those results is 24 hours old.
@@ -30,9 +30,9 @@ Both rules count only orders that have ended (settled). Wins offset losses. An o
 | Rule | Proposed value | Setting in the app | Where it is checked |
 |---|---|---|---|
 | Most one order may cost | 2 dollars | `ORDER_MAX_COST_USD` | Order checks (exists) |
-| Most all orders of one game may cost together | 4 dollars | to be added (same game, one risk) | Order checks (to be built) |
+| Most all orders of one game may cost together | 4 dollars | `ORDER_MAX_GAME_COST_USD` | Order checks (built, off until a value is set) |
 | Most new orders approved in one day may cost | 10 dollars | `ORDER_MAX_DAY_COST_USD` | Order checks (exists) |
-| Most orders open (not yet settled) at one time may cost | 20 dollars | to be added (same game, one risk) | Order checks (to be built) |
+| Most orders open (not yet settled) at one time may cost | 20 dollars | `ORDER_MAX_OPEN_COST_USD` | Order checks (built, off until a value is set) |
 | Stop for the day after a loss of | 10 dollars in 24 hours | `ORDER_PAUSE_DAY_LOSS_USD` | Order checks (built, off until a value is set) |
 | Stop completely after a loss of | 20 dollars since the start | `ORDER_PAUSE_TOTAL_LOSS_USD` and `ORDER_LOSS_SINCE` | Order checks (built, off until a value is set) |
 | Default answer | NO BET | none | Every page and alert (built) |
