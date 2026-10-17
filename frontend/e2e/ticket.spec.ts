@@ -81,7 +81,7 @@ test("a prepared ticket waits on the Approval page with its checks and is reject
 test("the Results page loads", async ({ signedIn: page }) => {
   await page.goto("/results");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Results");
-  for (const label of ["Simulated orders settled", "Chosen side at the ask", "Flagged bets"]) await expect(page.getByText(label, { exact: true })).toBeVisible();
+  for (const label of ["Simulated orders settled", "Chosen side at the ask", "Flagged bets"]) await expect(page.getByText(label, { exact: true }).first()).toBeVisible(); // the card (a table header may repeat the words)
   for (const h of ["Simulated result by sport", "Simulated result by kind of market"]) await expect(page.getByRole("heading", { name: h })).toBeVisible();
 });
 
@@ -119,9 +119,9 @@ test("the Games page offers more sports found on Kalshi, marks them as not yet m
 test("the Dashboard shows the message about the scores, the cards and the charts", async ({ signedIn: page }) => {
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Dashboard");
   await expect(page.getByRole("status").filter({ hasText: /finished|edge|ahead/ })).toBeVisible();
-  for (const label of ["Finished games scored", "Worth a look today", "Flagged bets so far", "Research spend"]) await expect(page.getByText(label, { exact: true })).toBeVisible();
+  for (const label of ["Finished games scored", "Worth a look today", "Flagged bets so far", "Research spend"]) await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Forecast error, all games" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "By sport" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "By sport", exact: true })).toBeVisible();
   for (const h of ["Accuracy by sport", "Accuracy by kind of market"]) await expect(page.getByRole("heading", { name: h })).toBeVisible();
 });
 
