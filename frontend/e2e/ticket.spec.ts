@@ -87,7 +87,7 @@ test("the Results page loads", async ({ signedIn: page }) => {
 test("any researched game with a fresh forecast can be added from the Opportunities page, and the ticket says when it is not marked worth a look", async ({ signedIn: page }) => {
   await page.goto("/opportunities?all=1");
   await page.getByText(/researched games? that have not started/).waitFor();
-  const notFlagged = page.locator("tr", { hasText: "Not flagged" }).filter({ has: page.getByRole("button", { name: ADD_BUTTON }) });
+  const notFlagged = page.locator("tr", { hasText: "NO BET" }).filter({ has: page.getByRole("button", { name: ADD_BUTTON }) });
   test.skip((await notFlagged.count()) === 0, "no row that is not flagged and has a fresh forecast (forecasts older than 12 hours cannot be added)");
   await notFlagged.first().getByRole("button", { name: ADD_BUTTON }).click();
   await expect(page.getByRole("region", { name: "Ticket" })).toContainText("not marked worth a look");
@@ -129,6 +129,7 @@ test("a finished run opens with an At a glance box, and the evidence is folded u
   test.skip((await done.count()) === 0, "no finished run yet");
   await done.first().getByRole("link").first().click();
   await expect(page.getByRole("heading", { name: "At a glance" })).toBeVisible();
+  await expect(page.getByText(/^(NO BET|Worth a look)/).first()).toBeVisible(); // the verdict is the headline of the box
   const text = page.getByText("“Supported” means the page itself says it");
   await expect(text).toBeHidden(); // folded
   await page.getByRole("heading", { name: "The evidence" }).click();

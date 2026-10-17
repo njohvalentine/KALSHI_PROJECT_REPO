@@ -24,6 +24,12 @@ export function RunGlance({ run }: { run: Run }) {
       <h2 id="glance-heading" className="mb-3 text-lg font-semibold tracking-tight">
         At a glance
       </h2>
+      {run.verdict ? (
+        <p className={run.verdict.kind === "no_bet" ? "mb-3 text-xl font-bold" : "mb-3 text-xl font-bold text-good"}>
+          {run.verdict.label}
+          <span className="block text-base font-normal text-muted-foreground">{run.verdict.text.replace(/^(NO BET: |Worth a look\. )/, "")}</span>
+        </p>
+      ) : null}
       {!p?.outcomes ? (
         <p className="text-muted-foreground">{p?.unavailable ?? "There is no forecast for this run."} The research below is still available.</p>
       ) : flagged.length === 0 ? (

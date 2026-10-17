@@ -161,6 +161,7 @@ def test_ranking_puts_flagged_games_first_by_gap_and_the_empty_state_explains_it
     kalshi.events["KX-7"] = event("KX-7", "KXTGAME", market("KX-7-H", "0.43", "0.45"), market("KX-7-A", "0.54", "0.56"))
     result = run(engine, kalshi, show_all=True)
     assert [r["title"] for r in result["opportunities"]] == ["Flagged", "Not flagged"] and result["flagged_games"] == 1
+    assert [r["verdict"]["kind"] for r in result["opportunities"]] == ["look_caution", "no_bet"]  # no scored games yet: a flag carries the caution
     only_flat = run(engine, kalshi, show_all=False, MIN_RESEARCH_SHIFT="0.9")  # nothing can be flagged now
     assert only_flat["opportunities"] == [] and only_flat["flagged_games"] == 0
     assert only_flat["top_reasons"] and all("games" in r and "reason" in r for r in only_flat["top_reasons"])

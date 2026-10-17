@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 from app.config import load_settings
 from app.discovery import SeriesCatalog, is_game_series, league_of, upcoming_series
 from app.games import GamesService
-from app.monitor import UNTESTED, alert_text
+from app.monitor import alert_text
+from app.verdict import verdict
 from app.opportunities import build_row
 from app.research.markets import attach_companions
 from app.research.prompts import PLANNER_INSTRUCTIONS
@@ -176,13 +177,15 @@ def test_the_flag_and_the_alert_say_when_the_sport_has_no_scored_results():
         return build_row(game, comp, load_settings({**ENV}), NOW, scored)
 
     new = row_for({"Basketball": 3})
-    assert new["measured"] is False and any("no scored results yet" in r for r in new["risks"])
+    assert new["measured"] is False and (any("no scored results yet" in r for r in new["risks"]) or "no scored results yet" in (new["verdict"]["caution"] or ""))
+    assert new["flagged"] is True and not any("no scored results yet" in r for r in new["risks"])  # said once, in the caution
     assert row_for({"Basketball": 25})["measured"] is True
     game = {"title": "A vs B", "finished_at": NOW}
-    text = alert_text("run_flagged", game, {"supported_claims": 7, "measured": False}, NOW,
-                      {"best": {"market": "A wins", "side": "yes", "price": 0.4, "gap": 0.1, "count": 1}})
-    assert UNTESTED.strip() in text and UNTESTED.strip() not in alert_text(
-        "run_flagged", game, {"supported_claims": 7, "measured": True}, NOW, {"best": {"market": "A wins", "side": "yes", "price": 0.4, "gap": 0.1, "count": 1}})
+    best = {"best": {"market": "A wins", "side": "yes", "price": 0.4, "gap": 0.1, "count": 1}}
+    text = alert_text("run_flagged", game, {"supported_claims": 7, "verdict": verdict(1, False, False, False, "ahead")}, NOW, best)
+    assert "this sport has no scored results yet: the flag has not been tested here" in text and "NO BET is the default" in text
+    measured = alert_text("run_flagged", game, {"supported_claims": 7, "verdict": verdict(1, False, False, True, "ahead")}, NOW, best)
+    assert "no scored results" not in measured and "NO BET" not in measured  # a measured sport with a proven track record: no caution
 
 
 def test_the_planner_prompt_is_for_any_sport_and_keeps_the_specific_lines():

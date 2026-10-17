@@ -21,6 +21,7 @@ from app.auth import require_user
 from app.config import Settings
 from app.measured import scored_games_by_sport
 from app.kalshi import KalshiClient
+from app.verdict import track_kind, verdict
 from app.models import OutcomeRecord, Run
 from app.research.compare import compare_run
 
@@ -94,7 +95,7 @@ def _normal(reason: str) -> str:
     return re.sub(r"[-+]?\d+(?:\.\d+)?", "#", reason)
 
 
-def build_row(game: dict, comparison: dict, settings: Settings, now: datetime, scored: dict[str, int] | None = None) -> dict:
+def build_row(game: dict, comparison: dict, settings: Settings, now: datetime, scored: dict[str, int] | None = None, track: str = "too_few") -> dict:
     """One row for one game from its fresh comparison. The row shows the single best market."""
     prediction = game["prediction"]
     finished = game["finished_at"]
@@ -110,13 +111,19 @@ def build_row(game: dict, comparison: dict, settings: Settings, now: datetime, s
         "stale": stale, "supported_claims": prediction.get("supported_claims", 0), "evidence": prediction.get("evidence"),
         "flagged": False, "flagged_markets": 0, "best": None, "unavailable": None, "risks": [],
     }
+
+    def answer() -> dict:
+        return verdict(row["flagged_markets"], stale, row["unavailable"] is not None, row["measured"], track, age_hours)
+
     if "unavailable" in comparison:
         row["unavailable"] = comparison["unavailable"]
+        row["verdict"] = answer()
         return row
     by_ticker = {o["market_ticker"]: o for o in prediction["outcomes"]}
     scored = [c for c in comparison["outcomes"] if c.get("net_edge") is not None]
     if not scored:
         row["unavailable"] = "No market had a price to compare with."
+        row["verdict"] = answer()
         return row
     flagged = [c for c in scored if c["meaningful"] and not stale]
     # In a two-outcome game "yes" on one side and "no" on the other are almost the same bet: count it once.
@@ -138,13 +145,14 @@ def build_row(game: dict, comparison: dict, settings: Settings, now: datetime, s
         },
     )
     risks = list(best["reasons"]) if not flagged else []
-    if row["measured"] is False:
+    if row["measured"] is False and not flagged:  # a flagged game says it in its NO BET caution (verdict.py)
         risks.append("this sport has no scored results yet, so the flag has not been tested here")
     if stale:
         risks.insert(0, f"the forecast is {age_hours:.0f} hours old; the facts it rests on may be out of date")
     if (best.get("fee") or {}).get("source", "series") != "series":
         risks.append("the fee could not be read from Kalshi, so a standard fee was assumed")
     row["risks"] = risks
+    row["verdict"] = answer()
     return row
 
 
@@ -152,12 +160,13 @@ async def collect(engine, client: KalshiClient, settings: Settings, fee_cache: d
     """For each game with a forecast that has not started: (stored game data, fresh comparison, row)."""
     games = await asyncio.to_thread(_load, engine, now)
     scored = await asyncio.to_thread(scored_games_by_sport, engine)
+    track = await asyncio.to_thread(track_kind, engine, settings)
     semaphore = asyncio.Semaphore(settings.sports_fetch_concurrency)
 
     async def one(game: dict) -> tuple[dict, dict, dict]:
         async with semaphore:
             comparison = await evaluate_game(client, settings, fee_cache, game)
-        return game, comparison, build_row(game, comparison, settings, now, scored)
+        return game, comparison, build_row(game, comparison, settings, now, scored, track)
 
     return list(await asyncio.gather(*(one(g) for g in games)))
 

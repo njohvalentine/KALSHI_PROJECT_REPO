@@ -26,6 +26,7 @@ from app.research.runner import execute_run
 from dataclasses import asdict
 
 from app.research.schemas import GameInfo
+from app.verdict import track_kind, verdict
 
 log = logging.getLogger("app.runs")
 
@@ -288,7 +289,22 @@ def get_run(run_id: str, request: Request, db: Annotated[DbSession, Depends(get_
     run = db.get(Run, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return run_to_dict(run, db=db, measured_min_games=request.app.state.settings.measured_min_games)
+    settings = request.app.state.settings
+    detail = run_to_dict(run, db=db, measured_min_games=settings.measured_min_games)
+    detail["verdict"] = _run_verdict(run, detail, settings, db.get_bind())
+    return detail
+
+
+def _run_verdict(run: Run, detail: dict, settings, engine) -> dict | None:
+    """The answer for the stored forecast of a finished run (the prices of the time of the run). None while it runs or when it failed."""
+    if run.status != "done":
+        return None
+    prediction = run.prediction or {}
+    outcomes = (prediction.get("comparison") or {}).get("outcomes")
+    age = None if run.finished_at is None else (datetime.now(UTC) - run.finished_at).total_seconds() / 3600
+    return verdict(
+        flagged=sum(1 for o in outcomes or [] if o.get("meaningful")), stale=age is not None and age > settings.opportunity_max_age_hours,
+        unavailable="outcomes" not in prediction or outcomes is None, measured=detail.get("measured"), track=track_kind(engine, settings), age_hours=age)
 
 
 @router.get("")

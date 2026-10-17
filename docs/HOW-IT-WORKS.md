@@ -144,6 +144,8 @@ A market is flagged only if every one of these is true. The limits are placehold
 
 If a market is not flagged, the result page lists the reasons. "Worth a look" is never a recommendation to bet. It only means a person might want to look more closely.
 
+Every game also gets one plain answer, the same on the Opportunities page, the result page and in the alerts: **NO BET** when no market passed the tests, when the forecast is more than 12 hours old, or when there is no forecast or price. When a market did pass, the answer is "Worth a look", with the caution "NO BET is the default" for as long as the finished games do not show that our forecasts beat the Kalshi price, or while the sport has no scored results. Only a flag in a measured sport, while we are ahead of Kalshi by at least 0.005 on 30 or more games, is shown without the caution. The word BET is never used on its own.
+
 ### 5.6 Old forecasts are not flagged
 
 The Opportunities page re-reads today's prices for games that were already researched, and applies the same rules again. A forecast older than 12 hours is shown greyed out and is never flagged, because the facts it rests on may be out of date. No AI call is made on that page.

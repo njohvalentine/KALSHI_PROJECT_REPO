@@ -95,6 +95,7 @@ export type Run = RunSummary & {
   forecasts: ForecastRow[];
   baseline: Record<string, number> | null;
   costs: Record<string, string | null> | null;
+  verdict: GameVerdict | null; // null while the run is not done
 };
 
 /** What the Games list needs from the latest finished run of a game. */
@@ -142,6 +143,7 @@ export type GamesResponse = {
   fetched_at: string;
 };
 
+export type GameVerdict = { kind: "no_bet" | "look_caution" | "look"; label: string; text: string; caution: string | null };
 export type OpportunityBest = {
   market_ticker: string;
   kind: string;
@@ -173,6 +175,7 @@ export type Opportunity = {
   best: OpportunityBest | null;
   unavailable: string | null;
   risks: string[];
+  verdict: GameVerdict;
 };
 export type OpportunitiesResponse = {
   opportunities: Opportunity[];

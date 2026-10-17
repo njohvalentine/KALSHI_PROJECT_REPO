@@ -50,6 +50,7 @@ function Row({ o }: { o: Opportunity }) {
         <>
           <TableCell className="min-w-52 max-w-60 whitespace-normal">
             <div>{buyText(o)}</div>
+            {o.verdict.caution ? <div className="mt-1 text-sm font-medium text-warn">{o.verdict.caution}</div> : null}
             {o.flagged && o.flagged_markets > 1 ? (
               <div className="mt-1 text-sm text-muted-foreground">
                 {o.flagged_markets - 1} more market{o.flagged_markets - 1 === 1 ? "" : "s"} of this game {o.flagged_markets - 1 === 1 ? "is" : "are"} also worth a look.{" "}
@@ -70,7 +71,7 @@ function Row({ o }: { o: Opportunity }) {
       <TableCell className="text-right tabular-nums">{o.supported_claims}</TableCell>
       <TableCell className="min-w-32 whitespace-normal">
         <div className="flex flex-wrap gap-1.5">
-          {o.flagged ? <Badge className="bg-good-soft text-good">Worth a look</Badge> : <Badge variant="outline">Not flagged</Badge>}
+          {o.flagged ? <Badge className="bg-good-soft text-good">{o.verdict.label}</Badge> : <Badge variant="outline" className="font-bold">{o.verdict.label}</Badge>}
           {o.measured === false ? <Badge variant="outline" title="This sport has fewer scored games than needed, so the flag has not been tested here">Sport not yet measured</Badge> : null}
           {o.stale ? <Badge className="bg-warn-soft text-warn">Forecast is old</Badge> : null}
         </div>
