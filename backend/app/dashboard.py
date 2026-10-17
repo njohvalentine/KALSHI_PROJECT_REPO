@@ -43,6 +43,8 @@ def build(score: dict, spend: dict) -> dict:
         "games_needed": MIN_GAMES,
         "message": verdict(score["games"], same["ours"], same["market"]),
         "scores": {"n": same["n"], "ours": same["ours"], "baseline": same["baseline"], "market": same["market"]},
+        "bookmakers": None if not score["bookmakers"]["n"] else {
+            k: score["bookmakers"][k] for k in ("games", "n", "ours", "baseline", "market", "book", "pinnacle", "pinnacle_n")} | {"too_few": score["bookmakers"]["games"] < MIN_GAMES},
         "by_sport": [
             {"sport": sport, "games": g["games"], "ours": g["same_records"]["ours"], "baseline": g["same_records"]["baseline"],
              "market": g["same_records"]["market"], "too_few": g["games"] < MIN_SPORT_GAMES}

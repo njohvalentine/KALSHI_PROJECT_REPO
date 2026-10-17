@@ -75,8 +75,31 @@ def _side(win_probability: Decimal, price: Decimal | None, fee: FeeInfo, size: D
     return {"price": price, "size": size, "fee": cost, "net_edge": win_probability - price - cost}
 
 
+def book_gap(book: dict, yes: dict | None, no: dict | None, our_side: str | None, s: Settings, read_at: str | None) -> dict:
+    """The bookmakers' view of one market against the Kalshi price. `book` is {probability (margin already removed), pinnacle, count};
+    `yes` and `no` are the sides of compare_outcome (price at the ask, fee, contracts on offer). Buying a side is worth the bookmakers'
+    probability of it minus the price minus the fee, the same arithmetic as our own gap. It passes when the gap is at least EDGE_MIN and
+    at least MIN_ASK_SIZE contracts are on offer at that price. It is shown and recorded; it does not change the flag."""
+    b = Decimal(str(book["probability"]))
+    options = {}
+    if yes:
+        options["yes"] = (b - yes["price"] - yes["fee"], yes["size"])
+    if no:
+        options["no"] = ((ONE - b) - no["price"] - no["fee"], no["size"])
+    out = {"probability": b, "pinnacle": book.get("pinnacle"), "count": book["count"], "read_at": read_at,
+           "side": None, "edge": None, "enough_contracts": False, "passes": False, "agrees_with_us": None}
+    if options:
+        side = max(options, key=lambda n: options[n][0])
+        edge, size = options[side]
+        enough = size is not None and size >= Decimal(str(s.min_ask_size))
+        out.update(side=side, edge=edge, enough_contracts=enough, passes=edge >= Decimal(str(s.edge_min)) and enough,
+                   agrees_with_us=None if edge <= 0 or our_side is None else side == our_side)
+    return out
+
+
 def compare_outcome(
     outcome: dict, market: dict | None, fee: FeeInfo, evidence: str, supported_claims: int, s: Settings, baseline: float | None = None,
+    book: dict | None = None, book_at: str | None = None,
 ) -> dict:
     ticker = outcome["market_ticker"]
     if market is None:
@@ -129,6 +152,8 @@ def compare_outcome(
     if size is None or size < Decimal(str(s.min_ask_size)):
         reasons.append(f"only {size if size is not None else 'an unknown number of'} contracts at the best price (MIN_ASK_SIZE is {s.min_ask_size})")
     result["meaningful"] = not reasons
+    if book:  # the bookmakers' view of this market (winner markets only), beside ours
+        result["book"] = book_gap(book, yes, no, side, s, book_at)
     return result
 
 
@@ -150,6 +175,7 @@ def _fee_dict(fee: FeeInfo) -> dict:
 def compare(
     prediction: dict, event_data: dict, fee: FeeInfo, s: Settings, priced_at: datetime,
     companions: list[tuple[dict, FeeInfo]] | None = None, baseline: dict[str, float] | None = None,
+    book: dict[str, dict] | None = None, book_at: str | None = None,
 ) -> dict:
     """Compares every market of the prediction. `event_data` and `fee` belong to the winner event; `companions`
     are (event data, fee) pairs of the other events of the game (total, both teams to score, spread)."""
@@ -163,6 +189,7 @@ def compare(
         result = compare_outcome(
             o, market, market_fee, prediction["evidence"], prediction["supported_claims"], s,
             None if baseline is None else baseline.get(o["market_ticker"]),
+            (book or {}).get(o["market_ticker"]), book_at,
         )
         result["fee"] = _fee_dict(market_fee)  # each market carries the fee of its own series
         outcomes.append(result)
@@ -207,7 +234,7 @@ async def _read_series_fee(client: KalshiClient, series_ticker: str | None, even
 
 async def compare_run(
     client: KalshiClient, event_ticker: str, prediction: dict, s: Settings, companions: list[tuple[str, str | None]] | None = None,
-    baseline: dict[str, float] | None = None, fee_cache: dict | None = None,
+    baseline: dict[str, float] | None = None, fee_cache: dict | None = None, book: dict | None = None,
 ) -> dict:
     """Reads fresh prices and the series fees, then compares. Never raises for a Kalshi problem: it returns why not.
     `companions` are (event ticker, series ticker) of the game's other market events."""
@@ -233,4 +260,5 @@ async def compare_run(
         if series not in fees:
             fees[series] = await _series_fee(client, series, companion_event, fee_cache)
         extra.append((data, fees[series]))
-    return compare(prediction, event_data, fee, s, priced_at, extra, baseline)
+    at = (book or {}).get("at")
+    return compare(prediction, event_data, fee, s, priced_at, extra, baseline, (book or {}).get("by_ticker"), at.isoformat() if at else None)

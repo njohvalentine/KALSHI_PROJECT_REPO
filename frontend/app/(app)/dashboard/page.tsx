@@ -86,6 +86,19 @@ export default async function DashboardPage() {
           )}
         </section>
       </div>
+      {d.bookmakers ? (
+        <section className="mt-4 rounded-xl border bg-card p-5" aria-labelledby="book-heading">
+          <h2 id="book-heading" className="text-lg font-semibold">Games with bookmaker prices</h2>
+          <p className="mb-3 text-sm text-muted-foreground">
+            Brier score on the same {d.bookmakers.n} outcomes of {d.bookmakers.games} game{d.bookmakers.games === 1 ? "" : "s"}. Lower is better.
+            {d.bookmakers.too_few ? ` Too few games to read: ${d.games_needed} are needed.` : ""}
+          </p>
+          <Bar label="Ours" value={d.bookmakers.ours} color="bg-chart-1" />
+          <Bar label="Kalshi price" value={d.bookmakers.market} color="bg-foreground" />
+          <Bar label="Bookmakers" value={d.bookmakers.book} color="bg-chart-3" />
+          {d.bookmakers.pinnacle !== null ? <Bar label={`Pinnacle · ${d.bookmakers.pinnacle_n}`} value={d.bookmakers.pinnacle} color="bg-chart-4" /> : null}
+        </section>
+      ) : null}
       <p className="mt-4 text-sm text-muted-foreground">
         Scores need about {d.games_needed} finished games before they mean anything. Research spend is calculated by the app from the tokens used; it is not the OpenAI bill.
         Nothing here places an order.

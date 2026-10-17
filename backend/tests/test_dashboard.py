@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from app.dashboard import verdict
 from app.research.records import save_records, score_records
 from tests.conftest import EMAIL, PASSWORD, needs_db
@@ -19,13 +21,15 @@ def test_the_message_follows_the_scores():
     assert "not proof" in verdict(62, 0.15, 0.20)["text"]
 
 
-def many_games(engine, n):
+def many_games(engine, n, book=False, first=0):
     records = []
-    for i in range(n):
+    for i in range(first, first + n):
         for r in make_records(baseline={"KX-A": 0.55, "KX-B": 0.45}):
             r.run_id, r.event_ticker, r.market_ticker = f"run{i}", f"KX-{i}", f"{r.market_ticker}-{i}"
             r.sport, r.league = "Tennis", "ATP"
             r.resolved_at, r.resolved_yes = r.created_at, (r.outcome == "A wins") == (i % 2 == 0)
+            if book:
+                r.book_probability, r.book_count = (Decimal("0.6") if r.outcome == "A wins" else Decimal("0.4")), 19
             records.append(r)
     save_records(engine, records)
 
@@ -60,3 +64,18 @@ def test_the_numbers_are_the_ones_score_records_gives(make_client):
     assert body["spend"]["limit"] == 5 and body["spend"]["last_24h"] == 0  # no run was made in this database
     assert body["chosen_side"] == expected["paper_all"] and body["chosen_side"]["bets"] == 12
     assert body["message"]["kind"] == "too_few"  # 6 games is below the 30 needed
+
+
+@needs_db
+def test_the_bookmaker_block_appears_only_with_bookmaker_prices_and_marks_under_30_games(make_client):
+    many_games(make_client.engine, 4)  # no bookmaker price on these
+    with make_client() as client:
+        client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
+        assert client.get("/api/dashboard").json()["bookmakers"] is None
+    many_games(make_client.engine, 3, book=True, first=10)
+    with make_client() as client:
+        client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
+        block = client.get("/api/dashboard").json()["bookmakers"]
+    assert block["games"] == 3 and block["too_few"] is True
+    for key in ("ours", "market", "book", "baseline"):
+        assert block[key] is not None

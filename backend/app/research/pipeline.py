@@ -100,12 +100,13 @@ async def run_later_stages(
         prediction["pipeline"] = {"pages": fetched, "claim_checks": summary.counts, "baseline": baseline is not None}
         if forecast_set.ok:
             await asyncio.to_thread(save_forecasts, engine, run_id, forecast_set)
-            prediction["comparison"] = await _stage("compare", set_stage, compare_run(
-                kalshi, game.event_ticker, prediction, settings, [(g.event_ticker, g.series_ticker) for g in game.groups], baseline))
             # One read of the odds feed per league (cached); it never fails the run: a failure is a note on the record.
+            # It is read before the comparison, which sets the bookmakers' view beside ours, and the record uses the same read.
             book = await book_for_game(
                 odds, event_ticker=game.event_ticker, title=game.title, starts_at=_start(game),
                 outcome_names=game.outcome_names, outcome_tickers=game.outcome_tickers)
+            prediction["comparison"] = await _stage("compare", set_stage, compare_run(
+                kalshi, game.event_ticker, prediction, settings, [(g.event_ticker, g.series_ticker) for g in game.groups], baseline, book=book))
             records = build_records(run_id, game, prediction, prediction["comparison"], baseline, datetime.now(UTC), book)
             await asyncio.to_thread(save_records, engine, records)
         result.prediction = prediction

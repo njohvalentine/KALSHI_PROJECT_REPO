@@ -64,6 +64,11 @@ function Row({ o }: { o: Opportunity }) {
           <TableCell className="text-right tabular-nums">
             {pct(b.our_probability)} / {pct(b.market_probability)}
             <div className="text-sm text-muted-foreground">range {Math.round(b.spread * 100)} points</div>
+            {b.book ? (
+              <div className="text-sm text-muted-foreground" title="The bookmakers' consensus with their margin removed, as it was when the forecast was made">
+                bookmakers {pct(b.book.probability)} ({b.book.count} books{b.book.age_hours === null ? "" : `, read ${b.book.age_hours < 1 ? "less than an hour" : `${Math.round(b.book.age_hours)} h`} ago`})
+              </div>
+            ) : null}
           </TableCell>
           <TableCell className={cn("text-right text-lg tabular-nums", o.flagged ? "font-bold text-good" : "font-semibold")}>{gapCents(b.gap)}</TableCell>
         </>

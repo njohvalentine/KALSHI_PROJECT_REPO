@@ -86,6 +86,9 @@ def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None, measur
                 if r.baseline_probability is not None
             }
             summary["baseline"] = baseline or None  # the plain AI call with no research, per outcome
+            records = db.scalars(select(OutcomeRecord).where(OutcomeRecord.run_id == run.id, OutcomeRecord.market_kind == "winner")).all()
+            # why there is no bookmaker price for the game (None when there is one, or when the run has no records)
+            summary["book_note"] = None if any(r.book_probability is not None for r in records) else next((r.book_note for r in records if r.book_note), None)
             sport = db.scalar(select(OutcomeRecord.sport).where(OutcomeRecord.run_id == run.id, OutcomeRecord.sport.is_not(None)).limit(1))
             summary["sport"] = sport
             # False when the sport has fewer scored games than MEASURED_MIN_GAMES (the flag has not been tested there); None when unknown

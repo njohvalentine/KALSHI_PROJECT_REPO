@@ -146,6 +146,10 @@ If a market is not flagged, the result page lists the reasons. "Worth a look" is
 
 Every game also gets one plain answer, the same on the Opportunities page, the result page and in the alerts: **NO BET** when no market passed the tests, when the forecast is more than 12 hours old, or when there is no forecast or price. When a market did pass, the answer is "Worth a look", with the caution "NO BET is the default" for as long as the finished games do not show that our forecasts beat the Kalshi price, or while the sport has no scored results. Only a flag in a measured sport, while we are ahead of Kalshi by at least 0.005 on 30 or more games, is shown without the caution. The word BET is never used on its own.
 
+### 5.5b The bookmakers are compared with the Kalshi price (shown, not used to flag)
+
+For winner markets, when the odds feed covers the league, the system also reads the bookmakers' prices. Each bookmaker's margin is removed by scaling its prices to 100 percent, exchanges are left out, and the median over the bookmakers is the consensus. For each side the system works out the gap against the Kalshi price the same way as for our own forecast: the bookmakers' probability minus the ask price minus the fee. It also checks that enough contracts are offered, and whether the bookmakers favour the same side as we do. This is shown on the result page and on the Opportunities page and is scored on the Dashboard as games finish. It does not change when a market is flagged. Total, margin and both-teams-to-score markets have no bookmaker price, because the feed is read for head-to-head prices only.
+
 ### 5.6 Old forecasts are not flagged
 
 The Opportunities page re-reads today's prices for games that were already researched, and applies the same rules again. A forecast older than 12 hours is shown greyed out and is never flagged, because the facts it rests on may be out of date. No AI call is made on that page.
@@ -236,6 +240,8 @@ The full report, with all numbers and caveats, is `docs/ACCURACY-REPORT-2026-10-
 **Baseline (plain AI).** The estimate made by one AI call with no research. It shows what the research adds.
 
 **Bid.** The highest price at which someone is willing to buy a contract. This is the price you get if you sell immediately.
+
+**Bookmaker consensus.** The median, over the bookmakers, of their prices for an outcome after each bookmaker's margin is removed. It is compared with the Kalshi price and with our forecast.
 
 **Brier score.** The average squared difference between a forecast probability and what happened (1 or 0). Lower is better. A constant 50 percent scores 0.25.
 

@@ -47,6 +47,10 @@ def _game_inputs(db: DbSession, run: Run) -> dict:
         "start": next((r.game_start for r in records if r.game_start), None),
         "finished_at": run.finished_at, "prediction": run.prediction,
         "baseline": {r.market_ticker: float(r.baseline_probability) for r in records if r.baseline_probability is not None},
+        # the bookmakers' price stored with the forecast (read when the run was made), with the moment it was read
+        "book": {"at": next((r.book_at for r in records if r.book_at), None),
+                 "by_ticker": {r.market_ticker: {"probability": float(r.book_probability), "pinnacle": None if r.book_pinnacle is None else float(r.book_pinnacle),
+                                                 "count": r.book_count} for r in records if r.book_probability is not None}},
         # the market as it was when the forecast was made, to see how far it has moved since
         "forecast_mids": {
             r.market_ticker: float((r.yes_bid + r.yes_ask) / 2)
@@ -88,11 +92,20 @@ async def evaluate_game(client: KalshiClient, settings: Settings, fee_cache: dic
     events = {_event_of(o["market_ticker"]): None for o in game["prediction"]["outcomes"]}
     events.pop(game["event_ticker"], None)
     companions = [(event, event.split("-")[0]) for event in events]
-    return await compare_run(client, game["event_ticker"], game["prediction"], settings, companions, game["baseline"], fee_cache)
+    return await compare_run(client, game["event_ticker"], game["prediction"], settings, companions, game["baseline"], fee_cache, book=game.get("book"))
 
 
 def _normal(reason: str) -> str:
     return re.sub(r"[-+]?\d+(?:\.\d+)?", "#", reason)
+
+
+def _book_view(book: dict | None, now: datetime) -> dict | None:
+    """The bookmakers' view of the best market for the row: their probability, how many books, the gap against them, and how old the read is."""
+    if not book:
+        return None
+    read = datetime.fromisoformat(book["read_at"]) if book.get("read_at") else None
+    return {**{k: book[k] for k in ("probability", "count", "side", "edge", "passes", "agrees_with_us")},
+            "age_hours": None if read is None else round(max((now - read).total_seconds() / 3600, 0), 1)}
 
 
 def build_row(game: dict, comparison: dict, settings: Settings, now: datetime, scored: dict[str, int] | None = None, track: str = "too_few") -> dict:
@@ -142,6 +155,7 @@ def build_row(game: dict, comparison: dict, settings: Settings, now: datetime, s
             "market_ticker": best["market_ticker"], "kind": o.get("kind", "winner"), "market": o["outcome"], "side": best["side"],
             "price": price, "our_probability": round(ours, 4), "market_probability": price, "gap": best["net_edge"],
             "spread": o["spread"], "reasons": best["reasons"], "fee_source": (best.get("fee") or {}).get("source"),
+            "book": _book_view(best.get("book"), now),
         },
     )
     risks = list(best["reasons"]) if not flagged else []

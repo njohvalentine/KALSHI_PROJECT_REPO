@@ -53,7 +53,7 @@ def prediction(*outcomes, claims=7, evidence="supported"):
     return {"outcomes": list(outcomes), "evidence": evidence, "supported_claims": claims, "forecasters_valid": 3, "dropped": [], "markets_not_offered": [], "adjustments": []}
 
 
-def add_run(engine, ticker, title, pred, finished_hours_ago=1, start_in_hours=5, status="done", baseline=None, run_id=None):
+def add_run(engine, ticker, title, pred, finished_hours_ago=1, start_in_hours=5, status="done", baseline=None, run_id=None, book=None):
     run_id = run_id or f"run-{ticker}"
     finished = NOW - timedelta(hours=finished_hours_ago)
     with DbSession(engine) as db:
@@ -63,6 +63,8 @@ def add_run(engine, ticker, title, pred, finished_hours_ago=1, start_in_hours=5,
                 run_id=run_id, event_ticker=ticker, market_ticker=o["market_ticker"], outcome=o["outcome"], game_start=NOW + timedelta(hours=start_in_hours),
                 created_at=finished, before_start=True, probability=o["probability"], prob_min=o["min"], prob_max=o["max"], forecasters_valid=3,
                 evidence="supported", supported_claims=7, baseline_probability=(baseline or {}).get(o["market_ticker"]),
+                book_probability=(book or {}).get(o["market_ticker"]), book_count=19 if (book or {}).get(o["market_ticker"]) else None,
+                book_at=finished if (book or {}).get(o["market_ticker"]) else None,
             ))
         db.commit()
 
@@ -198,3 +200,19 @@ def test_the_endpoint_needs_login_calls_no_model_and_caches_for_a_minute(make_cl
         assert shown_all["games_considered"] == 1
     finally:
         client.__exit__(None, None, None)
+
+
+def test_the_row_carries_the_stored_bookmaker_price_with_its_age_and_the_gap_at_todays_kalshi_price(fresh_db):
+    engine = migrated(fresh_db)
+    add_run(engine, "KX-1", "Booked", GOOD, finished_hours_ago=3, baseline=GOOD_BASELINE, book={"KX-1-H": 0.60, "KX-1-A": 0.40})
+    add_run(engine, "KX-7", "Unbooked", GOOD, finished_hours_ago=2, baseline=GOOD_BASELINE)
+    kalshi = kalshi_for_good()
+    kalshi.events["KX-7"] = event("KX-7", "KXTGAME", market("KX-7-H", "0.40", "0.42"), market("KX-7-A", "0.57", "0.59"))
+    rows = {r["title"]: r for r in run(engine, kalshi, show_all=True)["opportunities"]}
+    booked, unbooked = rows["Booked"]["best"], rows["Unbooked"]["best"]
+    assert unbooked["book"] is None  # no bookmaker price was stored for that game
+    assert booked["kind"] == "winner" and booked["market_ticker"] == "KX-1-H"  # the bookmakers only price winner markets
+    assert booked["book"]["probability"] == 0.60 and booked["book"]["count"] == 19 and booked["book"]["age_hours"] == 3.0
+    assert booked["book"]["side"] in ("yes", "no") and booked["book"]["edge"] is not None
+    # the gap is at today's Kalshi price (ask 0.42 for yes, 0.43 for no), not the price of the time of the run
+    assert abs(booked["book"]["edge"] - (0.60 - 0.42 - 0.07 * 0.42 * 0.58)) < 1e-4 or abs(booked["book"]["edge"] - (0.40 - 0.43 - 0.07 * 0.43 * 0.57)) < 1e-4

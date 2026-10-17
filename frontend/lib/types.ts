@@ -53,7 +53,19 @@ export type PredictionOutcome = {
   spread: number;
   forecasts: { variant: string; probability: number }[];
 };
+export type BookView = {
+  probability: number;
+  pinnacle: number | null;
+  count: number;
+  read_at: string | null;
+  side: "yes" | "no" | null;
+  edge: number | null;
+  enough_contracts: boolean;
+  passes: boolean;
+  agrees_with_us: boolean | null;
+};
 export type ComparisonOutcome = {
+  book?: BookView;
   market_ticker: string;
   yes_bid: number | null;
   yes_ask: number | null;
@@ -96,6 +108,7 @@ export type Run = RunSummary & {
   baseline: Record<string, number> | null;
   costs: Record<string, string | null> | null;
   verdict: GameVerdict | null; // null while the run is not done
+  book_note?: string | null; // why the game has no bookmaker price
 };
 
 /** What the Games list needs from the latest finished run of a game. */
@@ -156,6 +169,7 @@ export type OpportunityBest = {
   spread: number;
   reasons: string[];
   fee_source: string | null;
+  book: { probability: number; count: number; side: "yes" | "no" | null; edge: number | null; passes: boolean; agrees_with_us: boolean | null; age_hours: number | null } | null;
 };
 export type Opportunity = {
   run_id: string;
@@ -269,6 +283,7 @@ export type DashboardResponse = {
   message: { kind: "too_few" | "ahead" | "no_edge"; text: string };
   scores: { n: number; ours: number | null; baseline: number | null; market: number | null };
   by_sport: DashboardGroup[];
+  bookmakers: { games: number; n: number; ours: number | null; baseline: number | null; market: number | null; book: number | null; pinnacle: number | null; pinnacle_n: number; too_few: boolean } | null;
   chosen_side: { bets: number; won: number; average_result: number | null; total_result: number | null };
   flagged: { bets: number; won: number; average_result: number | null; total_result: number | null; too_few: boolean };
   spend: { total_usd: number; runs: number; last_24h: number; limit: number; note: string };

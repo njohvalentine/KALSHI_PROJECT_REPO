@@ -146,6 +146,67 @@ function GroupRows({ rows, run }: { rows: Row[]; run: { id: string; event_ticker
   );
 }
 
+function BookmakersFold({ run, rows }: { run: Run; rows: Row[] }) {
+  const withBook = rows.filter((r) => r.outcome.kind === undefined || r.outcome.kind === "winner").filter((r) => r.market?.book);
+  if (withBook.length === 0) {
+    return run.book_note ? <p className="mt-3 text-sm text-muted-foreground">No bookmaker price for this game: {run.book_note}.</p> : null;
+  }
+  return (
+    <div className="mt-4">
+      <Fold
+        id="bookmakers"
+        level="h3"
+        defaultOpen
+        title="Bookmakers"
+        summary={`${withBook[0].market?.book?.count} bookmakers, their margin removed; the gap is against the Kalshi price after fees`}
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Outcome</TableHead>
+              <TableHead className="text-right">Ours</TableHead>
+              <TableHead className="text-right">Bookmakers</TableHead>
+              <TableHead className="text-right">Pinnacle</TableHead>
+              <TableHead>Gap against them, after fees</TableHead>
+              <TableHead>Contracts</TableHead>
+              <TableHead>Compared with us</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {withBook.map(({ outcome, market }) => {
+              const b = market!.book!;
+              const price = b.side === "yes" ? market!.yes_ask : b.side === "no" ? market!.no_ask : null;
+              return (
+                <TableRow key={outcome.market_ticker}>
+                  <TableCell className="whitespace-normal font-medium">{outcome.outcome}</TableCell>
+                  <TableCell className="text-right tabular-nums">{pct(outcome.probability)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{pct(b.probability)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{b.pinnacle === null ? "–" : pct(b.pinnacle)}</TableCell>
+                  <TableCell className="whitespace-normal tabular-nums">
+                    {b.edge === null || b.side === null ? "–" : (
+                      <>
+                        <span className={b.passes ? "font-semibold text-good" : "font-medium"}>{gapCents(b.edge)}</span>
+                        <span className="block text-sm text-muted-foreground">buying “{b.side}” at {cents(price)}</span>
+                      </>
+                    )}
+                  </TableCell>
+                  <TableCell className="whitespace-normal text-sm">{b.edge !== null && b.edge > 0 ? (b.enough_contracts ? "enough on offer" : "too few on offer") : "–"}</TableCell>
+                  <TableCell className="whitespace-normal text-sm">
+                    {b.agrees_with_us === null ? "No gap against the bookmakers" : b.agrees_with_us ? "They agree with us" : "They disagree with us"}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Read {ago(withBook[0].market?.book?.read_at ?? null)}. This is shown beside our forecast and does not change the flag. A gap passes (green) when it is at least the minimum gap and enough contracts are offered.
+        </p>
+      </Fold>
+    </div>
+  );
+}
+
 export function PredictionSection({ run }: { run: Run }) {
   const p = run.prediction;
   if (!p) {
@@ -198,6 +259,8 @@ export function PredictionSection({ run }: { run: Run }) {
           </div>
         );
       })}
+
+      <BookmakersFold run={run} rows={rows} />
 
       <div className="mt-3 grid gap-1 text-sm text-muted-foreground">
         {comparison?.unavailable ? <p>Market prices could not be read for this run: {comparison.unavailable}</p> : null}
