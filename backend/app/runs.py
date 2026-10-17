@@ -4,6 +4,7 @@ import asyncio
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -99,6 +100,7 @@ def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None, measur
 
 class StartBody(BaseModel):
     event_ticker: str = Field(min_length=1, max_length=128)
+    confirm_repeat: bool = False  # true: the person has seen that the game was researched recently and wants a new run
 
 
 def _kickoff(kalshi, event_ticker: str) -> str | None:
@@ -165,12 +167,22 @@ async def _run_and_release(request_app, run_id: str, game: GameInfo) -> None:
 class RunStartError(Exception):
     """A run could not be started. `status_code` and `detail` are what the endpoint answers."""
 
-    def __init__(self, status_code: int, detail: str, headers: dict | None = None, run_id: str | None = None):
+    def __init__(self, status_code: int, detail: str, headers: dict | None = None, run_id: str | None = None, extra: dict | None = None):
         super().__init__(detail)
-        self.status_code, self.detail, self.headers, self.run_id = status_code, detail, headers, run_id
+        self.status_code, self.detail, self.headers, self.run_id, self.extra = status_code, detail, headers, run_id, extra
 
 
-async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: str = "manual") -> dict:
+def _recent_run(engine, event_ticker: str, hours: float) -> tuple[float, Decimal | None] | None:
+    """(hours ago, cost) of the latest finished run of the game whose forecast is still fresh, or None."""
+    from sqlalchemy.orm import Session
+
+    with Session(engine) as db:
+        run = db.scalar(select(Run).where(Run.event_ticker == event_ticker, Run.status == "done", Run.finished_at >= datetime.now(UTC) - timedelta(hours=hours))
+                        .order_by(Run.finished_at.desc()).limit(1))
+        return None if run is None else ((datetime.now(UTC) - run.finished_at).total_seconds() / 3600, run.cost_usd)
+
+
+async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: str = "manual", confirm_repeat: bool = False) -> dict:
     """Starts a run for a game in the background and returns {"id", "status"}. Used by the endpoint (a person
     pressed Research) and by the watcher (the automatic batch rule). Raises RunStartError."""
     state = app.state
@@ -178,6 +190,19 @@ async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: s
         raise RunStartError(503, "Research is not configured. Set OPENAI_API_KEY and restart the backend.")
     if state.active_runs >= state.settings.max_concurrent_runs:
         raise RunStartError(429, "Too many runs in progress. Wait for one to finish.", headers={"Retry-After": "30"})
+    if not confirm_repeat:
+        # A fresh forecast exists: a new run costs the same again, so a person must say they want it. The watcher never does.
+        recent = await run_in_threadpool(_recent_run, state.engine, event_ticker, state.settings.opportunity_max_age_hours)
+        if recent is not None:
+            hours, cost = recent
+            ago = "less than an hour" if hours < 1 else f"{round(hours)} hours"
+            price = "an unknown cost" if cost is None else f"${cost:.2f}"
+            raise RunStartError(
+                409,
+                f"This game was researched {ago} ago for {price}, and its forecast is still fresh. A new run costs about the same and counts against "
+                "today's limit. Prices may have moved, which you can see on the Opportunities page without a new run.",
+                extra={"code": "recently_researched", "hours_ago": round(hours, 1), "cost_usd": None if cost is None else float(cost)},
+            )
     state.active_runs += 1  # reserve the slot before any await, so parallel requests cannot overshoot
     task_owns_slot = False
     try:
@@ -226,10 +251,10 @@ async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: s
 @router.post("", status_code=202, dependencies=[Depends(require_requested_with)])
 async def start_run(body: StartBody, request: Request, user: Annotated[User, Depends(require_user)]):
     try:
-        return await start_game_run(request.app, body.event_ticker, user.id)
+        return await start_game_run(request.app, body.event_ticker, user.id, confirm_repeat=body.confirm_repeat)
     except RunStartError as exc:
         if exc.status_code == 409:
-            return JSONResponse(status_code=409, content={"detail": exc.detail, "run_id": exc.run_id})
+            return JSONResponse(status_code=409, content={"detail": exc.detail, "run_id": exc.run_id, **(exc.extra or {})})
         raise HTTPException(status_code=exc.status_code, detail=exc.detail, headers=exc.headers) from exc
 
 

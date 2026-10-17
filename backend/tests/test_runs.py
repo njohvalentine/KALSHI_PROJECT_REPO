@@ -117,7 +117,9 @@ def test_second_run_for_the_same_market_is_refused_while_one_is_active(make_clie
         assert first.status_code == 202
         assert second.status_code == 409 and second.json()["run_id"] == first.json()["id"]
         wait_done(client, first.json()["id"])
-        assert start(client).status_code == 202  # allowed again once the first is finished
+        again = start(client)  # finished: its forecast is fresh, so a new run needs the person's confirmation (see test_repeat_guard.py)
+        assert again.status_code == 409 and again.json()["code"] == "recently_researched"
+        assert client.post("/api/runs", json={"event_ticker": "KX-1", "confirm_repeat": True}, headers=H).status_code == 202
     finally:
         client.__exit__(None, None, None)
 

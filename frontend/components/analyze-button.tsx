@@ -13,19 +13,22 @@ export function AnalyzeButton({ eventTicker, latest }: { eventTicker: string; la
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [repeat, setRepeat] = useState<string | null>(null); // the server said the forecast is still fresh: the sentence to show
 
-  async function start() {
+  async function start(confirmRepeat = false) {
     setError(null);
+    setRepeat(null);
     setPending(true);
     try {
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Requested-With": "web" },
-        body: JSON.stringify({ event_ticker: eventTicker }),
+        body: JSON.stringify({ event_ticker: eventTicker, confirm_repeat: confirmRepeat }),
       });
       const body = await res.json().catch(() => ({}));
       if (res.status === 202) return router.push(`/prediction/${body.id}`);
       if (res.status === 409 && body.run_id) return router.push(`/prediction/${body.run_id}`);
+      if (res.status === 409 && body.code === "recently_researched") return setRepeat(body.detail);
       if (res.status === 401) return router.replace("/login");
       setError(typeof body.detail === "string" ? body.detail : `Could not start (HTTP ${res.status}).`);
     } catch {
@@ -42,6 +45,21 @@ export function AnalyzeButton({ eventTicker, latest }: { eventTicker: string; la
       </Link>
     );
   }
+  if (repeat) {
+    return (
+      <div className="grid max-w-xs gap-2 text-right text-sm" role="alertdialog" aria-label="Research again?">
+        <p>{repeat}</p>
+        <div className="flex justify-end gap-2">
+          <Button size="sm" onClick={() => start(true)} disabled={pending}>
+            Research again anyway
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setRepeat(null)}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex gap-2">
@@ -50,7 +68,7 @@ export function AnalyzeButton({ eventTicker, latest }: { eventTicker: string; la
             View research
           </Link>
         ) : null}
-        <Button size="sm" onClick={start} disabled={pending} title={RUN_COST_NOTE}>
+        <Button size="sm" onClick={() => start()} disabled={pending} title={RUN_COST_NOTE}>
           {pending ? "Starting…" : latest ? "Research again" : "Research"}
         </Button>
       </div>

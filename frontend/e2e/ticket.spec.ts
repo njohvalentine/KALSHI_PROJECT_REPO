@@ -134,3 +134,29 @@ test("a finished run opens with an At a glance box, and the evidence is folded u
   await page.getByRole("heading", { name: "The evidence" }).click();
   await expect(text).toBeVisible();
 });
+
+test("Research on a game with a fresh forecast asks first, and confirming sends confirm_repeat", async ({ signedIn: page }) => {
+  const sent: unknown[] = [];
+  await page.route("**/api/runs", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const body = route.request().postDataJSON();
+    sent.push(body);
+    if (!body.confirm_repeat) {
+      return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ code: "recently_researched", run_id: null, detail: "This game was researched 3 hours ago for $0.43, and its forecast is still fresh." }) });
+    }
+    return route.fulfill({ status: 429, contentType: "application/json", body: JSON.stringify({ detail: "stopped here by the test" }) }); // no real run, no spend
+  });
+  await page.goto("/games");
+  await page.getByRole("button", { name: /^Research/ }).first().click();
+  await expect(page.getByRole("alertdialog", { name: "Research again?" })).toContainText("researched 3 hours ago for $0.43");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await page.getByRole("button", { name: /^Research/ }).first().click();
+  await page.getByRole("button", { name: "Research again anyway" }).click();
+  await expect(page.getByText("stopped here by the test")).toBeVisible();
+  expect(sent).toEqual([
+    { event_ticker: expect.any(String), confirm_repeat: false },
+    { event_ticker: expect.any(String), confirm_repeat: false },
+    { event_ticker: expect.any(String), confirm_repeat: true },
+  ]);
+});
