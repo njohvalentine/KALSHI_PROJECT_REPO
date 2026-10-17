@@ -73,3 +73,24 @@ def test_a_confirmed_repeat_still_meets_the_daily_limit(make_client):
         assert again.status_code == 429 and "daily research limit" in again.json()["detail"]
     finally:
         client.__exit__(None, None, None)
+
+
+def test_two_starts_at_the_same_moment_cannot_both_take_the_only_slot(make_client, monkeypatch):
+    """The repeat check waits on the database; the slot must already be taken by then, or both starts pass the concurrency check."""
+    import time
+
+    def slow_none(*args, **kwargs):
+        time.sleep(0.3)
+        return None
+
+    monkeypatch.setattr("app.runs._recent_run", slow_none)
+    client = signed_in(make_client, FakeModel(delay=1), MAX_CONCURRENT_RUNS="1", RESEARCH_MAX_PER_DAY="0")
+    try:
+        async def both():
+            return await asyncio.gather(start_game_run(client.app, "KX-A", None), start_game_run(client.app, "KX-B", None), return_exceptions=True)
+
+        results = asyncio.run(both())
+        refused = [r for r in results if isinstance(r, RunStartError)]
+        assert len(refused) == 1 and refused[0].status_code == 429, results
+    finally:
+        client.__exit__(None, None, None)

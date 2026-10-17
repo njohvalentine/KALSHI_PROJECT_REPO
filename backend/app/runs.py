@@ -190,22 +190,23 @@ async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: s
         raise RunStartError(503, "Research is not configured. Set OPENAI_API_KEY and restart the backend.")
     if state.active_runs >= state.settings.max_concurrent_runs:
         raise RunStartError(429, "Too many runs in progress. Wait for one to finish.", headers={"Retry-After": "30"})
-    if not confirm_repeat:
-        # A fresh forecast exists: a new run costs the same again, so a person must say they want it. The watcher never does.
-        recent = await run_in_threadpool(_recent_run, state.engine, event_ticker, state.settings.opportunity_max_age_hours)
-        if recent is not None:
-            hours, cost = recent
-            ago = "less than an hour" if hours < 1 else f"{round(hours)} hours"
-            price = "an unknown cost" if cost is None else f"${cost:.2f}"
-            raise RunStartError(
-                409,
-                f"This game was researched {ago} ago for {price}, and its forecast is still fresh. A new run costs about the same and counts against "
-                "today's limit. Prices may have moved, which you can see on the Opportunities page without a new run.",
-                extra={"code": "recently_researched", "hours_ago": round(hours, 1), "cost_usd": None if cost is None else float(cost)},
-            )
     state.active_runs += 1  # reserve the slot before any await, so parallel requests cannot overshoot
     task_owns_slot = False
     try:
+        if not confirm_repeat:
+            # A fresh forecast exists: a new run costs the same again, so a person must say they want it. The watcher never does.
+            # This check waits on the database, so it runs after the slot is reserved above: a refusal gives the slot back in the finally below.
+            recent = await run_in_threadpool(_recent_run, state.engine, event_ticker, state.settings.opportunity_max_age_hours)
+            if recent is not None:
+                hours, cost = recent
+                ago = "less than an hour" if hours < 1 else f"{round(hours)} hours"
+                price = "an unknown cost" if cost is None else f"${cost:.2f}"
+                raise RunStartError(
+                    409,
+                    f"This game was researched {ago} ago for {price}, and its forecast is still fresh. A new run costs about the same and counts against "
+                    "today's limit. Prices may have moved, which you can see on the Opportunities page without a new run.",
+                    extra={"code": "recently_researched", "hours_ago": round(hours, 1), "cost_usd": None if cost is None else float(cost)},
+                )
         try:
             raw = await run_in_threadpool(state.kalshi.get_event, event_ticker)
         except KalshiNotFound as exc:
