@@ -69,6 +69,27 @@ def day_cost(db: DbSession, now: datetime, exclude_id: int | None = None) -> Dec
     return total
 
 
+def simulated_loss(db: DbSession, s: Settings, now: datetime) -> tuple[Decimal, Decimal]:
+    """(loss of the last 24 hours, loss since ORDER_LOSS_SINCE) of the settled simulated orders, as positive amounts (0 when they are ahead)."""
+    settled = db.scalars(select(Order).where(Order.state == "settled", Order.paper_result.is_not(None))).all()
+    day = sum((o.paper_result for o in settled if o.settled_at and o.settled_at >= now - timedelta(hours=24)), Decimal(0))
+    total = sum((o.paper_result for o in settled if s.order_loss_since is None or (o.placed_at and o.placed_at >= s.order_loss_since)), Decimal(0))
+    return max(-day, Decimal(0)), max(-total, Decimal(0))
+
+
+def pause_reason(db: DbSession, s: Settings, now: datetime) -> str | None:
+    """The sentence that says why no new order may be made (a stop rule of the risk framework), or None. A limit of 0 is off."""
+    day, total = simulated_loss(db, s, now)
+    if s.order_pause_day_loss_usd and day >= _dec(s.order_pause_day_loss_usd):
+        return (f"Paused: the simulated results of the last 24 hours are -${day:.2f} (the stop rule is ${s.order_pause_day_loss_usd:.2f}, ORDER_PAUSE_DAY_LOSS_USD). "
+                "New orders can be made again when the oldest of those results is 24 hours old.")
+    if s.order_pause_total_loss_usd and total >= _dec(s.order_pause_total_loss_usd):
+        since = "" if s.order_loss_since is None else f" since {s.order_loss_since:%Y-%m-%d}"
+        return (f"Paused: the simulated results{since} are -${total:.2f} (the stop rule is ${s.order_pause_total_loss_usd:.2f}, ORDER_PAUSE_TOTAL_LOSS_USD). "
+                "A review and a new ORDER_LOSS_SINCE date are needed before new orders.")
+    return None
+
+
 def order_to_dict(o: Order, legs: list[OrderLeg] | None = None) -> dict:
     def num(x):
         return None if x is None else float(x)
@@ -172,6 +193,10 @@ def checks_for(order: Order, legs: list[OrderLeg], fresh_by_leg: list[dict], s: 
     out.append({"name": "within_limits", "leg": None, "ok": within, "blocking": True,
                 "detail": f"{order.contracts} contracts (limit {s.order_max_contracts}), up to ${order.max_cost:.2f} (limit ${s.order_max_cost_usd:.2f}), "
                           f"${spent + order.max_cost:.2f} today (limit ${s.order_max_day_cost_usd:.2f})"})
+    paused = pause_reason(db, s, now)
+    out.append({"name": "not_paused", "leg": None, "ok": paused is None, "blocking": True,
+                "detail": paused or ("no stop rule is set (ORDER_PAUSE_DAY_LOSS_USD, ORDER_PAUSE_TOTAL_LOSS_USD)"
+                                     if not (s.order_pause_day_loss_usd or s.order_pause_total_loss_usd) else "the simulated losses are below the stop rules")})
     events = [g.event_ticker for g in legs]
     legs_ok = len(legs) <= s.ticket_max_legs and len(set(events)) == len(events)
     out.append({"name": "legs_ok", "leg": None, "ok": legs_ok, "blocking": True,
@@ -269,6 +294,9 @@ async def prepare_ticket(app, user_id: int, contracts: int, legs_in: list[tuple]
                 forecast_at=min((p["game"]["finished_at"] for p in prepared if p["game"]["finished_at"]), default=None),
                 state="proposed", created_by=user_id, expires_at=now + timedelta(minutes=s.order_expiry_minutes),
             )
+            paused = pause_reason(db, s, now)
+            if paused:
+                raise OrderError(422, paused)
             if max_cost > _dec(s.order_max_cost_usd):
                 raise OrderError(422, f"This ticket could cost ${max_cost:.2f}, above the limit of ${s.order_max_cost_usd:.2f} per order.")
             if day_cost(db, now) + max_cost > _dec(s.order_max_day_cost_usd):

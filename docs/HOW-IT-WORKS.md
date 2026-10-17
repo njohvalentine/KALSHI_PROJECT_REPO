@@ -172,6 +172,7 @@ An order is prepared, then waits for a person. A person approves or rejects it, 
 - each leg's forecast is recent (12 hours or less)
 - the price has not moved against us by more than 2 cents
 - enough contracts are offered
+- no stop rule has triggered: after the simulated results of the last 24 hours, or since a review date, lose more than a set limit, no new order is allowed (off until the client approves a value; see `docs/RISK-FRAMEWORK.md`)
 - the leg is still worth a look (this one only warns)
 
 Each change of state is a single, atomic database update, so a double click or a retry cannot place an order twice. Every change is written to an append-only history. When the game has ended, the system settles the simulated orders and shows what they would have paid.

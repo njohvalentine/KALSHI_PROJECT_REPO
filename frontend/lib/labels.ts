@@ -92,6 +92,7 @@ export const ORDER_STATE: Record<string, string> = {
 };
 
 export const CHECK_NAME: Record<string, string> = {
+  not_paused: "No stop rule has triggered (the simulated losses are below the limits)",
   not_expired: "Still within its time limit",
   game_not_started: "The game has not started",
   forecast_fresh: "The forecast is recent enough",
