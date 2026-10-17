@@ -3,6 +3,7 @@
 The message at the top is written here, from the numbers, so it reads the same everywhere and cannot be more
 optimistic than the scores allow."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
@@ -60,5 +61,6 @@ def dashboard(request: Request, db: Annotated[DbSession, Depends(get_db)]):
     series = {e.ticker: (e.sport, e.league) for e in s.sports_series}
     score = score_records(request.app.state.engine, None, series, s.min_supported_claims)
     total, runs = db.execute(select(func.coalesce(func.sum(Run.cost_usd), 0), func.count()).where(Run.status == "done", Run.cost_usd.is_not(None))).one()
-    return build(score, {"total_usd": float(total), "runs": runs,
+    window = db.scalar(select(func.count()).select_from(Run).where(Run.created_at >= datetime.now(UTC) - timedelta(hours=24))) or 0
+    return build(score, {"total_usd": float(total), "runs": runs, "last_24h": window, "limit": s.research_max_per_day,
                          "note": "Calculated by the app from the tokens used and the prices it stores; it is not the OpenAI bill."})

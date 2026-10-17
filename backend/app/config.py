@@ -117,6 +117,7 @@ class Settings:
     alert_cooldown_minutes: float
     alert_max_per_hour: int
     auto_research_max_per_day: int
+    research_max_per_day: int  # games researched in the last 24 hours, whoever starts them; 0 = no limit
     auto_research_hours_ahead: float
     auto_research_min_gap_hours: float
     order_max_contracts: int
@@ -304,6 +305,12 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     else:
         auto_per_day = 0
         problems.append(f"AUTO_RESEARCH_MAX_PER_DAY must be a whole number, 0 or more (0 means off), got {raw_auto!r}")
+    raw_cap = env.get("RESEARCH_MAX_PER_DAY", "5").strip() or "5"
+    if raw_cap.isdigit():
+        research_cap = int(raw_cap)  # 0 is allowed and means no limit
+    else:
+        research_cap = 5
+        problems.append(f"RESEARCH_MAX_PER_DAY must be a whole number, 0 or more (0 means no limit), got {raw_cap!r}")
     auto_hours_ahead = _parse_positive_float("AUTO_RESEARCH_HOURS_AHEAD", env.get("AUTO_RESEARCH_HOURS_AHEAD", "24"), problems)
     auto_min_gap = _parse_positive_float("AUTO_RESEARCH_MIN_GAP_HOURS", env.get("AUTO_RESEARCH_MIN_GAP_HOURS", "12"), problems)
     order_max_contracts = _parse_positive_int("ORDER_MAX_CONTRACTS", env.get("ORDER_MAX_CONTRACTS", "10"), problems)
@@ -355,6 +362,8 @@ def load_settings(env: Mapping[str, str]) -> Settings:
 
     log.info("The bookmaker benchmark is %s." % (f"ON (regions {odds_regions})" if odds_enabled else "off (ODDS_ENABLED is not 'true')"))
     log.info("Alerts are %s." % ("sent to a Telegram chat" if alerts_enabled else "only recorded in the app (ALERTS_ENABLED is not 'true')"))
+    log.info(
+        "Research is limited to %s.", f"{research_cap} games in any 24 hours (RESEARCH_MAX_PER_DAY)" if research_cap else "no number of games (RESEARCH_MAX_PER_DAY is 0)")
     if monitor_enabled:
         log.info(
             "The watcher is ON (every %g min). Alerts are %s. Automatic research: %s.",
@@ -423,6 +432,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         alert_cooldown_minutes=alert_cooldown,
         alert_max_per_hour=alert_max_per_hour,
         auto_research_max_per_day=auto_per_day,
+        research_max_per_day=research_cap,
         auto_research_hours_ahead=auto_hours_ahead,
         auto_research_min_gap_hours=auto_min_gap,
         order_max_contracts=order_max_contracts,

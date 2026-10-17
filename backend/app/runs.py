@@ -3,14 +3,14 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DbSession
@@ -116,10 +116,29 @@ def _kickoff(kalshi, event_ticker: str) -> str | None:
     return None
 
 
-def _insert_run(engine, run_id: str, game: GameInfo, user_id: int | None, trigger: str = "manual") -> None:
+class DailyLimitReached(Exception):
+    """RESEARCH_MAX_PER_DAY runs were already made in the last 24 hours. `opens_at` is when the next slot opens."""
+
+    def __init__(self, used: int, opens_at: datetime):
+        super().__init__(f"{used} runs in the last 24 hours")
+        self.used, self.opens_at = used, opens_at
+
+
+LIMIT_LOCK = 7243001  # a fixed number for the database lock that makes "count, then insert" one step
+
+
+def _insert_run(engine, run_id: str, game: GameInfo, user_id: int | None, trigger: str = "manual", limit: int = 0) -> None:
     from sqlalchemy.orm import Session
 
     with Session(engine) as db:
+        if limit:
+            # One caller at a time counts and inserts, so two presses at once cannot both take the last slot.
+            # The lock is released when this transaction ends.
+            db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": LIMIT_LOCK})
+            made = db.scalars(select(Run.created_at).where(Run.created_at >= datetime.now(UTC) - timedelta(hours=24)).order_by(Run.created_at)).all()
+            if len(made) >= limit:
+                # the slot opens when enough of the oldest runs are 24 hours old that fewer than `limit` remain
+                raise DailyLimitReached(len(made), made[len(made) - limit] + timedelta(hours=24))
         db.add(Run(id=run_id, event_ticker=game.event_ticker, event_title=game.title, status="queued", created_by=user_id, trigger=trigger))
         db.commit()
 
@@ -182,7 +201,15 @@ async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: s
             raise RunStartError(502, "Kalshi returned game data we cannot use") from exc
         run_id = uuid.uuid4().hex
         try:
-            await run_in_threadpool(_insert_run, state.engine, run_id, game, user_id, trigger)
+            await run_in_threadpool(_insert_run, state.engine, run_id, game, user_id, trigger, state.settings.research_max_per_day)
+        except DailyLimitReached as limit:
+            wait = max(int((limit.opens_at - datetime.now(UTC)).total_seconds()), 1)
+            raise RunStartError(
+                429,
+                f"The daily research limit is reached: {limit.used} games in the last 24 hours. The next slot opens at {limit.opens_at:%H:%M} (UTC), "
+                "when the oldest of them is 24 hours old. The limit is set by RESEARCH_MAX_PER_DAY.",
+                headers={"Retry-After": str(wait)},
+            ) from None
         except IntegrityError:
             existing = await run_in_threadpool(_active_run_id, state.engine, game.event_ticker)
             raise RunStartError(409, "A run for this game is already in progress", run_id=existing) from None

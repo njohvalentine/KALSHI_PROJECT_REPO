@@ -268,5 +268,5 @@ export type DashboardResponse = {
   by_sport: DashboardGroup[];
   chosen_side: { bets: number; won: number; average_result: number | null; total_result: number | null };
   flagged: { bets: number; won: number; average_result: number | null; total_result: number | null; too_few: boolean };
-  spend: { total_usd: number; runs: number; note: string };
+  spend: { total_usd: number; runs: number; last_24h: number; limit: number; note: string };
 };

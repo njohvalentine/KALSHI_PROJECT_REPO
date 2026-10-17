@@ -60,7 +60,7 @@ export default async function DashboardPage() {
           value={`${f.won} / ${f.bets}`}
           sub={f.bets === 0 ? "none yet" : `won · paper result ${centsPrecise(f.average_result)} per contract${f.too_few ? " (too few to read)" : ""}`}
         />
-        <Stat label="Research spend" value={`$${d.spend.total_usd.toFixed(2)}`} sub={`all time · ${d.spend.runs} runs · estimated`} />
+        <Stat label="Research spend" value={`$${d.spend.total_usd.toFixed(2)}`} sub={`all time · ${d.spend.runs} runs · estimated${d.spend.limit ? ` · ${d.spend.last_24h} of ${d.spend.limit} games researched in the last 24 hours` : ""}`} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border bg-card p-5" aria-labelledby="all-heading">
