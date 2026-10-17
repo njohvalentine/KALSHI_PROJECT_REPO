@@ -125,6 +125,8 @@ export type Outcome = {
   label: string;
   bid: string | null;
   ask: string | null;
+  ask_size?: string | null;
+  bid_size?: string | null;
   last: string | null;
   volume: string | null;
   status: string | null;
@@ -153,6 +155,7 @@ export type GamesResponse = {
   notes: string[];
   more_sports: { sport: string; games: number; series: number; also_measured: boolean }[];
   measured_min_games: number;
+  screening: { available: boolean; max_leagues: number };
   fetched_at: string;
 };
 
@@ -288,3 +291,10 @@ export type DashboardResponse = {
   flagged: { bets: number; won: number; average_result: number | null; total_result: number | null; too_few: boolean };
   spend: { total_usd: number; runs: number; last_24h: number; limit: number; note: string };
 };
+
+export type ScreenResult = {
+  status: "promising" | "not_promising" | "cannot" | "not_checked";
+  text: string;
+  best: { market: string; side: "yes" | "no"; price: number; book_probability: number; book_count: number; edge: number; enough_contracts: boolean } | null;
+};
+export type ScreenResponse = { results: Record<string, ScreenResult>; notes: string[]; credits: { remaining: number | null; used: number | null } | null };

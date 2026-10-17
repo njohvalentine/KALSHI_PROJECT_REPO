@@ -11,6 +11,7 @@ from app.checkpoint import open_checkpointer
 from app.games import GamesService
 from app.games import router as games_router
 from app.alerts import router as alerts_router
+from app.screening import router as screening_router
 from app.dashboard import router as dashboard_router
 from app.monitor import Monitor
 from app.opportunities import router as opportunities_router
@@ -90,6 +91,7 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
     app = FastAPI(title="Valentine backend", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.include_router(auth_router)
     app.include_router(games_router)
+    app.include_router(screening_router)
     app.include_router(runs_router)
     app.include_router(opportunities_router)
     app.include_router(alerts_router)

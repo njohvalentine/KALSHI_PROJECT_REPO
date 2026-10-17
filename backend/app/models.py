@@ -183,6 +183,44 @@ class OutcomeRecord(Base):
     settlement_value: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
 
 
+class Screening(Base):
+    """One winner outcome checked against the bookmakers before any research (the free check on the Games page). Saved so the rule can
+    be tested on real games later: the result fields are filled in once the game has ended."""
+
+    __tablename__ = "screenings"
+    __table_args__ = (
+        Index("ix_screenings_event", "event_ticker", "created_at"),
+        Index("ix_screenings_open", "resolved_at", "game_start"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    event_ticker: Mapped[str] = mapped_column(String(128))
+    market_ticker: Mapped[str] = mapped_column(String(128))
+    title: Mapped[str] = mapped_column(Text)
+    outcome: Mapped[str] = mapped_column(Text)
+    sport: Mapped[str | None] = mapped_column(String(40))
+    league: Mapped[str | None] = mapped_column(String(80))
+    game_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Kalshi at that moment
+    yes_bid: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    yes_ask: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    no_ask: Mapped[Decimal | None] = mapped_column(Numeric(7, 4))
+    yes_ask_size: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    yes_bid_size: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    # the bookmakers at that moment (margin removed) and what the rule said
+    book_probability: Mapped[Decimal] = mapped_column(Numeric(5, 4))
+    book_count: Mapped[int] = mapped_column(Integer)
+    book_pinnacle: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    side: Mapped[str | None] = mapped_column(String(3))
+    net_edge: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    enough_contracts: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    passes: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # the result, filled in once the game has ended
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_yes: Mapped[bool | None] = mapped_column(Boolean)
+
+
 class Order(Base):
     """A simulated order: proposed, approved by a person, then placed in the simulation. Nothing is ever sent to Kalshi."""
 

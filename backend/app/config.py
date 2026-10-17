@@ -132,6 +132,9 @@ class Settings:
     odds_api_key: str | None
     odds_regions: str
     odds_cache_minutes: float
+    screen_hours_ahead: float  # the free bookmaker check only looks at games starting within this many hours
+    screen_min_credits_left: int  # it refuses to read the odds feed below this many credits
+    screen_max_leagues: int  # leagues read per press
     telegram_chat_id: str | None
     record_baseline: bool
     resolve_after_hours: float
@@ -337,6 +340,14 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     odds_api_key = env.get("ODDS_API_KEY", "").strip() or None
     odds_regions = env.get("ODDS_REGIONS", "eu").strip()
     odds_cache_minutes = _parse_positive_float("ODDS_CACHE_MINUTES", env.get("ODDS_CACHE_MINUTES", "10"), problems)
+    screen_hours_ahead = _parse_positive_float("SCREEN_HOURS_AHEAD", env.get("SCREEN_HOURS_AHEAD", "36"), problems)
+    raw_floor = env.get("SCREEN_MIN_CREDITS_LEFT", "100").strip() or "100"
+    if raw_floor.isdigit():
+        screen_floor = int(raw_floor)  # 0 is allowed: no floor
+    else:
+        screen_floor = 100
+        problems.append(f"SCREEN_MIN_CREDITS_LEFT must be a whole number, 0 or more, got {raw_floor!r}")
+    screen_leagues = _parse_positive_int("SCREEN_MAX_LEAGUES", env.get("SCREEN_MAX_LEAGUES", "8"), problems)
     if odds_enabled:
         if not odds_api_key:
             problems.append("ODDS_ENABLED=true needs ODDS_API_KEY")
@@ -447,6 +458,9 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         odds_api_key=odds_api_key,
         odds_regions=odds_regions,
         odds_cache_minutes=odds_cache_minutes,
+        screen_hours_ahead=screen_hours_ahead,
+        screen_min_credits_left=screen_floor,
+        screen_max_leagues=screen_leagues,
         telegram_chat_id=telegram_chat,
         record_baseline=record_baseline,
         resolve_after_hours=resolve_after_hours,

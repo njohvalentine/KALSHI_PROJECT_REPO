@@ -161,3 +161,9 @@ test("Research on a game with a fresh forecast asks first, and confirming sends 
     { event_ticker: expect.any(String), confirm_repeat: true },
   ]);
 });
+
+test("the Games page offers the free bookmaker check as a link and does not run it by itself", async ({ signedIn: page }) => {
+  await page.goto("/games");
+  await expect(page.getByRole("link", { name: "Check these games against the bookmakers" })).toBeVisible(); // needs the odds feed on (ODDS_ENABLED)
+  await expect(page.getByText("Checked against the bookmakers")).toHaveCount(0); // only after the person asks (screen=1): it spends odds credits
+});

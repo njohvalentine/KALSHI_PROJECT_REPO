@@ -150,6 +150,10 @@ Every game also gets one plain answer, the same on the Opportunities page, the r
 
 For winner markets, when the odds feed covers the league, the system also reads the bookmakers' prices. Each bookmaker's margin is removed by scaling its prices to 100 percent, exchanges are left out, and the median over the bookmakers is the consensus. For each side the system works out the gap against the Kalshi price the same way as for our own forecast: the bookmakers' probability minus the ask price minus the fee. It also checks that enough contracts are offered, and whether the bookmakers favour the same side as we do. This is shown on the result page and on the Opportunities page and is scored on the Dashboard as games finish. It does not change when a market is flagged. Total, margin and both-teams-to-score markets have no bookmaker price, because the feed is read for head-to-head prices only.
 
+### 5.5c The free check before research
+
+Research costs money, so the Games page can check games against the bookmakers first, for free in OpenAI terms. A game is "worth researching" when, for a winner outcome and a side, the bookmakers' consensus probability minus the Kalshi ask price minus the fee is at least 5 cents, at least 10 contracts are offered at that price, and the game starts within 36 hours. Games whose league has no bookmaker source, or that the feed does not list, are shown as "cannot be screened" and are never treated as promising or not promising. The check runs only when a person presses a link, because every league read uses one of the 500 free odds credits of the month, and it refuses to read when fewer than 100 are left. It does not stop anyone from researching. The first real check, on 2026-10-17, looked at 53 soccer games in six leagues with about 21 bookmakers each: the best gap anywhere was +0.9 cents and the average was -1.2 cents after fees, so none was worth researching under this rule. That is one day of data. Whether the rule picks better games is to be tested on results before it is used as a filter.
+
 ### 5.6 Old forecasts are not flagged
 
 The Opportunities page re-reads today's prices for games that were already researched, and applies the same rules again. A forecast older than 12 hours is shown greyed out and is never flagged, because the facts it rests on may be out of date. No AI call is made on that page.
@@ -298,6 +302,8 @@ The full report, with all numbers and caveats, is `docs/ACCURACY-REPORT-2026-10-
 **Series (Kalshi).** A family of repeating events, for example all NBA games. A series has a title, tags that name the sport, and fee settings.
 
 **Settled.** A simulated order whose game has ended and for which the paper result was worked out.
+
+**Screening (the free check).** Comparing the bookmakers' prices with the Kalshi price before any research, to see which games are worth researching. It uses no OpenAI credit.
 
 **Spread (of the forecasters).** The highest forecaster probability minus the lowest, for one outcome. A large spread means the forecasters disagreed.
 

@@ -10,10 +10,16 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { backendFetch } from "@/lib/backend";
 import { ago, bidAsk, pct, RUN_COST_NOTE } from "@/lib/format";
-import type { GamesResponse, LatestForecast, LatestRun, RunSummary } from "@/lib/types";
+import type { GamesResponse, LatestForecast, LatestRun, RunSummary, ScreenResponse, ScreenResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Params = { sport?: string; q?: string; started?: string; more?: string };
+type Params = { sport?: string; q?: string; started?: string; more?: string; screen?: string };
+
+function ScreenLabel({ result }: { result: ScreenResult | undefined }) {
+  if (!result) return <span className="text-muted-foreground">Not checked (started, or too far ahead)</span>;
+  if (result.status === "promising") return <span className="font-medium text-good">{result.text}</span>;
+  return <span className="text-muted-foreground">{result.text}</span>;
+}
 
 function href(params: Params, change: Partial<Params>): string {
   const merged = { ...params, ...change };
@@ -31,7 +37,16 @@ async function GamesList({ params }: { params: Params }) {
   if (params.more && params.sport) query.set("more", "true"); // also load the sport's other leagues found on Kalshi (slower)
   // Both lookups run together. The latest-run lookup only decorates the buttons; if it fails the
   // list still works and the buttons simply start fresh.
-  const [res, latestRes] = await Promise.all([backendFetch(`/api/games?${query}`), backendFetch("/api/runs/latest")]);
+  // The free bookmaker check runs only when the person asked for it (screen=1): it reads the odds feed, which has a monthly allowance.
+  const screenQuery = new URLSearchParams({ limit: "200" });
+  if (params.sport) screenQuery.set("sport", params.sport);
+  if (params.q) screenQuery.set("q", params.q);
+  if (params.more && params.sport) screenQuery.set("more", "true");
+  const [res, latestRes, screenRes] = await Promise.all([
+    backendFetch(`/api/games?${query}`),
+    backendFetch("/api/runs/latest"),
+    params.screen ? backendFetch(`/api/games/screen?${screenQuery}`) : Promise.resolve(null),
+  ]);
 
   if (!res.ok) {
     const detail = await res.json().then((b) => b.detail as string, () => "");
@@ -45,6 +60,8 @@ async function GamesList({ params }: { params: Params }) {
   const data = (await res.json()) as GamesResponse;
   const latest = new Map<string, { id: string; status: RunSummary["status"] }>();
   const forecasts = new Map<string, LatestForecast>();
+  const screen: ScreenResponse | null = screenRes && screenRes.ok ? ((await screenRes.json()) as ScreenResponse) : null;
+  const screenFailed = Boolean(screenRes && !screenRes.ok);
   if (latestRes.ok) {
     for (const r of ((await latestRes.json()) as { runs: LatestRun[] }).runs) {
       latest.set(r.event_ticker, { id: r.id, status: r.status });
@@ -69,6 +86,37 @@ async function GamesList({ params }: { params: Params }) {
           );
         })}
       </nav>
+
+      {data.screening.available ? (
+        <div className="mb-4 text-sm">
+          {screen || screenFailed ? (
+            <>
+              <p className="text-muted-foreground">
+                {screenFailed
+                  ? "The check against the bookmakers could not be made. Reload the page to try again."
+                  : `Checked against the bookmakers${screen?.credits && screen.credits.used !== null ? `: ${screen.credits.used} odds credit${screen.credits.used === 1 ? "" : "s"} used` : ""}${
+                      screen?.credits && screen.credits.remaining !== null ? `, ${screen.credits.remaining} left this month` : ""
+                    }. No OpenAI credit was used. It is a guide for choosing what to research, not a recommendation.`}{" "}
+                <Link href={href(params, { screen: undefined })} className="text-primary underline underline-offset-4">
+                  Hide the check
+                </Link>
+              </p>
+              {screen?.notes.map((n) => (
+                <p key={n} className="mt-1 text-warn">
+                  {n}
+                </p>
+              ))}
+            </>
+          ) : (
+            <p className="text-muted-foreground">
+              <Link href={href(params, { screen: "1" })} className="font-medium text-primary underline underline-offset-4">
+                Check these games against the bookmakers
+              </Link>{" "}
+              to see which are worth researching. It reads the bookmakers’ prices (at most {data.screening.max_leagues} odds credits, one per league) and uses no OpenAI credit.
+            </p>
+          )}
+        </div>
+      ) : null}
 
       {data.more_sports.length > 0 ? (
         <div className="mb-4">
@@ -122,6 +170,7 @@ async function GamesList({ params }: { params: Params }) {
                 <TableHead className="px-4 py-3">Game</TableHead>
                 <TableHead className="hidden px-4 py-3 md:table-cell">Starts</TableHead>
                 <TableHead className="px-4 py-3">Outcomes (sell – buy price)</TableHead>
+                {screen ? <TableHead className="hidden px-4 py-3 lg:table-cell">Bookmakers</TableHead> : null}
                 <TableHead className="hidden px-4 py-3 text-right md:table-cell">Research (costs credit)</TableHead>
               </TableRow>
             </TableHeader>
@@ -172,10 +221,20 @@ async function GamesList({ params }: { params: Params }) {
                         Estimate made {ago(forecasts.get(g.event_ticker)?.forecast_at ?? null)}; the prices are live.
                       </p>
                     ) : null}
+                    {screen && screen.results[g.event_ticker] ? (
+                      <div className="mt-2 text-sm lg:hidden">
+                        <ScreenLabel result={screen.results[g.event_ticker]} />
+                      </div>
+                    ) : null}
                     <div className="mt-2 md:hidden">
                       <AnalyzeButton eventTicker={g.event_ticker} latest={latest.get(g.event_ticker) ?? null} />
                     </div>
                   </TableCell>
+                  {screen ? (
+                    <TableCell className="hidden max-w-[34ch] whitespace-normal px-4 py-3.5 text-sm lg:table-cell">
+                      <ScreenLabel result={screen.results[g.event_ticker]} />
+                    </TableCell>
+                  ) : null}
                   <TableCell className="hidden px-4 py-3.5 text-right md:table-cell">
                     <AnalyzeButton eventTicker={g.event_ticker} latest={latest.get(g.event_ticker) ?? null} />
                   </TableCell>
@@ -226,7 +285,7 @@ function GamesLoading() {
 export default async function GamesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const raw = await searchParams;
   const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
-  const params: Params = { sport: first(raw.sport), q: first(raw.q), started: first(raw.started), more: first(raw.more) };
+  const params: Params = { sport: first(raw.sport), q: first(raw.q), started: first(raw.started), more: first(raw.more), screen: first(raw.screen) };
   return (
     <>
       <PageHeader
@@ -237,12 +296,13 @@ export default async function GamesPage({ searchParams }: { searchParams: Promis
         {params.sport ? <input type="hidden" name="sport" value={params.sport} /> : null}
         {params.started ? <input type="hidden" name="started" value={params.started} /> : null}
         {params.more ? <input type="hidden" name="more" value={params.more} /> : null}
+        {params.screen ? <input type="hidden" name="screen" value={params.screen} /> : null}
         <Input name="q" defaultValue={params.q ?? ""} placeholder="Search by team, player or league" className="bg-card" aria-label="Search games" />
         <button type="submit" className={buttonVariants({ variant: "outline" })}>
           Search
         </button>
       </form>
-      <Suspense key={`${params.sport}|${params.q}|${params.started}|${params.more}`} fallback={<GamesLoading />}>
+      <Suspense key={`${params.sport}|${params.q}|${params.started}|${params.more}|${params.screen}`} fallback={<GamesLoading />}>
         <GamesList params={params} />
       </Suspense>
     </>

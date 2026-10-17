@@ -221,6 +221,20 @@ def book_prices(event: dict, expected_outcomes: int) -> dict[str, dict]:
     return out
 
 
+def prices_by_ticker(event: dict, outcome_names: list[str], outcome_tickers: list[str]) -> dict[str, dict] | None:
+    """The bookmaker price of each of our outcomes (by market ticker) from one game of the feed, or None when an outcome has no
+    price from at least MIN_BOOKS bookmakers or its name does not match. The one mapping used by a run and by the free check."""
+    prices = book_prices(event, len(outcome_tickers))
+    by_ticker = {}
+    for name, ticker in zip(outcome_names, outcome_tickers):
+        feed_name = "Draw" if name.strip().lower() in ("tie", "draw") else next(
+            (n for n in (event["home_team"], event["away_team"]) if same_team(name, n)), None)
+        hit = prices.get(feed_name) if feed_name else None
+        if hit and hit["count"] >= MIN_BOOKS:
+            by_ticker[ticker] = hit
+    return by_ticker if len(by_ticker) == len(outcome_tickers) else None
+
+
 async def book_for_game(client: OddsClient | None, *, event_ticker: str, title: str, starts_at: datetime | None,
                         outcome_names: list[str], outcome_tickers: list[str]) -> dict:
     """{"at": when it was read, "by_ticker": {market ticker: {probability, pinnacle, count}}, "note": why not}.
@@ -240,15 +254,8 @@ async def book_for_game(client: OddsClient | None, *, event_ticker: str, title: 
                 break
         if event is None:
             return {"at": now, "by_ticker": {}, "note": why}
-        prices = book_prices(event, len(outcome_tickers))
-        by_ticker = {}
-        for name, ticker in zip(outcome_names, outcome_tickers):
-            feed_name = "Draw" if name.strip().lower() in ("tie", "draw") else next(
-                (n for n in (event["home_team"], event["away_team"]) if same_team(name, n)), None)
-            hit = prices.get(feed_name) if feed_name else None
-            if hit and hit["count"] >= MIN_BOOKS:
-                by_ticker[ticker] = hit
-        if len(by_ticker) != len(outcome_tickers):
+        by_ticker = prices_by_ticker(event, outcome_names, outcome_tickers)
+        if by_ticker is None:
             return {"at": now, "by_ticker": {}, "note": f"fewer than {MIN_BOOKS} bookmakers priced every outcome, or an outcome name did not match"}
         return {"at": now, "by_ticker": by_ticker, "note": None}
     except OddsError as exc:

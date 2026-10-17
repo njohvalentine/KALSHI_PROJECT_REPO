@@ -66,6 +66,8 @@ def build_game(
                 "ask": m.get("yes_ask_dollars"),
                 "last": m.get("last_price_dollars"),
                 "volume": m.get("volume_fp"),
+                "ask_size": m.get("yes_ask_size_fp"),  # contracts offered at the best ask / best bid (for the free bookmaker check)
+                "bid_size": m.get("yes_bid_size_fp"),
                 "status": m.get("status"),
             }
             for m in markets
@@ -291,4 +293,6 @@ def list_games(
     include_started: bool = False,
     more: bool = False,
 ):
-    return request.app.state.games.query(sport=sport, q=q, limit=limit, include_started=include_started, more=more)
+    state = request.app.state
+    return {**state.games.query(sport=sport, q=q, limit=limit, include_started=include_started, more=more),
+            "screening": {"available": state.odds is not None, "max_leagues": state.settings.screen_max_leagues}}  # the free bookmaker check needs the odds feed
