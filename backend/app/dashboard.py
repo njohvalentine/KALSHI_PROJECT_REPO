@@ -33,6 +33,17 @@ def verdict(games: int, ours: float | None, market: float | None) -> dict:
             f"(ours {ours:.3f}, Kalshi {market:.3f}). {games} games is not a final verdict."}
 
 
+def _groups(groups: dict, key: str) -> list[dict]:
+    """The rows of the tables by sport and by kind of market: the three scores on the same outcomes and the paper result of all
+    the chosen sides and of the flagged ones, straight from score_records (the numbers of the command)."""
+    return [
+        {key: name, "games": g["games"], "outcomes": g["outcomes"], "n": g["same_records"]["n"], "ours": g["same_records"]["ours"],
+         "baseline": g["same_records"]["baseline"], "market": g["same_records"]["market"], "too_few": g["games"] < MIN_SPORT_GAMES,
+         "paper": g["paper_all"], "flagged": g["paper_flagged"]}
+        for name, g in sorted(groups.items(), key=lambda kv: -kv[1]["games"])
+    ]
+
+
 def build(score: dict, spend: dict) -> dict:
     same = score["same_records"]
     flagged = score["paper_flagged"]
@@ -45,12 +56,8 @@ def build(score: dict, spend: dict) -> dict:
         "scores": {"n": same["n"], "ours": same["ours"], "baseline": same["baseline"], "market": same["market"]},
         "bookmakers": None if not score["bookmakers"]["n"] else {
             k: score["bookmakers"][k] for k in ("games", "n", "ours", "baseline", "market", "book", "pinnacle", "pinnacle_n")} | {"too_few": score["bookmakers"]["games"] < MIN_GAMES},
-        "by_sport": [
-            {"sport": sport, "games": g["games"], "ours": g["same_records"]["ours"], "baseline": g["same_records"]["baseline"],
-             "market": g["same_records"]["market"], "too_few": g["games"] < MIN_SPORT_GAMES}
-            for sport, g in sorted(score["by_sport"].items(), key=lambda kv: -kv[1]["games"])
-            if g["same_records"]["n"] > 0
-        ],
+        "by_sport": _groups(score["by_sport"], "sport"),
+        "by_kind": _groups(score["by_kind"], "kind"),
         "chosen_side": score["paper_all"],
         "flagged": {**flagged, "too_few": flagged["bets"] < MIN_FLAGGED_BETS},
         "spend": spend,

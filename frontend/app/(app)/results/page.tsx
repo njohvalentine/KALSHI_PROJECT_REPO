@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LocalTime } from "@/components/local-time";
+import { GroupTable } from "@/components/group-table";
 import { PageHeader } from "@/components/page-header";
 import { Stat } from "@/components/stat";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -106,6 +107,15 @@ function Orders({ data, scores }: { data: OrdersResponse; scores: DashboardRespo
           </Table>
         </div>
       )}
+      {scores ? (
+        <div className="mt-6 grid min-w-0 gap-4">
+          <GroupTable id="paper-sport" title="Simulated result by sport" firstColumn="Sport" rows={scores.by_sport} mode="profit" />
+          <GroupTable id="paper-kind" title="Simulated result by kind of market" firstColumn="Kind of market" rows={scores.by_kind} mode="profit" />
+          <p className="text-sm text-muted-foreground">
+            Buying the side we rated higher at the ask price, one contract each, with fees, held to the end. The markets of one game move together, so these bets are not independent. An average over fewer than 30 bets is noise.
+          </p>
+        </div>
+      ) : null}
       <p className="mt-4 text-sm text-muted-foreground">These are simulations: no order was sent to Kalshi, and a handful of orders says almost nothing about whether the system works.</p>
     </>
   );

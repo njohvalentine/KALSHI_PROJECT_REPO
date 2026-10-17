@@ -82,6 +82,7 @@ test("the Results page loads", async ({ signedIn: page }) => {
   await page.goto("/results");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Results");
   for (const label of ["Simulated orders settled", "Chosen side at the ask", "Flagged bets"]) await expect(page.getByText(label, { exact: true })).toBeVisible();
+  for (const h of ["Simulated result by sport", "Simulated result by kind of market"]) await expect(page.getByRole("heading", { name: h })).toBeVisible();
 });
 
 test("any researched game with a fresh forecast can be added from the Opportunities page, and the ticket says when it is not marked worth a look", async ({ signedIn: page }) => {
@@ -121,6 +122,7 @@ test("the Dashboard shows the message about the scores, the cards and the charts
   for (const label of ["Finished games scored", "Worth a look today", "Flagged bets so far", "Research spend"]) await expect(page.getByText(label, { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Forecast error, all games" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "By sport" })).toBeVisible();
+  for (const h of ["Accuracy by sport", "Accuracy by kind of market"]) await expect(page.getByRole("heading", { name: h })).toBeVisible();
 });
 
 test("a finished run opens with an At a glance box, and the evidence is folded until it is opened", async ({ signedIn: page }) => {

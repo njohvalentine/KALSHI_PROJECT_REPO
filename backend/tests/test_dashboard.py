@@ -1,6 +1,10 @@
 from decimal import Decimal
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session as DbSession
+
 from app.dashboard import verdict
+from app.models import OutcomeRecord
 from app.research.records import save_records, score_records
 from tests.conftest import EMAIL, PASSWORD, needs_db
 from tests.test_records import make_records
@@ -79,3 +83,32 @@ def test_the_bookmaker_block_appears_only_with_bookmaker_prices_and_marks_under_
     assert block["games"] == 3 and block["too_few"] is True
     for key in ("ours", "market", "book", "baseline"):
         assert block[key] is not None
+
+
+@needs_db
+def test_the_tables_by_sport_and_by_kind_carry_the_scores_and_the_paper_results(make_client):
+    many_games(make_client.engine, 4)
+    with DbSession(make_client.engine) as db:  # two of the games are about a total, not the winner
+        for r in db.scalars(select(OutcomeRecord).where(OutcomeRecord.event_ticker.in_(["KX-2", "KX-3"]))):
+            r.market_kind = "total"
+            r.meaningful = False  # and none of their bets is flagged
+        db.commit()
+    with make_client() as client:
+        client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
+        body = client.get("/api/dashboard").json()
+    expected = score_records(make_client.engine)
+    kinds = {k["kind"]: k for k in body["by_kind"]}
+    assert set(kinds) == {"winner", "total"} and kinds["winner"]["games"] == 2 and kinds["total"]["games"] == 2
+    assert kinds["winner"]["paper"] == expected["by_kind"]["winner"]["paper_all"]
+    assert kinds["winner"]["flagged"]["bets"] == 4 and kinds["total"]["flagged"]["bets"] == 0  # flagged bets are counted per group
+    assert kinds["total"]["too_few"] is True  # 2 games: under 5
+    sport = body["by_sport"][0]
+    assert sport["sport"] == "Tennis" and sport["games"] == 4 and sport["paper"]["bets"] == 8 and sport["flagged"]["bets"] == 4
+
+
+@needs_db
+def test_an_empty_database_gives_empty_tables(make_client):
+    with make_client() as client:
+        client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
+        body = client.get("/api/dashboard").json()
+    assert body["by_sport"] == [] and body["by_kind"] == []

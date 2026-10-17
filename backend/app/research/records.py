@@ -178,6 +178,7 @@ def _group_scores(used: list[OutcomeRecord], key) -> dict:
                 "market": _brier([(_mid(r), r.resolved_yes) for r in both]),
             },
             "paper_all": _paper(rows),
+            "paper_flagged": _paper([r for r in rows if r.meaningful]),  # how the flagged bets of this group did
         }
     return out
 

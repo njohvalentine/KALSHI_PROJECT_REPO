@@ -277,7 +277,20 @@ export type SimOrder = {
 };
 export type OrdersResponse = { orders: SimOrder[]; totals: { settled: number; won: number; paper_result: number } };
 
-export type DashboardGroup = { sport: string; games: number; ours: number | null; baseline: number | null; market: number | null; too_few: boolean };
+export type PaperStats = { bets: number; won: number; average_result: number | null; total_result: number | null };
+export type DashboardGroup = {
+  sport?: string;
+  kind?: string;
+  games: number;
+  outcomes: number;
+  n: number; // outcomes that have all three numbers
+  ours: number | null;
+  baseline: number | null;
+  market: number | null;
+  too_few: boolean;
+  paper: PaperStats; // the chosen side at the ask, all bets
+  flagged: PaperStats; // only the bets marked worth a look
+};
 export type DashboardResponse = {
   games: number;
   outcomes: number;
@@ -286,6 +299,7 @@ export type DashboardResponse = {
   message: { kind: "too_few" | "ahead" | "no_edge"; text: string };
   scores: { n: number; ours: number | null; baseline: number | null; market: number | null };
   by_sport: DashboardGroup[];
+  by_kind: DashboardGroup[];
   bookmakers: { games: number; n: number; ours: number | null; baseline: number | null; market: number | null; book: number | null; pinnacle: number | null; pinnacle_n: number; too_few: boolean } | null;
   chosen_side: { bets: number; won: number; average_result: number | null; total_result: number | null };
   flagged: { bets: number; won: number; average_result: number | null; total_result: number | null; too_few: boolean };

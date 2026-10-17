@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { GroupTable } from "@/components/group-table";
 import { PageHeader } from "@/components/page-header";
 import { Stat } from "@/components/stat";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -73,10 +74,10 @@ export default async function DashboardPage() {
         <section className="rounded-xl border bg-card p-5" aria-labelledby="sport-heading">
           <h2 id="sport-heading" className="text-lg font-semibold">By sport</h2>
           <p className="mb-3 text-sm text-muted-foreground">Ours against the Kalshi price. A shorter bar is better.</p>
-          {d.by_sport.length === 0 ? (
+          {d.by_sport.filter((s) => s.n > 0).length === 0 ? (
             <p className="text-sm text-muted-foreground">No finished games yet.</p>
           ) : (
-            d.by_sport.map((s) => (
+            d.by_sport.filter((s) => s.n > 0).map((s) => (
               <div key={s.sport} className="mb-3">
                 <Bar label={`${s.sport} · ${s.games}`} value={s.ours} color="bg-chart-1" />
                 <Bar label="Kalshi price" value={s.market} color="bg-foreground" />
@@ -85,6 +86,13 @@ export default async function DashboardPage() {
             ))
           )}
         </section>
+      </div>
+      <div className="mt-4 grid min-w-0 gap-4">
+        <GroupTable id="acc-sport" title="Accuracy by sport" firstColumn="Sport" rows={d.by_sport} mode="accuracy" />
+        <GroupTable id="acc-kind" title="Accuracy by kind of market" firstColumn="Kind of market" rows={d.by_kind} mode="accuracy" />
+        <p className="text-sm text-muted-foreground">
+          Brier score on the outcomes that have all three numbers; lower is better. A row with fewer than 5 games is too small to read. The markets of one game move together, so the number of games matters more than the number of outcomes.
+        </p>
       </div>
       {d.bookmakers ? (
         <section className="mt-4 rounded-xl border bg-card p-5" aria-labelledby="book-heading">
