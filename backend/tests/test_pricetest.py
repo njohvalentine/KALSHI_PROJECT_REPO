@@ -11,8 +11,8 @@ import pytest
 from app import cli
 from app.kalshi import KalshiClient
 from app.research.compare import FeeInfo
-from app.research.pricetest import (Cache, Game, Outcome, analyse, bootstrap, calibration, collect, format_report, game_results, pick_price, run,
-                                    sample_events, verdict)
+from app.research.pricetest import (Cache, Game, Outcome, analyse, bootstrap, calibration, collect, format_report, game_results, horizon_label, information_arrival,
+                                    pick_price, run, sample_events, verdict)
 
 FEE = FeeInfo("quadratic", Decimal(1), "series")
 D = Decimal
@@ -126,7 +126,9 @@ class FakeKalshi:
             return httpx2.Response(200, json={"series": {"fee_type": "quadratic", "fee_multiplier": 1}})
         if path == "/historical/markets":
             assert request.url.params["series_ticker"] == "KXEPLGAME"
-            ms = [{"ticker": f"KXEPLGAME-G{i}-{s}", "event_ticker": f"KXEPLGAME-G{i}", "result": "yes" if s == "A" else "no", "close_time": f"2026-03-0{i + 1}T20:00:00Z"} for i in range(3) for s in "AB"]
+            opened = {0: "2026-02-10T00:00:00Z", 1: "2026-03-01T00:00:00Z", 2: "2026-02-10T00:00:00Z"}  # G1's markets opened only a day before its start
+            ms = [{"ticker": f"KXEPLGAME-G{i}-{s}", "event_ticker": f"KXEPLGAME-G{i}", "result": "yes" if s == "A" else "no", "close_time": f"2026-03-0{i + 1}T20:00:00Z",
+                   "open_time": opened[i]} for i in range(3) for s in "AB"]
             return httpx2.Response(200, json={"markets": ms, "cursor": ""})
         if path == "/milestones":
             ev = request.url.params["related_event_ticker"]
@@ -140,7 +142,7 @@ class FakeKalshi:
             bid, ask = ("0.50", "0.52") if ticker.endswith("A") else ("0.47", "0.49")
             if "G1" in ticker and ticker.endswith("B"):
                 bid, ask = "0.30", "0.60"  # a spread of 30 cents: the game is dropped
-            return httpx2.Response(200, json={"candlesticks": [candle(start - 3600, bid, ask)]})
+            return httpx2.Response(200, json={"candlesticks": [candle(int(request.url.params["end_ts"]), bid, ask)]})  # the last candle of the window asked for
         raise AssertionError(path)
 
 
@@ -191,3 +193,63 @@ def test_an_overloaded_kalshi_is_waited_for_and_a_game_is_dropped_only_after_all
         lambda r: httpx2.Response(429) if r.url.path.endswith("/candlesticks") else real(r))))
     games, dropped, _ = collect(always, Cache(None), ["KXEPLGAME"], pause=0, workers=1)
     assert games == [] and dropped["KXEPLGAME: Kalshi could not be read after repeated tries"] == 2  # the games that had a start time, said plainly
+
+
+DAY = 86400
+
+
+def test_the_price_is_chosen_at_the_requested_lead_and_the_labels_read_plainly():
+    start = 10_000_000
+    candles = [candle(start - 14 * DAY, "0.40", "0.44"), candle(start - 7 * DAY, "0.45", "0.49"), candle(start - 6 * DAY, "0.50", "0.52"), candle(start - 3600, "0.60", "0.62")]
+    assert pick_price(candles, start, 14 * DAY) == (D("0.40"), D("0.44"))
+    assert pick_price(candles, start, 7 * DAY) == (D("0.45"), D("0.49"))  # the later candles are too close to the start
+    assert pick_price(candles, start) == (D("0.60"), D("0.62"))  # the default is one hour
+    assert [horizon_label(h) for h in (1, 24, 72, 168, 336, 30)] == ["1 hour", "24 hours", "3 days", "7 days", "14 days", "30 hours"]
+
+
+def candle_requests(fake):
+    return [r for r in fake.requests if r.endswith("/candlesticks")]
+
+
+def test_each_horizon_has_its_own_candles_and_a_market_not_yet_open_costs_no_request(tmp_path):
+    fake = FakeKalshi()
+    cache = Cache(tmp_path)
+    one_hour, d1, _ = collect(fake.client, cache, ["KXEPLGAME"], pause=0)
+    after_one_hour = len(candle_requests(fake))
+    assert [g.event for g in one_hour] == ["KXEPLGAME-G0"] and after_one_hour == 4  # G0 (2 markets) and G1 (2 markets)
+    week, dropped, _ = collect(fake.client, cache, ["KXEPLGAME"], pause=0, lead_hours=168)
+    assert [g.event for g in week] == ["KXEPLGAME-G0"] and dropped["KXEPLGAME: the market was not open 7 days before the start"] == 1  # G1 opened a day before its start
+    assert len(candle_requests(fake)) == after_one_hour + 2  # only G0's two markets were asked for at 7 days: a new window, not the one-hour candles
+    collect(fake.client, cache, ["KXEPLGAME"], pause=0, lead_hours=168)
+    collect(fake.client, cache, ["KXEPLGAME"], pause=0)
+    assert len(candle_requests(fake)) == after_one_hour + 2  # both horizons come from the cache the second time
+
+
+def test_the_other_horizons_are_reported_in_sections_and_only_the_pooled_group_and_the_sectors_are_tested(tmp_path):
+    report = run(FakeKalshi().client, tmp_path, ["KXEPLGAME"], log_line=lambda s: None, horizons=(24, 168))
+    assert "raw results, 24 hours before the start" in report and "raw results, 7 days before the start" in report
+    assert "Median spread at this horizon" in report and "(descriptive only)" in report and "Brier score of the price is" in report
+    assert "| Premier League | 1 | F |" in report and "descriptive |" in report  # the series row is shown but not tested
+    default = run(FakeKalshi().client, tmp_path, ["KXEPLGAME"], log_line=lambda s: None)
+    assert "raw results, 1 hour before the start" in default and "descriptive" not in default  # the first test is unchanged: every group tested
+
+
+def test_a_group_outside_the_tested_set_gets_no_verdict():
+    games = [game(f"E{i}", "0.50", "0.52", "0.47", "0.49", i % 2 == 0, day=i + 1) for i in range(10)]
+    result = analyse(games, {"KXEPLGAME": FEE}, tested={"All"})
+    assert result["All"]["strategies"]["F"]["verdict"] != "descriptive" and result["Premier League"]["strategies"]["F"]["verdict"] == "descriptive"
+
+
+def test_the_gain_in_accuracy_as_the_game_nears_is_measured_on_the_same_games():
+    far = [game("A", "0.45", "0.55", "0.40", "0.50", True), game("B", "0.40", "0.50", "0.45", "0.55", False)]
+    near = [game("A", "0.80", "0.82", "0.17", "0.19", True), game("C", "0.60", "0.62", "0.35", "0.37", True)]
+    arrival = information_arrival(far, near)
+    assert arrival["games"] == 1 and arrival["horizon"] > arrival["one_hour"]  # on game A alone the nearer price is the better one
+
+
+def test_the_horizons_option_is_checked(monkeypatch, capsys):
+    for k, v in {"DATABASE_URL": "postgresql://u:p@db:5432/x", "KALSHI_API_BASE": "https://k.test", "SESSION_SECRET": "s" * 40}.items():
+        monkeypatch.setenv(k, v)
+    for bad in ("x", "0", "24,-3", ""):
+        assert cli.main(["price-test", "--horizons", bad]) == 2
+    assert "--horizons must be hours" in capsys.readouterr().err

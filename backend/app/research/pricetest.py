@@ -95,9 +95,13 @@ def _num(candle_side: dict | None) -> Decimal | None:
     return Decimal(str(value)) if value not in (None, "") else None
 
 
-def pick_price(candles: list[dict], start_ts: int) -> tuple[Decimal, Decimal] | None:
-    """(bid, ask) of the last candle that ends at least one hour before the start and has both, else None."""
-    usable = [c for c in candles if c.get("end_period_ts") is not None and c["end_period_ts"] <= start_ts - HOUR]
+def horizon_label(lead_hours: int) -> str:
+    return "1 hour" if lead_hours == 1 else f"{lead_hours // 24} days" if lead_hours % 24 == 0 and lead_hours >= 48 else f"{lead_hours} hours"
+
+
+def pick_price(candles: list[dict], start_ts: int, lead: int = HOUR) -> tuple[Decimal, Decimal] | None:
+    """(bid, ask) of the last candle that ends at least `lead` seconds (default one hour) before the start and has both, else None."""
+    usable = [c for c in candles if c.get("end_period_ts") is not None and c["end_period_ts"] <= start_ts - lead]
     for candle in sorted(usable, key=lambda c: c["end_period_ts"], reverse=True):
         bid, ask = _num(candle.get("yes_bid")), _num(candle.get("yes_ask"))
         if bid is not None and ask is not None:
@@ -135,15 +139,18 @@ def _start_of(client: KalshiClient, event: str, cache: Cache) -> str | None:
     return start or None
 
 
-def _candles_of(client: KalshiClient, ticker: str, start_ts: int, cache: Cache) -> list[dict]:
-    cached = cache.get(f"candles-{ticker}")
+def _candles_of(client: KalshiClient, ticker: str, start_ts: int, cache: Cache, lead: int = HOUR) -> list[dict]:
+    """The hourly candles of the 4 hours that end `lead` seconds before the start. The one-hour ones keep their first cache name (so the first test's
+    downloads are reused); other horizons have their own, so one horizon never reads another's candles by mistake."""
+    key = f"candles-{ticker}" if lead == HOUR else f"candles-{ticker}-{lead}"
+    cached = cache.get(key)
     if cached is not None:
         return cached
     try:
-        got = patient(lambda: client.get_historical_candlesticks(ticker, start_ts=start_ts - 4 * HOUR, end_ts=start_ts - HOUR, period_interval=60)).get("candlesticks", [])
+        got = patient(lambda: client.get_historical_candlesticks(ticker, start_ts=start_ts - lead - 4 * HOUR, end_ts=start_ts - lead, period_interval=60)).get("candlesticks", [])
     except KalshiNotFound:
         got = []
-    cache.put(f"candles-{ticker}", got)
+    cache.put(key, got)
     return got
 
 
@@ -157,18 +164,18 @@ def _series_of(client: KalshiClient, series: str, cache: Cache) -> dict:
 
 
 def _markets_of(client: KalshiClient, series: str, cache: Cache, log_line: Callable[[str], None]) -> list[dict]:
-    cached = cache.get(f"markets-{series}")
+    cached = cache.get(f"markets2-{series}")  # the second version of the list also keeps each market's opening time
     if cached is not None:
         return cached
     out, cursor = [], None
     while True:
         page = patient(lambda: client.list_historical_markets(limit=1000, cursor=cursor, series_ticker=series))
-        out += [{"ticker": m["ticker"], "event": m["event_ticker"], "result": m.get("result"), "close": m.get("close_time")} for m in page.get("markets", [])]
+        out += [{"ticker": m["ticker"], "event": m["event_ticker"], "result": m.get("result"), "close": m.get("close_time"), "open": m.get("open_time")} for m in page.get("markets", [])]
         cursor = page.get("cursor")
         log_line(f"{series}: {len(out)} markets listed")
         if not cursor or not page.get("markets"):
             break
-    cache.put(f"markets-{series}", out)
+    cache.put(f"markets2-{series}", out)
     return out
 
 
@@ -192,9 +199,11 @@ def sample_events(markets: list[dict], sample: int = SAMPLE) -> tuple[list[str],
 
 
 def collect(client: KalshiClient, cache: Cache, series_list: list[str], sample: int = SAMPLE, workers: int = 3, pause: float = 0.1,
-            log_line: Callable[[str], None] = lambda s: None) -> tuple[list[Game], Counter, dict]:
-    """The sampled games with the price an hour before the start, the reasons games were dropped, and the fee of each series."""
+            log_line: Callable[[str], None] = lambda s: None, lead_hours: int = 1) -> tuple[list[Game], Counter, dict]:
+    """The sampled games with the price `lead_hours` before the start (an hour by default), the reasons games were dropped, and the fee of each series.
+    The sample is the same at every horizon (it does not depend on prices), so the horizons compare the same games."""
     games, dropped, fees = [], Counter(), {}
+    lead, label = lead_hours * HOUR, horizon_label(lead_hours)
 
     for series in series_list:
         fees[series] = fee_info_from_series(_series_of(client, series, cache))
@@ -218,10 +227,13 @@ def collect(client: KalshiClient, cache: Cache, series_list: list[str], sample: 
             start = datetime.fromisoformat(start_text.replace("Z", "+00:00"))
             outcomes = []
             for m in by_event[event]:
-                price = pick_price(_candles_of(client, m["ticker"], int(start.timestamp()), cache), int(start.timestamp()))
+                opened = m.get("open")
+                if opened and datetime.fromisoformat(opened.replace("Z", "+00:00")).timestamp() > start.timestamp() - lead:
+                    return f"the market was not open {label} before the start"  # no request: it did not exist yet
+                price = pick_price(_candles_of(client, m["ticker"], int(start.timestamp()), cache, lead), int(start.timestamp()), lead)
                 time.sleep(pause)
                 if price is None:
-                    return "no bid and ask an hour before the start"
+                    return f"no bid and ask {label} before the start"
                 bid, ask = price
                 if not (0 < bid <= ask < 1):
                     return "no usable bid and ask (empty or crossed)"
@@ -314,8 +326,12 @@ def brier(games: list[Game]) -> float | None:
     return sum(values) / len(values) if values else None
 
 
-def analyse(games: list[Game], fees: dict) -> dict:
-    """Per group (each series, each sector, all): the calibration, the Brier score, and per strategy the two halves and the verdict."""
+TESTED_AT_HORIZON = {"All", "Soccer (all)", "Tennis (all)", "Baseball (all)", "Basketball (all)"}  # at the other horizons only these are tested (45 comparisons)
+
+
+def analyse(games: list[Game], fees: dict, tested: set[str] | None = None) -> dict:
+    """Per group (each series, each sector, all): the calibration, the Brier score, and per strategy the two halves and the verdict.
+    With `tested`, only those groups get a verdict; the others are shown as descriptive (fewer comparisons, so fewer chances by luck)."""
     groups: dict[str, list[Game]] = {"All": list(games)}
     for g in games:
         name, sector = SERIES[g.series]
@@ -329,7 +345,8 @@ def analyse(games: list[Game], fees: dict) -> dict:
         strategies = {}
         for key in STRATEGIES:
             per_half = [bootstrap([game_results(g, fees[g.series])[key] for g in h]) for h in halves]
-            strategies[key] = {"first": per_half[0], "second": per_half[1], "verdict": verdict(*per_half)}
+            strategies[key] = {"first": per_half[0], "second": per_half[1],
+                               "verdict": verdict(*per_half) if tested is None or name in tested else "descriptive"}
         out[name] = {"games": len(members), "from": members[0].start.date().isoformat() if members else None,
                      "to": members[-1].start.date().isoformat() if members else None, "brier": brier(members),
                      "calibration": calibration(members), "strategies": strategies}
@@ -340,9 +357,22 @@ def _c(x: float | None) -> str:
     return "–" if x is None else f"{x * 100:+.1f}¢"
 
 
-def format_report(result: dict, dropped: Counter, collected: int) -> str:
-    lines = ["# Kalshi price test: raw results", "",
-             f"Games read: {collected}. Prices: hourly bid and ask closes an hour before the start, not executable fills. Rule and strategies: `docs/specs/FEAT-20261017-1842-kalshi-price-test.md`.",
+def information_arrival(at_horizon: list[Game], at_one_hour: list[Game]) -> dict:
+    """On the games that have a price at both times: the Brier score of the price at the horizon and of the one-hour price (descriptive only)."""
+    near = {g.event: g for g in at_one_hour}
+    common = [g for g in at_horizon if g.event in near]
+    return {"games": len(common), "horizon": brier(common), "one_hour": brier([near[g.event] for g in common])}
+
+
+def median_spread(games: list[Game]) -> float | None:
+    spreads = sorted(float(o.ask - o.bid) for g in games for o in g.outcomes)
+    return spreads[len(spreads) // 2] if spreads else None
+
+
+def format_report(result: dict, dropped: Counter, collected: int, label: str = "1 hour", notes: tuple[str, ...] = ()) -> str:
+    lines = [f"# Kalshi price test: raw results, {label} before the start", "",
+             f"Games read: {collected}. Prices: hourly bid and ask closes {label} before the start, not executable fills. Rule and strategies: `docs/specs/FEAT-20261017-1842-kalshi-price-test.md` (and, for the other horizons, `docs/specs/FEAT-20261019-0956-price-test-horizons.md`).",
+             *notes,
              "A pattern is FOUND only if the second half is above zero with the lower end of its 99% interval above zero and the first half is also above zero.", "",
              "## Strategies", ""]
     lines += [f"- **{k}**: {v}" for k, v in STRATEGIES.items()] + ["", "## Results by group", "",
@@ -362,11 +392,27 @@ def format_report(result: dict, dropped: Counter, collected: int) -> str:
 
 
 def run(client: KalshiClient, cache_dir: Path | None, series_list: list[str] | None = None, sample: int = SAMPLE, workers: int = 3,
-        log_line: Callable[[str], None] = print) -> str:
+        log_line: Callable[[str], None] = print, horizons: tuple[int, ...] = (1,)) -> str:
+    """The report for one hour before the start (the first test) or, with `horizons` in hours, one section per horizon on the same games."""
+    cache, series_list = Cache(cache_dir), series_list or list(SERIES)
     try:
-        games, dropped, fees = collect(client, Cache(cache_dir), series_list or list(SERIES), sample, workers, log_line=log_line)
+        if horizons == (1,):
+            games, dropped, fees = collect(client, cache, series_list, sample, workers, log_line=log_line)
+            if not games:
+                raise SystemExit("Error: no game could be used; see the reasons: " + str(dict(dropped)))
+            return format_report(analyse(games, fees), dropped, len(games))
+        one_hour, _, _ = collect(client, cache, series_list, sample, workers, log_line=log_line)  # the cached first test: no new request
+        sections = []
+        for hours in horizons:
+            games, dropped, fees = collect(client, cache, series_list, sample, workers, log_line=log_line, lead_hours=hours)
+            if not games:
+                sections.append(f"# Kalshi price test: {horizon_label(hours)} before the start\n\nNo game could be used. Reasons: {dict(dropped)}\n")
+                continue
+            arrival, spread = information_arrival(games, one_hour), median_spread(games)
+            notes = (f"Median spread at this horizon: {spread * 100:.1f} cents. On the {arrival['games']} games that also have a one-hour price, the Brier score of the price is "
+                     f"{arrival['horizon']:.4f} at {horizon_label(hours)} and {arrival['one_hour']:.4f} one hour before the start (descriptive only).",
+                     "Only the pooled group and the four sectors are tested here (45 comparisons over three horizons); the series rows are descriptive.")
+            sections.append(format_report(analyse(games, fees, TESTED_AT_HORIZON), dropped, len(games), horizon_label(hours), notes))
+        return "\n\n---\n\n".join(sections)
     except KalshiError as exc:
         raise SystemExit(f"Error: Kalshi could not be read ({exc}). Is the VPN on?") from None
-    if not games:
-        raise SystemExit("Error: no game could be used; see the reasons: " + str(dict(dropped)))
-    return format_report(analyse(games, fees), dropped, len(games))

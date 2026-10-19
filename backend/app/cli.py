@@ -115,7 +115,14 @@ def _price_test_command(args) -> int:
         print(f"Error: unknown series {', '.join(unknown)}; the choices are {', '.join(SERIES)}", file=sys.stderr)
         return 2
     client = KalshiClient(settings.kalshi_api_base)
-    report = run(client, Path(args.cache_dir), series, args.sample, args.workers, log_line=lambda line: print(line, file=sys.stderr))
+    try:
+        horizons = tuple(int(h) for h in args.horizons.split(","))
+        if not horizons or any(h < 1 for h in horizons):
+            raise ValueError
+    except ValueError:
+        print("Error: --horizons must be hours, for example 1 or 24,168,336", file=sys.stderr)
+        return 2
+    report = run(client, Path(args.cache_dir), series, args.sample, args.workers, log_line=lambda line: print(line, file=sys.stderr), horizons=horizons)
     if args.out:
         Path(args.out).write_text(report)
         print(f"Report written to {args.out}")
@@ -225,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     pt.add_argument("--series", help="Comma-separated series tickers instead of all fourteen (for a quick check)")
     pt.add_argument("--cache-dir", default=".price-test-cache", help="Where downloaded pages are kept, so a second run downloads nothing again")
     pt.add_argument("--workers", type=int, default=3, help="Requests at the same time (Kalshi answers 429 when asked too fast)")
+    pt.add_argument("--horizons", default="1", help="Hours before the start, comma separated (24,168,336 for 24 hours, 7 and 14 days); the default is one hour, the first test")
     pt.add_argument("--out", help="Write the report to this file instead of printing it")
     args = parser.parse_args(argv)
 
