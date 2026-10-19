@@ -38,6 +38,10 @@ An AI research assistant for Kalshi prediction markets, focused on **soccer, bas
 
 Since the first draft: Telegram alerts are live; tickets of several games exist (simulated); the Games page can list every sport Kalshi offers, with the sports we have no scores for marked "not yet measured", and the NBA is supported; a replay tool tests ideas on saved evidence; 10 browser tests and 551 backend tests exist. The accuracy results (61 finished games) show no sign of an edge over Kalshi's price; see `docs/MILESTONES.md`, Milestone 4.
 
+### Update 2026-10-19
+
+Since the update of 2026-10-15: a Dashboard (the landing page) and a redesigned look; NO BET as the one answer of every page and alert (`app/verdict.py`); a daily limit on researched games and a confirmation before researching a game whose forecast is still fresh; the bookmaker comparison and a free check against the bookmakers before research; the planner no longer plans an odds angle and three angles are the default (about a fifth cheaper); risk limits and stop rules in the order checks (off until the client gives values); read-only price tests on Kalshi's own history and the signal-analysis scripts; and a rule that `docker-compose.yml` passes every setting by name with no default of its own (the defaults live in `config.py`). The results and the reasons are in `docs/MILESTONES.md`, `docs/discussion/NOTEPAD.md` (D42 to D49), `docs/HOW-IT-WORKS.md` and `docs/RISK-FRAMEWORK.md`.
+
 ## 3. How it works
 
 ```
