@@ -96,6 +96,34 @@ def _records_command(args) -> int:
     return 0
 
 
+def _price_test_command(args) -> int:
+    """The free price-only test on Kalshi's own history (read-only: it reads public pages and writes a report file)."""
+    from pathlib import Path
+
+    from app.config import SettingsError, load_settings
+    from app.kalshi import KalshiClient
+    from app.research.pricetest import SERIES, run
+
+    try:
+        settings = load_settings(os.environ)
+    except SettingsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    series = [s.strip() for s in args.series.split(",")] if args.series else None
+    unknown = [s for s in series or [] if s not in SERIES]
+    if unknown:
+        print(f"Error: unknown series {', '.join(unknown)}; the choices are {', '.join(SERIES)}", file=sys.stderr)
+        return 2
+    client = KalshiClient(settings.kalshi_api_base)
+    report = run(client, Path(args.cache_dir), series, args.sample, args.workers, log_line=lambda line: print(line, file=sys.stderr))
+    if args.out:
+        Path(args.out).write_text(report)
+        print(f"Report written to {args.out}")
+    else:
+        print(report)
+    return 0
+
+
 def _moment(text: str | None, name: str):
     from datetime import UTC, datetime
 
@@ -192,8 +220,16 @@ def main(argv: list[str] | None = None) -> int:
                           ("--edge-min", "EDGE_MIN"), ("--min-supported-claims", "MIN_SUPPORTED_CLAIMS"), ("--min-research-shift", "MIN_RESEARCH_SHIFT"),
                           ("--edge-plausible-max", "EDGE_PLAUSIBLE_MAX"), ("--min-ask-size", "MIN_ASK_SIZE")):
         rp.add_argument(flag, dest=setting, metavar=setting, help=f"Replay with this value of {setting} instead of the current setting")
+    pt = sub.add_parser("price-test", help="Free price-only test on Kalshi's own history: is the price an hour before a game exploitable after fees (read-only)")
+    pt.add_argument("--sample", type=int, default=400, help="Games per series at most (every k-th game in order of settlement; the rule was fixed at 400)")
+    pt.add_argument("--series", help="Comma-separated series tickers instead of all fourteen (for a quick check)")
+    pt.add_argument("--cache-dir", default=".price-test-cache", help="Where downloaded pages are kept, so a second run downloads nothing again")
+    pt.add_argument("--workers", type=int, default=6)
+    pt.add_argument("--out", help="Write the report to this file instead of printing it")
     args = parser.parse_args(argv)
 
+    if args.command == "price-test":
+        return _price_test_command(args)
     if args.command == "replay-forecasts":
         return _replay_command(args)
 

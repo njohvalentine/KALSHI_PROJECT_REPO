@@ -130,11 +130,12 @@ def test_the_feed_off_says_so():
 @needs_db
 def test_the_endpoint_saves_one_row_per_outcome_and_the_list_alone_reads_nothing(make_client):
     client = make_client()
-    odds = FakeOdds(events={"soccer_epl": [feed_event()]})
+    kickoff = datetime.now(UTC) + timedelta(hours=5)  # the game and the feed's event start at the same moment, whatever the clock says
+    odds = FakeOdds(events={"soccer_epl": [feed_event(at=kickoff)]})
     with client:
         client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers=H)
         client.app.state.odds, client.app.state.kalshi = odds, FakeKalshi()
-        client.app.state.games.query = lambda sport, q, limit, include_started, more: {"games": [game(start=datetime.now(UTC) + timedelta(hours=5))]}
+        client.app.state.games.query = lambda sport, q, limit, include_started, more: {"games": [game(start=kickoff)]}
         assert odds.calls == []
         assert client.post("/api/games/screen").status_code == 403  # no X-Requested-With header: nothing was read
         assert client.get("/api/games/screen").status_code == 405  # a GET no longer does the work

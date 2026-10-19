@@ -159,8 +159,8 @@ class KalshiClient:
     def get_historical_cutoff(self) -> dict[str, Any]:
         return self._get("/historical/cutoff")
 
-    def list_historical_markets(self, *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
-        return self._get("/historical/markets", dict(limit=limit, cursor=cursor))
+    def list_historical_markets(self, *, limit: int | None = None, cursor: str | None = None, series_ticker: str | None = None) -> dict[str, Any]:
+        return self._get("/historical/markets", dict(limit=limit, cursor=cursor, series_ticker=series_ticker))
 
     def get_historical_candlesticks(
         self, ticker: str, *, start_ts: int, end_ts: int, period_interval: int

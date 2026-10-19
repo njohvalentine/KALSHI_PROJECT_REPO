@@ -129,6 +129,10 @@ Other options: `--forecaster-model`, `--forecaster-effort`, `--edge-min`, `--min
 
 The Games page shows the measured series (`SPORTS_SERIES`, the 15 we have scores for) as before, and a row "More on Kalshi" with every other sport or league Kalshi lists, with the number of games coming up. Picking one loads its games (the first load asks Kalshi about each series and takes up to about 20 seconds; at most 60 series at once, the busiest first). Those games can be researched like any other; they are marked **not yet measured** until the sport has `MEASURED_MIN_GAMES` (20) scored games, and the flag, the Opportunities row, the run page and the Telegram alert say so. The NBA has its total points and spread markets; other new sports get the winner market only. `SPORTS_DISCOVERY=false` gives the old list exactly; `SPORTS_EXCLUDE_TAGS` leaves out sport tags (default Esports, Video games, 4th of July, Other). Automatic research and the daily batch still use only the measured series.
 
+### The price test on Kalshi's own history
+
+`docker compose exec backend uv run --no-sync python -m app.cli price-test --out /tmp/price-test.md` reads Kalshi's public history of finished games (14 series, at most 400 games each, every k-th game by settlement date), takes the bid and ask an hour before each start, and reports calibration, the Brier score of the price, and three simulated strategies with the rule and the strict 99% interval fixed in `docs/specs/FEAT-20261017-1842-kalshi-price-test.md`. It is read-only (no database row, no order, no OpenAI credit). It needs the VPN, makes many thousands of requests (give it half an hour or more), and keeps what it downloads in `.price-test-cache` so a second run downloads nothing again. `--series KXEPLGAME` runs one series for a quick check.
+
 ## 9. Backups
 
 The database holds everything (runs, sources, forecasts, records, alerts, accounts). A backup:

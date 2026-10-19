@@ -22,3 +22,7 @@ out/
 
 # Misc
 .DS_Store
+
+# Pages downloaded by the price test
+.price-test-cache/
+backend/.price-test-cache/

@@ -24,7 +24,7 @@ Branch `feature/sports-games-list` (base `master`). Option B of `docs/discussion
 ## The rule (written before the run)
 
 - The sample of each series is split by start date: the **first half is only for looking, the second half confirms**.
-- A pattern **counts as found only if, in the second half, the average result after fees is above zero and the lower end of the 99 percent interval is also above zero, and the first half has the same sign.** 99 percent, because 3 strategies in 15 groups are 45 comparisons and at 95 percent about two would pass by chance.
+- A pattern **counts as found only if, in the second half, the average result after fees is above zero and the lower end of the 99 percent interval is also above zero, and the first half has the same sign.** 99 percent, because 3 strategies in 19 groups (14 series, 4 sectors and all games pooled) are 57 comparisons and at 95 percent about three would pass by chance. (The first version of this spec said 45; it forgot the four sector groups. The rule is unchanged.)
 - Anything else is reported as "no pattern found" or, for a result that looks good in the first half only, as "not confirmed". No other strategy is tried after seeing the numbers (an added strategy would be a new item with its own rule).
 - The report states, whatever the result: the number of games, the period, and that the prices are hourly bid and ask closes of the markets, not executable fills (the contracts offered at the ask are not known for the past), so a pattern that passes is a reason for a live check and not proof of profit.
 
