@@ -34,6 +34,8 @@ The first lines of the backend log say what is on and off: whether research is o
 
 Everything is set in the file `.env` next to `docker-compose.yml` (git-ignored; never commit it, never paste its contents anywhere). `.env.example` lists every setting with a comment and its default. After changing `.env`, run `docker compose up -d` again.
 
+Every setting listed in `.env.example` reaches the backend: `docker-compose.yml` passes each name through from the shell or from `.env` when it is set, and passes nothing when it is not, so the default of `backend/app/config.py` applies (the defaults live in the code only; a test fails if a setting is missing from the compose file or if it repeats a default). A shell value wins over `.env`, so `ALERTS_ENABLED=false docker compose up -d` still works for one start.
+
 Settings the app **requires** (it refuses to start without them, and says which is wrong): `DATABASE_URL` (built by Compose from the `POSTGRES_*` values), `KALSHI_API_BASE`, `SESSION_SECRET` (at least 32 random characters), and `LANGSMITH_API_KEY` when `LANGSMITH_TRACING=true`.
 
 Without `OPENAI_API_KEY` the app starts, the Games page works, and pressing Research is refused with a clear message.
