@@ -31,3 +31,8 @@ Backend: the planner instructions no longer ask for an odds angle (the two tests
 ## Checks to state at close
 
 Lateral spread: every place that creates or reads `market_odds` findings (the planner prompt, the graph, the checker, the run page, the replay tool) is searched and listed; old data still displays. Causal depth: the cost came from three things, the prompt asking for the angle, nothing stopping it, and the slot being refilled; all three are handled and the saving is measured on a real run.
+
+## Result of the confirming runs (added at close, 2026-10-19)
+
+- First run (Tottenham vs Coventry): the odds angle was gone but four evidence angles were researched and the run cost 0.459 dollars, because `docker-compose.yml` repeated the old default of four researchers and overrode the code (BUG-20261019-1147).
+- After that bug was fixed: Parma vs Torino researched **three angles, none about odds, and cost 0.392 dollars** (research 0.258, against an average research cost of 0.331 on the 81 earlier runs: a saving of 0.07, 22 percent, as predicted). The whole run cost 0.042 less than the 0.434 average, less than the predicted 0.08 to 0.11, because the checking cost of that run was higher (0.057 against 0.032 in the first run); one run is one data point and the cost of a run varies by about 0.1 dollar. That run had 13 supported claims. The next runs will show the average.
