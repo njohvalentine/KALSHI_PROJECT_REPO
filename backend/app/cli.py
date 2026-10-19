@@ -131,6 +131,28 @@ def _price_test_command(args) -> int:
     return 0
 
 
+def _late_test_command(args) -> int:
+    """The free late-game test on Kalshi's own history (read-only: it reads public pages and writes a report file)."""
+    from pathlib import Path
+
+    from app.config import SettingsError, load_settings
+    from app.kalshi import KalshiClient
+    from app.research.latetest import run
+
+    try:
+        settings = load_settings(os.environ)
+    except SettingsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    report = run(KalshiClient(settings.kalshi_api_base), Path(args.cache_dir), workers=args.workers, log_line=lambda line: print(line, file=sys.stderr))
+    if args.out:
+        Path(args.out).write_text(report)
+        print(f"Report written to {args.out}")
+    else:
+        print(report)
+    return 0
+
+
 def _moment(text: str | None, name: str):
     from datetime import UTC, datetime
 
@@ -234,8 +256,14 @@ def main(argv: list[str] | None = None) -> int:
     pt.add_argument("--workers", type=int, default=3, help="Requests at the same time (Kalshi answers 429 when asked too fast)")
     pt.add_argument("--horizons", default="1", help="Hours before the start, comma separated (24,168,336 for 24 hours, 7 and 14 days); the default is one hour, the first test")
     pt.add_argument("--out", help="Write the report to this file instead of printing it")
+    lt = sub.add_parser("late-test", help="Free test of the last minutes before the market close on Kalshi's own history (read-only; hindsight close time, not tradable)")
+    lt.add_argument("--cache-dir", default=".price-test-cache", help="Where downloaded pages are kept (shared with price-test)")
+    lt.add_argument("--workers", type=int, default=3, help="Requests at the same time (Kalshi answers 429 when asked too fast)")
+    lt.add_argument("--out", help="Write the report to this file instead of printing it")
     args = parser.parse_args(argv)
 
+    if args.command == "late-test":
+        return _late_test_command(args)
     if args.command == "price-test":
         return _price_test_command(args)
     if args.command == "replay-forecasts":
