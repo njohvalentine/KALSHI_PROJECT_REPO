@@ -105,6 +105,11 @@ export function RunView({ initial }: { initial: Run }) {
                 The planner proposed {run.plan.cut_angles} more angle(s); they were dropped to stay within the researcher limit.
               </p>
             ) : null}
+            {run.plan && (run.plan.dropped_odds_angles ?? 0) > 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                The planner also proposed {run.plan.dropped_odds_angles} angle(s) about betting odds; they were not researched, because nothing uses that research.
+              </p>
+            ) : null}
           </Fold>
         ) : null}
 

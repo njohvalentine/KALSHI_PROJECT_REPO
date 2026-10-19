@@ -60,7 +60,7 @@ def test_research_defaults_and_off_without_key(caplog):
     s = load_settings(GOOD)
     assert s.research_enabled is False and s.openai_api_key is None
     assert (s.planner_model, s.researcher_model) == ("gpt-5.4-mini", "gpt-5.4")
-    assert (s.max_researchers, s.max_searches_per_researcher, s.researcher_max_output_tokens) == (4, 3, 4000)
+    assert (s.max_researchers, s.max_searches_per_researcher, s.researcher_max_output_tokens) == (3, 3, 4000)
     assert (s.max_concurrent_runs, s.run_cost_warn_usd, s.research_reasoning_effort) == (2, 3.0, "low")
     assert "Research is OFF" in caplog.text  # the off state is visible, not silent
 

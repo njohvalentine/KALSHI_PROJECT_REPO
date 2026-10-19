@@ -95,7 +95,7 @@ class Angle(BaseModel):
     question: str = Field(description="The specific question the researcher should answer by searching the web")
     kind: Literal["evidence", "market_odds"] = Field(
         default="evidence",
-        description="market_odds for the angle about bookmaker odds or market prices, evidence for every other angle",
+        description="evidence for every angle. market_odds is kept for old data only: the planner must not plan an angle about odds, and one that is planned is dropped",
     )
 
 

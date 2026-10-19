@@ -139,7 +139,7 @@ The rule for when real betting could be considered is **deferred**; we will agre
 ## 6. Costs
 
 - A run (research, page reading, claim checking, three forecasts and the comparison) takes about one to one and a half minutes and cost **about 0.32 to 0.63 USD per game** in the real runs (the more markets a game has, the more it costs). The result page shows the cost of each step.
-- Built-in limits: at most 4 researchers per run, at most 3 searches each, a cap on output length per call, at most 2 runs at the same time, and one active run per game. A run that costs more than a set warning level is flagged.
+- Built-in limits: at most 3 researchers per run (4 until 2026-10-19, when the planner's angle about betting odds was dropped: nothing used its result), at most 3 searches each, a cap on output length per call, at most 2 runs at the same time, and one active run per game. A run that costs more than a set warning level is flagged.
 - Every press of Research spends credit, and the button says so. Automatic research of upcoming games exists but is **off**; if you switch it on you set how many games it may research per day.
 
 ## 7. Risks you should know about

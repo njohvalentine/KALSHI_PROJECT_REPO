@@ -11,7 +11,7 @@ from langgraph.types import Send
 from app.config import Settings
 from app.research.claims import build_claims
 from app.research.model import ResearchModel, ResearchModelError
-from app.research.schemas import Angle, GameInfo
+from app.research.schemas import Angle, GameInfo, is_market_angle
 
 log = logging.getLogger("app.research")
 
@@ -24,6 +24,7 @@ class ResearchState(TypedDict, total=False):
     game: dict  # GameInfo as a plain dict (checkpoints must hold plain data)
     angles: list[dict]
     cut_angles: int  # how many planned angles were dropped to stay within the cap
+    dropped_odds_angles: int  # how many angles about betting odds were dropped (nothing uses their result)
     findings: Annotated[list[dict], operator.add]  # one entry per researcher that produced findings
     usages: Annotated[list[dict], operator.add]
     errors: Annotated[list[dict], operator.add]
@@ -33,9 +34,14 @@ def build_graph(model: ResearchModel, settings: Settings, checkpointer=None):
     async def plan(state: ResearchState) -> dict:
         game = GameInfo(**state["game"])
         plan_, usage = await model.plan(game, settings.max_researchers)
-        angles = plan_.angles
+        # Nothing uses research about betting odds (the checker never lets it go forward, the forecasters ignore odds, the app reads the
+        # bookmakers itself), so an angle about it is dropped before it is paid for, even if the planner plans one against its instructions.
+        odds = [a for a in plan_.angles if is_market_angle(a.kind, a.name)]
+        angles = [a for a in plan_.angles if not is_market_angle(a.kind, a.name)]
+        if odds:
+            log.info("Planner proposed %d angle(s) about betting odds (%s); dropped, nothing uses them", len(odds), ", ".join(a.name for a in odds))
         if not angles:
-            raise EmptyPlanError("The planner returned no research angles")
+            raise EmptyPlanError("The planner returned no research angles" + (" (only angles about betting odds, which are not researched)" if odds else ""))
         cut = max(len(angles) - settings.max_researchers, 0)
         if cut:
             log.warning(
@@ -45,6 +51,7 @@ def build_graph(model: ResearchModel, settings: Settings, checkpointer=None):
         return {
             "angles": [a.model_dump() for a in angles[: settings.max_researchers]],
             "cut_angles": cut,
+            "dropped_odds_angles": len(odds),
             "usages": [asdict(usage)],
         }
 

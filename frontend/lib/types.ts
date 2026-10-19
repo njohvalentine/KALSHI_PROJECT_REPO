@@ -97,7 +97,7 @@ export type Prediction = {
 };
 
 export type Run = RunSummary & {
-  plan: { angles: { name: string; question: string }[]; cut_angles: number } | null;
+  plan: { angles: { name: string; question: string }[]; cut_angles: number; dropped_odds_angles?: number } | null;
   result: { findings: Finding[]; errors: RunError[]; costs?: Record<string, string | null> } | null;
   prediction: Prediction | null;
   sport?: string | null;

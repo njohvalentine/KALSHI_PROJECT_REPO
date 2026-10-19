@@ -120,9 +120,10 @@ def test_an_answer_without_findings_is_an_error_but_still_counted_for_cost():
     assert len(state["usages"]) == 2  # planner and the paid-for researcher call
 
 
-def test_planner_instructions_keep_one_topic_per_angle_and_odds_separate():
-    text = PLANNER_INSTRUCTIONS.format(max_angles=4, today="2026-10-12")
-    assert "ONE topic" in text and "Betting odds are always their own angle" in text
+def test_planner_instructions_keep_one_topic_per_angle_and_forbid_an_angle_about_odds():
+    text = PLANNER_INSTRUCTIONS.format(max_angles=3, today="2026-10-12")
+    assert "ONE topic" in text and "Do not plan an angle about betting odds or market prices" in text
+    assert "The current betting odds from major sportsbooks" not in text  # no longer offered as an example
     assert "official club, league and tour pages" in text
 
 
@@ -142,7 +143,7 @@ def test_findings_carry_the_kind_of_their_angle_and_the_planner_is_asked_for_it(
     from app.research.prompts import PLANNER_INSTRUCTIONS
     from app.research.schemas import Angle, is_market_angle
 
-    assert 'kind "market_odds"' in PLANNER_INSTRUCTIONS
+    assert 'kind "market_odds"' not in PLANNER_INSTRUCTIONS  # the planner is not asked for one any more; the kind stays for old data
     assert Angle(name="Form", question="q").kind == "evidence" and Angle(name="Odds", question="q", kind="market_odds").kind == "market_odds"
     assert is_market_angle("market_odds", "Prices") and is_market_angle("evidence", "Current odds") and is_market_angle(None, "Odds and lines")
     assert not is_market_angle("evidence", "Form") and not is_market_angle(None, None)
@@ -155,3 +156,40 @@ def test_researchers_are_asked_for_one_fact_per_line_with_its_date_and_for_artic
     assert "ONE fact per line" in text and "Put in the line only dates that the page itself shows" in text
     assert "Never put the day you looked at the page" in text
     assert "whose text is in the article itself" in text and "at most 10 findings" in text
+
+
+class OddsPlanner(FakeModel):
+    """A planner that plans an angle about odds although it is told not to (kind market_odds, or only a name that contains "odds")."""
+
+    def __init__(self, names, odds_kind=True, **kw):
+        super().__init__(angle_names=names, **kw)
+        self.odds_kind = odds_kind
+
+    async def plan(self, game, max_angles):
+        plan_, usage = await super().plan(game, max_angles)
+        for a in plan_.angles:
+            if "odds" in a.name.lower():
+                a.kind = "market_odds" if self.odds_kind else "evidence"
+        return plan_, usage
+
+
+def test_an_angle_about_odds_is_dropped_before_it_is_researched_and_counted_and_logged(caplog):
+    caplog.set_level(logging.INFO, logger="app.research")
+    model = OddsPlanner(["Form", "Current odds", "Injuries"])
+    state = run(model, MAX_RESEARCHERS=3)
+    assert sorted(model.research_calls) == ["Form", "Injuries"]  # no researcher (and no cost) for the odds angle
+    assert [a["name"] for a in state["angles"]] == ["Form", "Injuries"] and state["dropped_odds_angles"] == 1 and state["cut_angles"] == 0
+    assert "dropped, nothing uses them" in caplog.text and "Current odds" in caplog.text  # visible, not silent
+    named = OddsPlanner(["Form", "Odds and lines"], odds_kind=False)  # labelled evidence but named after odds: the same rule that keeps its claims from the forecasters
+    assert run(named)["dropped_odds_angles"] == 1 and sorted(named.research_calls) == ["Form"]
+
+
+def test_the_cap_is_applied_after_the_odds_angle_is_dropped_and_a_form_angle_is_kept():
+    model = OddsPlanner(["Form", "Market odds", "Injuries", "Venue", "Rest"])
+    state = run(model, MAX_RESEARCHERS=3)
+    assert [a["name"] for a in state["angles"]] == ["Form", "Injuries", "Venue"] and state["cut_angles"] == 1 and state["dropped_odds_angles"] == 1
+
+
+def test_a_planner_that_returns_only_odds_angles_fails_the_run_clearly():
+    with pytest.raises(EmptyPlanError, match="only angles about betting odds"):
+        run(OddsPlanner(["Current odds", "Market odds"]))

@@ -241,7 +241,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     effort = env.get("RESEARCH_REASONING_EFFORT", "low").strip()
     if effort not in EFFORTS:
         problems.append(f"RESEARCH_REASONING_EFFORT must be one of {', '.join(EFFORTS)}, got {effort!r}")
-    max_researchers = _parse_positive_int("MAX_RESEARCHERS", env.get("MAX_RESEARCHERS", "4"), problems)
+    max_researchers = _parse_positive_int("MAX_RESEARCHERS", env.get("MAX_RESEARCHERS", "3"), problems)
     max_searches = _parse_positive_int(
         "MAX_SEARCHES_PER_RESEARCHER", env.get("MAX_SEARCHES_PER_RESEARCHER", "3"), problems
     )

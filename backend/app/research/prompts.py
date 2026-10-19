@@ -13,8 +13,8 @@ and one specific question that a researcher can answer by searching the web.
 Rules:
 - Do not predict the outcome and never state a probability.
 - Questions must be answerable with facts from web pages: names, dates, numbers, official statements.
-- Each angle covers ONE topic. Betting odds are always their own angle, with kind "market_odds" (every \
-other angle has kind "evidence"); never combine odds with lineups, form, venue or rest.
+- Each angle covers ONE topic and has kind "evidence". Do not plan an angle about betting odds or market \
+prices: the system reads prices itself and the forecasters must not use them.
 - Today is {today} (UTC). Prefer the newest information and ask for the date of each fact. Prefer \
 official club, league and tour pages as sources.
 
@@ -26,7 +26,6 @@ for basketball, who is out or resting and the expected rotation and minutes).
 - Head-to-head record and relevant history.
 - Venue, travel, rest days and schedule load; for tennis the playing surface and recent match load; \
 for baseball weather and ballpark effects; for basketball back-to-back games and the pace of play.
-- The current betting odds from major sportsbooks and any consensus, as an outside price to compare against.
 If you know nothing specific about the sport, use general angles instead: the latest news, the \
 official rules and data sources that decide the outcome, and relevant base rates.
 """

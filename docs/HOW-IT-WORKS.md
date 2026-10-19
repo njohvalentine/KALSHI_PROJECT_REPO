@@ -64,15 +64,15 @@ An agent here means a step that is carried out by an AI model with its own instr
 
 ### 4.1 The planner (lead agent)
 
-- **Job:** read the game and decide which research angles to look into, between two and four.
+- **Job:** read the game and decide which research angles to look into, between two and three. It is told not to plan an angle about betting odds: nothing uses such research (the forecasters must not see prices, and the app reads the bookmakers itself), and an odds angle that is planned anyway is dropped before it is paid for.
 - **Model:** a smaller model (gpt-5.4-mini).
-- **Rules it follows:** each angle covers one topic only. Betting odds are always their own angle, marked as a market-odds angle, and never mixed with other topics. It must not predict anything or state a probability. It picks angles that fit the sport (for example probable starting pitchers for baseball, the playing surface for tennis, back-to-back games for basketball). If it knows nothing specific about a sport, it uses general angles such as the latest news and the rules that decide the outcome.
+- **Rules it follows:** each angle covers one topic only. It must not plan an angle about betting odds or market prices (see above). It must not predict anything or state a probability. It picks angles that fit the sport (for example probable starting pitchers for baseball, the playing surface for tennis, back-to-back games for basketball). If it knows nothing specific about a sport, it uses general angles such as the latest news and the rules that decide the outcome.
 - **Why it exists:** one place decides what is worth researching, instead of every researcher choosing for itself.
 
 ### 4.2 The researchers
 
 - **Job:** each researcher takes one angle, searches the web, and writes up to ten findings. Each finding is one fact on its own line.
-- **Model:** the larger model (gpt-5.4) with low reasoning effort, using OpenAI's web search tool. Up to three searches each, and up to four researchers per game, all at the same time.
+- **Model:** the larger model (gpt-5.4) with low reasoning effort, using OpenAI's web search tool. Up to three searches each, and up to three researchers per game, all at the same time.
 - **Rules it follows:** one fact per line, so that a line can be checked against a page. Only dates that the page itself shows. Prefer official club, league and news pages. No calculations or inferences unless the page states the number. Odds only with the date the page shows, and not older than three days. Never a probability, a prediction or a recommendation.
 - **Where the links come from:** only from the links that the search tool itself attached to the text, never from web addresses that the model typed in its answer. A line without a link is kept but marked as having no source.
 
@@ -283,7 +283,7 @@ The full report, with all numbers and caveats, is `docs/ACCURACY-REPORT-2026-10-
 
 **Market.** One yes or no question on Kalshi, for example "Arsenal wins" or "more than 2.5 goals".
 
-**Market-odds angle.** The research angle about betting odds. It is kept apart from other angles.
+**Market-odds angle.** A research angle about betting odds. Runs made before 2026-10-19 have one; since then it is no longer planned, and one that is planned anyway is dropped before it is paid for.
 
 **Measured (sport).** A sport with at least 20 scored games. Only for these is the flag considered tested.
 

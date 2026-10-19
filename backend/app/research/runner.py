@@ -29,7 +29,7 @@ def summarize(state: dict, settings: Settings, extra_usages: dict[str, list[dict
     errors = state.get("errors", [])
     costs = {name: (None if (c := total_cost(group)[0]) is None else str(c)) for name, group in groups.items() if group}
     return {
-        "plan": {"angles": state.get("angles", []), "cut_angles": state.get("cut_angles", 0)},
+        "plan": {"angles": state.get("angles", []), "cut_angles": state.get("cut_angles", 0), "dropped_odds_angles": state.get("dropped_odds_angles", 0)},
         "result": {"findings": findings, "errors": errors, "costs": costs},
         "input_tokens": sum(u.input_tokens for u in usages),
         "output_tokens": sum(u.output_tokens for u in usages),
