@@ -105,13 +105,27 @@ def pick_price(candles: list[dict], start_ts: int) -> tuple[Decimal, Decimal] | 
     return None
 
 
+def patient(call: Callable, tries: int = 6):
+    """Calls Kalshi and, when it is overloaded or unreachable even after the client's own retries, waits longer (1, 2, 4, 8, 16 seconds) and tries again.
+    A game is dropped for this only after all of that, and the report says so."""
+    for attempt in range(tries):
+        try:
+            return call()
+        except KalshiNotFound:
+            raise
+        except KalshiError:
+            if attempt == tries - 1:
+                raise
+            time.sleep(2 ** attempt)
+
+
 def _start_of(client: KalshiClient, event: str, cache: Cache) -> str | None:
     cached = cache.get(f"start-{event}")
     if cached is not None:
         return cached or None
     start = ""
     try:
-        for m in client.list_milestones(limit=5, related_event_ticker=event).get("milestones", []):
+        for m in patient(lambda: client.list_milestones(limit=5, related_event_ticker=event)).get("milestones", []):
             if event in (m.get("primary_event_tickers") or []) + (m.get("related_event_tickers") or []) and m.get("start_date"):
                 start = m["start_date"]
                 break
@@ -126,7 +140,7 @@ def _candles_of(client: KalshiClient, ticker: str, start_ts: int, cache: Cache) 
     if cached is not None:
         return cached
     try:
-        got = client.get_historical_candlesticks(ticker, start_ts=start_ts - 4 * HOUR, end_ts=start_ts - HOUR, period_interval=60).get("candlesticks", [])
+        got = patient(lambda: client.get_historical_candlesticks(ticker, start_ts=start_ts - 4 * HOUR, end_ts=start_ts - HOUR, period_interval=60)).get("candlesticks", [])
     except KalshiNotFound:
         got = []
     cache.put(f"candles-{ticker}", got)
@@ -137,7 +151,7 @@ def _series_of(client: KalshiClient, series: str, cache: Cache) -> dict:
     cached = cache.get(f"series-{series}")
     if cached is not None:
         return cached
-    got = client.get_series(series).get("series") or {}
+    got = patient(lambda: client.get_series(series)).get("series") or {}
     cache.put(f"series-{series}", got)
     return got
 
@@ -148,7 +162,7 @@ def _markets_of(client: KalshiClient, series: str, cache: Cache, log_line: Calla
         return cached
     out, cursor = [], None
     while True:
-        page = client.list_historical_markets(limit=1000, cursor=cursor, series_ticker=series)
+        page = patient(lambda: client.list_historical_markets(limit=1000, cursor=cursor, series_ticker=series))
         out += [{"ticker": m["ticker"], "event": m["event_ticker"], "result": m.get("result"), "close": m.get("close_time")} for m in page.get("markets", [])]
         cursor = page.get("cursor")
         log_line(f"{series}: {len(out)} markets listed")
@@ -177,7 +191,7 @@ def sample_events(markets: list[dict], sample: int = SAMPLE) -> tuple[list[str],
     return [event for _, event in usable[::step][:sample]], dropped
 
 
-def collect(client: KalshiClient, cache: Cache, series_list: list[str], sample: int = SAMPLE, workers: int = 6, pause: float = 0.05,
+def collect(client: KalshiClient, cache: Cache, series_list: list[str], sample: int = SAMPLE, workers: int = 3, pause: float = 0.1,
             log_line: Callable[[str], None] = lambda s: None) -> tuple[list[Game], Counter, dict]:
     """The sampled games with the price an hour before the start, the reasons games were dropped, and the fee of each series."""
     games, dropped, fees = [], Counter(), {}
@@ -192,6 +206,12 @@ def collect(client: KalshiClient, cache: Cache, series_list: list[str], sample: 
             by_event[m["event"]].append(m)
 
         def one(event: str) -> Game | str:
+            try:
+                return read_game(event)
+            except KalshiError:
+                return "Kalshi could not be read after repeated tries"
+
+        def read_game(event: str) -> Game | str:
             start_text = _start_of(client, event, cache)
             if not start_text:
                 return "no start time"
@@ -341,7 +361,7 @@ def format_report(result: dict, dropped: Counter, collected: int) -> str:
     return "\n".join(lines) + "\n"
 
 
-def run(client: KalshiClient, cache_dir: Path | None, series_list: list[str] | None = None, sample: int = SAMPLE, workers: int = 6,
+def run(client: KalshiClient, cache_dir: Path | None, series_list: list[str] | None = None, sample: int = SAMPLE, workers: int = 3,
         log_line: Callable[[str], None] = print) -> str:
     try:
         games, dropped, fees = collect(client, Cache(cache_dir), series_list or list(SERIES), sample, workers, log_line=log_line)

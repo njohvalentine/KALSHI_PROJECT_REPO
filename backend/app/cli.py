@@ -224,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     pt.add_argument("--sample", type=int, default=400, help="Games per series at most (every k-th game in order of settlement; the rule was fixed at 400)")
     pt.add_argument("--series", help="Comma-separated series tickers instead of all fourteen (for a quick check)")
     pt.add_argument("--cache-dir", default=".price-test-cache", help="Where downloaded pages are kept, so a second run downloads nothing again")
-    pt.add_argument("--workers", type=int, default=6)
+    pt.add_argument("--workers", type=int, default=3, help="Requests at the same time (Kalshi answers 429 when asked too fast)")
     pt.add_argument("--out", help="Write the report to this file instead of printing it")
     args = parser.parse_args(argv)
 

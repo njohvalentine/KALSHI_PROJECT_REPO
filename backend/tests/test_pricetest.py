@@ -170,3 +170,24 @@ def test_the_command_refuses_an_unknown_series(monkeypatch, capsys):
         monkeypatch.setenv(k, v)
     assert cli.main(["price-test", "--series", "KXNOPE"]) == 2
     assert "unknown series KXNOPE" in capsys.readouterr().err
+
+
+def test_an_overloaded_kalshi_is_waited_for_and_a_game_is_dropped_only_after_all_the_tries(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.research.pricetest.time.sleep", lambda s: None)
+    fake = FakeKalshi()
+    real, failures = fake.handle, {"n": 0}
+
+    def flaky(request):
+        if request.url.path.endswith("/candlesticks") and failures["n"] < 7:  # the client's own 3 tries fail twice over, then it answers
+            failures["n"] += 1
+            return httpx2.Response(429)
+        return real(request)
+
+    fake.client = KalshiClient("https://k.test/trade-api/v2", client=httpx2.Client(transport=httpx2.MockTransport(flaky)), sleep=lambda s: None)
+    games, dropped, _ = collect(fake.client, Cache(tmp_path), ["KXEPLGAME"], pause=0, workers=1)
+    assert [g.event for g in games] == ["KXEPLGAME-G0"] and "KXEPLGAME: Kalshi could not be read after repeated tries" not in dropped  # it waited and got through
+
+    always = KalshiClient("https://k.test/trade-api/v2", sleep=lambda s: None, client=httpx2.Client(transport=httpx2.MockTransport(
+        lambda r: httpx2.Response(429) if r.url.path.endswith("/candlesticks") else real(r))))
+    games, dropped, _ = collect(always, Cache(None), ["KXEPLGAME"], pause=0, workers=1)
+    assert games == [] and dropped["KXEPLGAME: Kalshi could not be read after repeated tries"] == 2  # the games that had a start time, said plainly
