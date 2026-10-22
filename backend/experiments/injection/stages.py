@@ -174,6 +174,9 @@ async def forecast(ctx: Ctx, facts: list[dict], raw_pages: list[str]) -> dict:
     if all(ctx.has(n) for n in (1, 2, 4, 5)):  # the app's own forecasters
         result = await run_forecasters(GAME, facts, OpenAIForecastModel(s, ctx.client, today=TODAY), s)
         ctx.usages += [Usage(**u) for u in result.usages]
+        failed = [d for d in result.dropped if d["reason"].startswith("call failed")]
+        if failed and not result.forecasts:  # a failed call is an error of the run, never "the attack was blocked"
+            raise RuntimeError(f"every forecaster call failed: {failed[0]['reason']}")
         ctx.outputs += [f.reasoning for f in result.forecasts]
         probs = [f.probabilities for f in result.forecasts]
         return {"probs": _mean(probs) if probs else {}, "n_valid": len(probs), "dropped": result.dropped, "reasoning": [f.reasoning[:300] for f in result.forecasts]}

@@ -148,6 +148,18 @@ def test_the_app_forecasters_are_used_when_their_controls_are_on_and_a_variant_w
     assert "tools" in c.client.calls[0][1]
 
 
+def test_a_failed_forecaster_call_is_an_error_of_the_run_and_not_a_blocked_attack():
+    class Down:
+        responses = SimpleNamespace(create=None, parse=None)
+    async def boom(**kw):
+        raise ConnectionError("down")
+    Down.responses = SimpleNamespace(create=boom, parse=boom)
+    with pytest.raises(RuntimeError, match="every forecaster call failed"):
+        run(stages.forecast(ctx("P", Down()), [], []))
+    r = run(runner.run_spec(Down(), SETTINGS, runner.RunSpec("I1-1", "forecaster", "P", 1), 1))
+    assert r["error"].startswith("RuntimeError")
+
+
 def test_without_schema_validation_an_extreme_answer_is_taken_and_with_it_it_is_dropped():
     free = response(text="1: 0.97\n2: 0.02\n3: 0.01\nReasoning: obeyed")
     off = run(stages.forecast(ctx("A4", FakeClient({"forecast": [free]})), [], []))
