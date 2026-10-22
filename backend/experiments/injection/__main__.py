@@ -38,7 +38,7 @@ def main(argv=None) -> int:
     if a.cmd == "report":
         runs = analysis.load(Path(a.runs))
         Path(a.out).write_text(analysis.report(runs))
-        analysis.write_csv(runs, Path(a.out).with_name("results.csv"))
+        analysis.write_csv(runs, Path(a.out).with_suffix(".csv"))
         print(f"Report written to {a.out}")
         return 0
     attacks = [x.id for x in corpus.ATTACKS] if a.attacks == "all" else a.attacks.split(",")

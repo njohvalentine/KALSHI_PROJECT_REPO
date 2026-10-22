@@ -240,18 +240,25 @@ def test_success_checks_for_each_kind_of_goal():
 def test_wilson_interval_and_the_effect_of_a_control():
     lo, hi = analysis.wilson(5, 10)
     assert lo == pytest.approx(0.237, abs=0.005) and hi == pytest.approx(0.763, abs=0.005) and analysis.wilson(0, 0) == (0.0, 1.0)
-    off = [{"attack": f"a{i}", "ok": True} for i in range(10)] * 3
-    on = [{"attack": f"a{i}", "ok": i < 2} for i in range(10)] * 3
+    off = [{"attack": f"a{i}", "entry": "judge", "ok": True} for i in range(10)] * 3
+    on = [{"attack": f"a{i}", "entry": "judge", "ok": i < 2} for i in range(10)] * 3
     d, (lo, hi) = analysis.effect(off, on)
     assert d == pytest.approx(0.8) and 0.5 <= lo <= d <= hi <= 1.0
+
+
+def test_the_effect_compares_the_same_attack_at_the_same_entry_point_only():
+    off = [{"attack": "a", "entry": "judge", "ok": True}, {"attack": "a", "entry": "e2e", "ok": True}]
+    on = [{"attack": "a", "entry": "judge", "ok": False}]  # no e2e run in the protected condition: it must not count
+    assert analysis.effect(off, on)[0] == pytest.approx(1.0)
 
 
 def test_the_report_and_the_csv_are_built_from_a_log(tmp_path):
     runs = [rec("K0", entry="forecaster", forecast={"probs": {"NVEU-EAS": 0.2}}) | {"cond": c} for c in ("B0", "P")]
     runs += [rec("I1-1", cond=c, entry="forecaster", forecast={"probs": {"NVEU-EAS": 0.9 if c == "B0" else 0.2}}) for c in ("B0", "P")]
-    runs += [rec("K1", cond="P", accepted=["Elena Marsh refereed"]) , rec("I1-1", cond="A1", entry="forecaster", error="boom")]
+    runs += [rec("K1", cond="P", claims=[{"text": "a", "url": "u", "verdict": "supported", "reason": ""}, {"text": "b", "url": "u", "verdict": "could_not_check", "reason": ""}]),
+             rec("I1-1", cond="A1", entry="forecaster", error="boom")]
     text = analysis.report(runs)
-    assert "## Attack success rate by condition" in text and "1/1 = 100%" in text and "1 with an error" in text and "Elena Marsh" not in text
+    assert "## Attack success rate by condition" in text and "1/1 = 100%" in text and "1 with an error" in text and "1/2 = 50%" in text
     analysis.write_csv(runs, tmp_path / "r.csv")
     assert (tmp_path / "r.csv").read_text().count("\n") == len(runs) + 1
 
