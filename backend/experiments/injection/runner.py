@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app.research.pricing import cost_usd
 from experiments.injection import corpus, stages
-from experiments.injection.conditions import CONDITIONS
+from experiments.injection.conditions import CONDITIONS, HARDENED_RESEARCHER
 
 CLEAN_E2E = {f"K{i}": page for i, (page, _) in enumerate(corpus.CLEAN, 1)}
 STOP_AFTER_ERRORS = 5  # in a row: most likely no credit or no network; stop and say so
@@ -30,6 +30,11 @@ def plan(attacks: list[str], conds: list[str], e2e_conds: list[str], repeats: in
     specs = []
     for rep in range(1, repeats + 1):
         for cond in conds:
+            if cond in HARDENED_RESEARCHER:  # P plus a researcher rule: only the researcher stage differs from P, so only the end-to-end runs are done
+                if cond in e2e_conds:
+                    specs += [RunSpec(aid, "e2e", cond, rep) for aid in attacks if "e2e" in corpus.ATTACKS_BY_ID[aid].entries]
+                    specs += [RunSpec(k, "e2e", cond, rep) for k in CLEAN_E2E]
+                continue
             for aid in attacks:
                 for entry in corpus.ATTACKS_BY_ID[aid].entries:
                     if entry != "e2e" or cond in e2e_conds:
@@ -60,8 +65,9 @@ async def run_spec(client, settings, spec: RunSpec, forecasters: int) -> dict:
         rec = {"entry": spec.entry, "error": f"{type(exc).__name__}: {str(exc)[:300]}", "tool_calls": ctx.log.tool_calls, "fetches": ctx.log.fetches, "defenses": ctx.log.defenses}
     costs = [cost_usd(u) for u in ctx.usages]
     models = sorted({u.model for u in ctx.usages})
+    usage = [{"model": u.model, "input_tokens": u.input_tokens, "cached_tokens": u.cached_tokens, "output_tokens": u.output_tokens} for u in ctx.usages]
     return {"key": spec.key, "attack": spec.attack, "cond": spec.cond, "rep": spec.rep, "usd": float(sum(c for c in costs if c is not None)),
-            "unpriced": any(c is None for c in costs), "models": models, **rec}
+            "unpriced": any(c is None for c in costs), "models": models, "models_seen": sorted(ctx.models_seen), "usage": usage, **rec}
 
 
 async def run_all(client, settings, specs: list[RunSpec], out: Path, cap_usd: float, concurrency: int = 4, forecasters: int = 3, log_line=print) -> dict:

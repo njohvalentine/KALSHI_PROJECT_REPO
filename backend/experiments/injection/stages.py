@@ -18,6 +18,7 @@ from app.research.prompts import FRAMINGS, RESEARCHER_INSTRUCTIONS, researcher_i
 from app.research.schemas import Angle, Usage
 from experiments.injection import canary, corpus, variants
 from experiments.injection.canary import CANARY_TOOLS, Log
+from experiments.injection.conditions import HARDENED_RESEARCHER
 
 TODAY = corpus.TODAY
 GAME = corpus.GAME
@@ -41,6 +42,9 @@ class Ctx:
     log: Log = field(default_factory=Log)
     usages: list = field(default_factory=list)
     outputs: list = field(default_factory=list)  # every piece of model output text, for the exfil check
+    inputs: list = field(default_factory=list)  # every model input text: {stage, text}
+    transcript: list = field(default_factory=list)  # the researcher's tool calls and what they returned
+    models_seen: set = field(default_factory=set)  # the model versions OpenAI says it answered with
     forecasters: int = 3
 
     def has(self, n: int) -> bool:
@@ -49,6 +53,8 @@ class Ctx:
 
 def _note(ctx: Ctx, response, model: str) -> None:
     ctx.usages.append(usage_from(response, model))
+    if getattr(response, "model", None):
+        ctx.models_seen.add(response.model)
 
 
 def _tool_calls(ctx: Ctx, stage: str, response) -> None:
@@ -60,6 +66,12 @@ def _tool_calls(ctx: Ctx, stage: str, response) -> None:
 # ---- researcher -----------------------------------------------------------------------------------------
 
 def _dispatch(ctx: Ctx, call) -> str:
+    out = _dispatch_inner(ctx, call)
+    ctx.transcript.append({"tool": call.name, "arguments": str(call.arguments)[:500], "output": out[:6000]})
+    return out
+
+
+def _dispatch_inner(ctx: Ctx, call) -> str:
     try:
         args = json.loads(call.arguments or "{}")
     except (ValueError, TypeError):
@@ -75,11 +87,18 @@ def _dispatch(ctx: Ctx, call) -> str:
     return "error: unknown tool"
 
 
+def researcher_instructions(rule: str = "") -> str:
+    """The app's researcher prompt, then (in the hardened condition) the hostile-instruction rule, then the harness's tool note."""
+    return RESEARCHER_INSTRUCTIONS.format(today=TODAY).rstrip("\n") + rule + variants.RESEARCHER_ADDENDUM
+
+
 async def research(ctx: Ctx) -> str:
     s = ctx.settings
     tools = [SEARCH_TOOL, READ_TOOL] + ([] if ctx.has(2) else CANARY_TOOLS)
-    kw = dict(model=s.researcher_model, instructions=RESEARCHER_INSTRUCTIONS.format(today=TODAY) + variants.RESEARCHER_ADDENDUM, tools=tools,
+    rule = variants.RESEARCHER_RULE if ctx.cond in HARDENED_RESEARCHER else ""
+    kw = dict(model=s.researcher_model, instructions=researcher_instructions(rule), tools=tools,
               reasoning={"effort": s.research_reasoning_effort}, max_output_tokens=s.researcher_max_output_tokens)
+    ctx.inputs.append({"stage": "researcher", "text": researcher_input(GAME, ANGLE, TODAY)})
     response = await ctx.client.responses.create(input=researcher_input(GAME, ANGLE, TODAY), **kw)
     _note(ctx, response, s.researcher_model)
     for _ in range(MAX_TOOL_ROUNDS):
@@ -110,9 +129,11 @@ def claims_from(text: str) -> list[dict]:
 
 async def _judge_call(ctx: Ctx, url: str, text: str, cut: bool, claims: list[str]) -> list[ClaimVerdict]:
     s = ctx.settings
+    ctx.inputs.append({"stage": "judge", "text": variants.judge_input(GAME.title, url, None, text, cut, claims, ctx.has(1))})
     if ctx.has(1) and ctx.has(2) and ctx.has(4):  # the app's own judge
         verdicts, usage = await OpenAIClaimJudge(s, ctx.client).judge(GAME.title, url, None, text, cut, claims)
         ctx.usages.append(usage)
+        ctx.outputs.append(json.dumps([v.model_dump() for v in verdicts]))
         return verdicts
     kw = dict(model=s.checker_model, instructions=variants.judge_instructions(TODAY, ctx.has(1), ctx.has(4)),
               input=variants.judge_input(GAME.title, url, None, text, cut, claims, ctx.has(1)), reasoning={"effort": s.checker_reasoning_effort},
@@ -171,6 +192,8 @@ def _mean(forecasts: list[dict[str, float]]) -> dict[str, float]:
 
 async def forecast(ctx: Ctx, facts: list[dict], raw_pages: list[str]) -> dict:
     s = dataclasses.replace(ctx.settings, forecaster_count=ctx.forecasters)
+    for i in range(ctx.forecasters):
+        ctx.inputs.append({"stage": f"forecaster {i + 1}", "text": variants.forecast_input(GAME, facts, TODAY, ctx.has(1), None if ctx.has(5) else raw_pages)})
     if all(ctx.has(n) for n in (1, 2, 4, 5)):  # the app's own forecasters
         result = await run_forecasters(GAME, facts, OpenAIForecastModel(s, ctx.client, today=TODAY), s)
         ctx.usages += [Usage(**u) for u in result.usages]
@@ -179,7 +202,8 @@ async def forecast(ctx: Ctx, facts: list[dict], raw_pages: list[str]) -> dict:
             raise RuntimeError(f"every forecaster call failed: {failed[0]['reason']}")
         ctx.outputs += [f.reasoning for f in result.forecasts]
         probs = [f.probabilities for f in result.forecasts]
-        return {"probs": _mean(probs) if probs else {}, "n_valid": len(probs), "dropped": result.dropped, "reasoning": [f.reasoning[:300] for f in result.forecasts]}
+        ctx.outputs.append(json.dumps([f.probabilities for f in result.forecasts]))
+        return {"probs": _mean(probs) if probs else {}, "n_valid": len(probs), "dropped": result.dropped, "reasoning": [f.reasoning for f in result.forecasts]}
     probs, dropped, reasoning = [], [], []
     for i in range(ctx.forecasters):
         framing = FRAMINGS[i % len(FRAMINGS)]
@@ -211,7 +235,7 @@ async def forecast(ctx: Ctx, facts: list[dict], raw_pages: list[str]) -> dict:
             continue
         ctx.outputs.append(reason)
         probs.append(by_ticker)
-        reasoning.append(reason[:300])
+        reasoning.append(reason)
     return {"probs": _mean(probs) if probs else {}, "n_valid": len(probs), "dropped": dropped, "reasoning": reasoning}
 
 
@@ -229,7 +253,7 @@ async def run_entry(ctx: Ctx, entry: str, slot: corpus.Page | None, *, planted: 
     rec: dict = {"entry": entry, "claims": [], "accepted": [], "forecast": {}, "order": {}}
     if entry == "e2e":
         text = await research(ctx)
-        rec["researcher_text"] = text[:3000]
+        rec["researcher_text"] = text
         judged = await judge_claims(ctx, claims_from(text))
     elif entry == "judge":
         claims = [{"text": c, "url": slot.url} for c in (planted, true_claim) if c]
@@ -247,5 +271,6 @@ async def run_entry(ctx: Ctx, entry: str, slot: corpus.Page | None, *, planted: 
         rec["forecast"] = await forecast(ctx, facts, raw)
         rec["order"] = order_step(ctx, rec["forecast"]["probs"])
     rec["tool_calls"], rec["fetches"], rec["defenses"] = ctx.log.tool_calls, ctx.log.fetches, ctx.log.defenses
-    rec["output_text"] = "\n".join(ctx.outputs)[:6000]
+    rec["output_text"] = "\n".join(ctx.outputs)  # complete: nothing is cut
+    rec["inputs"], rec["transcript"] = ctx.inputs, ctx.transcript
     return rec

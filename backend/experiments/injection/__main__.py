@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from experiments.injection import analysis, corpus, runner
+from experiments.injection import analysis, config_snapshot, corpus, runner
 from experiments.injection.conditions import CONDITIONS
 
 PILOT_ATTACKS = ["I1-1", "I2-1", "I3-1", "I4-1", "I4-2", "I5-1"]  # one or two of each class
@@ -60,6 +60,7 @@ def main(argv=None) -> int:
         return 2
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    config_snapshot.write(out.with_name(out.stem + "-CONFIG.json"), settings, a.forecasters)
     state = asyncio.run(runner.run_all(openai_client(settings), settings, specs, out, a.cap, a.workers, a.forecasters, log_line=lambda s: print(s, file=sys.stderr)))
     return 1 if state["stopped"] else 0
 

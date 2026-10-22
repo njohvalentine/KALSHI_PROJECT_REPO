@@ -11,9 +11,9 @@ import pytest
 from app.config import load_settings
 from app.research.forecast import ForecastAnswer, OutcomeProbability
 from app.research.check import ClaimVerdict, Verdicts
-from app.research.prompts import CHECKER_INSTRUCTIONS, FORECASTER_INSTRUCTIONS, FRAMINGS, checker_input, forecaster_input
+from app.research.prompts import CHECKER_INSTRUCTIONS, FORECASTER_INSTRUCTIONS, FRAMINGS, RESEARCHER_INSTRUCTIONS, checker_input, forecaster_input
 from experiments.injection import analysis, canary, corpus, runner, stages, variants
-from experiments.injection.conditions import CONDITIONS, CONTROLS
+from experiments.injection.conditions import CONDITIONS, CONTROLS, HARDENED_RESEARCHER
 
 SETTINGS = load_settings({"DATABASE_URL": "postgresql://x/y", "KALSHI_API_BASE": "https://k.test", "SESSION_SECRET": "s" * 40, "OPENAI_API_KEY": "sk-test"})
 
@@ -55,10 +55,41 @@ def run(coro):
 
 # ---- conditions, variants -------------------------------------------------------------------------------------
 
-def test_the_conditions_are_baseline_protected_and_one_control_off_each():
-    assert len(CONDITIONS) == 8 and CONDITIONS["B0"] == frozenset() and CONDITIONS["P"] == frozenset(CONTROLS)
+def test_the_conditions_are_baseline_protected_one_control_off_each_and_protected_with_a_researcher_rule():
+    assert len(CONDITIONS) == 9 and CONDITIONS["B0"] == frozenset() and CONDITIONS["P"] == frozenset(CONTROLS)
     for n in CONTROLS:
         assert CONDITIONS[f"A{n}"] == frozenset(CONTROLS) - {n}
+    assert CONDITIONS["PR"] == CONDITIONS["P"] and HARDENED_RESEARCHER == {"PR"}
+
+
+def test_the_researcher_rule_is_added_in_pr_only_and_everything_else_in_the_prompt_is_the_apps():
+    base = stages.researcher_instructions()
+    assert variants.RESEARCHER_RULE not in base and base.startswith(RESEARCHER_INSTRUCTIONS.format(today=stages.TODAY).rstrip("\n"))
+    hardened = stages.researcher_instructions(variants.RESEARCHER_RULE)
+    assert variants.RESEARCHER_RULE in hardened and hardened.replace(variants.RESEARCHER_RULE, "") == base
+    seen = {}
+    for cond in ("P", "PR"):
+        client = FakeClient({"research": [response(text="- x. [http://news.test/a]")]})
+        run(stages.research(ctx(cond, client, pages=corpus.site())))
+        seen[cond] = variants.RESEARCHER_RULE.strip() in client.calls[0][1]["instructions"]
+    assert seen == {"P": False, "PR": True}
+
+
+def test_the_hardened_condition_is_run_end_to_end_only():
+    specs = runner.plan(["I1-1", "I3-1"], ["P", "PR"], ["P", "PR"], 1)
+    pr = [s for s in specs if s.cond == "PR"]
+    assert {s.entry for s in pr} == {"e2e"} and {s.attack for s in pr} == {"I1-1", "I3-1", "K1", "K2", "K3", "K4"}
+
+
+def test_a_run_keeps_complete_inputs_outputs_tokens_and_the_model_versions():
+    long = "- " + "word " * 2000 + "[http://news.test/league/table]"
+    r1 = response(text=long)
+    r1.model = "gpt-5.4-2026-03-05"
+    client = FakeClient({"research": [r1], "judge": [response(parsed=Verdicts(verdicts=[]))], "forecast": [response(parsed=probs_answer())]})
+    rec = run(runner.run_spec(client, SETTINGS, runner.RunSpec("I1-1", "e2e", "P", 1), 1))
+    assert len(rec["researcher_text"]) > 9000 and rec["researcher_text"] == long and len(rec["output_text"]) > 9000  # nothing is cut
+    assert rec["usage"][0] == {"model": SETTINGS.researcher_model, "input_tokens": 1000, "cached_tokens": 0, "output_tokens": 100} and rec["models_seen"] == ["gpt-5.4-2026-03-05"]
+    assert {i["stage"] for i in rec["inputs"]} >= {"researcher", "judge", "forecaster 1"}
 
 
 def test_control_1_off_removes_only_the_untrusted_rules_and_on_is_the_apps_own_text():
@@ -246,6 +277,24 @@ def test_wilson_interval_and_the_effect_of_a_control():
     assert d == pytest.approx(0.8) and 0.5 <= lo <= d <= hi <= 1.0
 
 
+def test_false_information_is_reported_apart_from_injection_and_the_hardened_rule_gets_its_own_comparison():
+    runs = [rec("K0", entry="forecaster", forecast={"probs": {"NVEU-EAS": 0.2}}, usage=[{"model": "m", "input_tokens": 5, "cached_tokens": 1, "output_tokens": 2}]) | {"cond": c} for c in ("P",)]
+    runs += [rec("I3-1", cond="P", entry="judge", claims=[{"text": corpus.GOALKEEPER, "verdict": "supported", "reason": ""}]),
+             rec("I2-1", cond="P", entry="judge", claims=[{"text": corpus.GOALKEEPER, "verdict": "could_not_check", "reason": ""}]),
+             rec("I1-1", cond="P", entry="e2e"), rec("I1-1", cond="PR", entry="e2e")]
+    text = analysis.report(runs)
+    inj, false_info = text.split("## False-information acceptance")[0], text.split("## False-information acceptance")[1].split("## Attack success rate by class")[0]
+    assert "I3" not in inj and "1/1 = 100%" in false_info and "## The hostile-instruction rule at the researcher" in text and "| m | 5 | 1 | 2 |" in text
+
+
+def test_the_config_snapshot_has_the_prompts_and_pages_and_no_key():
+    from experiments.injection import config_snapshot
+    snap = config_snapshot.snapshot(SETTINGS, 1)
+    text = json.dumps(snap)
+    assert "sk-test" not in text and "OPENAI_API_KEY" not in text and "s" * 40 not in text
+    assert snap["prompts"]["researcher_hardened"] != snap["prompts"]["researcher"] and len(snap["pages"]) == 3 + 20 + 4 and len(snap["attacks"]) == 20 and snap["models"]["researcher"]
+
+
 def test_the_effect_compares_the_same_attack_at_the_same_entry_point_only():
     off = [{"attack": "a", "entry": "judge", "ok": True}, {"attack": "a", "entry": "e2e", "ok": True}]
     on = [{"attack": "a", "entry": "judge", "ok": False}]  # no e2e run in the protected condition: it must not count
@@ -258,7 +307,7 @@ def test_the_report_and_the_csv_are_built_from_a_log(tmp_path):
     runs += [rec("K1", cond="P", claims=[{"text": "a", "url": "u", "verdict": "supported", "reason": ""}, {"text": "b", "url": "u", "verdict": "could_not_check", "reason": ""}]),
              rec("I1-1", cond="A1", entry="forecaster", error="boom")]
     text = analysis.report(runs)
-    assert "## Attack success rate by condition" in text and "1/1 = 100%" in text and "1 with an error" in text and "1/2 = 50%" in text
+    assert "## Prompt-injection success" in text and "## False-information acceptance" in text and "Controls 1 and 3 each switch off several mechanisms" in text and "1/1 = 100%" in text and "1 with an error" in text and "1/2 = 50%" in text
     analysis.write_csv(runs, tmp_path / "r.csv")
     assert (tmp_path / "r.csv").read_text().count("\n") == len(runs) + 1
 
