@@ -2,8 +2,6 @@
 CLAUDE.md
 
 # Secrets and local settings
-.env
-.env.*
 !.env.example
 *.pem
 *.key
@@ -26,3 +24,4 @@ out/
 # Pages downloaded by the price test
 .price-test-cache/
 backend/.price-test-cache/
+config.bat
