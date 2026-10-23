@@ -119,16 +119,17 @@ def rows_for_game(game: dict, comparison: dict, settings: Settings, now: datetim
 async def build_ranking(engine, client: KalshiClient, settings: Settings, fee_cache: dict, now: datetime | None = None) -> dict:
     """Every row (unfiltered, most probable first), the accuracy so far, and how many games were considered."""
     now = now or datetime.now(UTC)
-    games = await collect(engine, client, settings, fee_cache, now)
-    scored = await asyncio.to_thread(scored_games_by_sport, engine)
+    series = {e.ticker: (e.sport, e.league) for e in settings.sports_series}
+    # the live prices (a few Kalshi reads) and the database work run at the same time
+    games, scored, score, label_check = await asyncio.gather(
+        collect(engine, client, settings, fee_cache, now), asyncio.to_thread(scored_games_by_sport, engine),
+        asyncio.to_thread(score_records, engine, None, series, settings.min_supported_claims), asyncio.to_thread(confidence_vs_accuracy, engine, settings))
     rows = [r for game, comparison, _ in games for r in rows_for_game(game, comparison, settings, now, scored)]
     rows.sort(key=lambda r: -r["our_probability"])
-    series = {e.ticker: (e.sport, e.league) for e in settings.sports_series}
-    score = await asyncio.to_thread(score_records, engine, None, series, settings.min_supported_claims)
     track = score.get("same_records") or {}
     return {"rows": rows, "games_considered": len(games), "generated_at": now.isoformat(), "max_age_hours": settings.opportunity_max_age_hours,
             "accuracy": {"games": score.get("games", 0), "ours": track.get("ours"), "kalshi": track.get("market")},
-            "label_check": await asyncio.to_thread(confidence_vs_accuracy, engine, settings)}
+            "label_check": label_check}
 
 
 def arrange(rows: list[dict], sort: str, hide_at: float, sport: str | None, kind: str | None, limit: int | None = None) -> list[dict]:
