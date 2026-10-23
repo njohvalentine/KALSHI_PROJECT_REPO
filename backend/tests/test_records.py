@@ -388,3 +388,29 @@ def test_several_forecasts_of_one_market_score_as_the_latest_before_the_start_an
     assert s["brier_ours"] == pytest.approx(((0.9 - 1) ** 2 + 0.3 ** 2) / 2)  # the latest of E1 (0.90), not 0.20 or 0.99
     assert s["updated"]["markets"] == 1 and s["updated"]["brier_first"] == pytest.approx(0.64) and s["updated"]["brier_latest"] == pytest.approx(0.01)
     assert "1 markets were forecast more than once: Brier of the first forecast 0.6400, of the latest 0.0100" in format_report(s)
+
+
+@needs_db
+def test_lineup_updates_are_reported_apart_from_other_repeat_runs(fresh_db):
+    from app.models import Run
+
+    command.upgrade(alembic_config(), "head")
+    first = scored_record("E1", 0.20, True, 0.5, 0.50, 0.54, "yes")
+    first.created_at = NOW - timedelta(hours=5)
+    updated = scored_record("E1", 0.90, True, 0.5, 0.50, 0.54, "yes")
+    updated.run_id, updated.created_at = "run-E1-update", NOW - timedelta(hours=1)
+    again = scored_record("E2", 0.30, True, 0.5, 0.40, 0.44, "yes")  # researched again by hand (not an update): not in the lineup line
+    again.created_at = NOW - timedelta(hours=5)
+    again_latest = scored_record("E2", 0.60, True, 0.5, 0.40, 0.44, "yes")
+    again_latest.run_id, again_latest.created_at = "run-E2-again", NOW - timedelta(hours=1)
+    with DbSession(fresh_db) as db:
+        db.add(Run(id="run-E1-update", event_ticker="E1", event_title="t", status="done", refresh_of="run-E1"))
+        db.add(Run(id="run-E2-again", event_ticker="E2", event_title="t", status="done"))
+        db.add_all([first, updated, again, again_latest])
+        db.commit()
+    s = score_records(fresh_db)
+    assert s["updated"]["markets"] == 2  # both repeats, as before
+    assert s["lineup_updates"]["markets"] == 1 and s["lineup_updates"]["games"] == 1
+    assert s["lineup_updates"]["brier_first"] == pytest.approx(0.64) and s["lineup_updates"]["brier_latest"] == pytest.approx(0.01)
+    text = format_report(s)
+    assert "Lineup updates: 1 markets of 1 games: Brier before the update 0.6400, after 0.0100" in text and "too few: about 50 updated games are needed" in text

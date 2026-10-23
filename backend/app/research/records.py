@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.config import Settings
 from app.kalshi import KalshiClient
-from app.models import OutcomeRecord
+from app.models import OutcomeRecord, Run
 from app.research.compare import FEE_RATE
 from app.research.schemas import GameInfo
 
@@ -23,6 +23,7 @@ FINAL_STATUSES = ("determined", "finalized", "settled")  # Kalshi market states 
 BATCH = 100
 UNKNOWN_START_WAIT = timedelta(hours=24)  # a record with no game start is looked up this long after it was made
 MIN_GAMES = 30
+MIN_UPDATE_GAMES = 50  # updated games needed before the first-against-updated comparison means anything
 MIN_GROUP_GAMES = 5  # a sport, league or evidence group with fewer games than this is printed with a warning
 
 
@@ -207,6 +208,7 @@ def score_records(engine, since: datetime | None = None, series: dict[str, tuple
         if since:
             query = query.where(OutcomeRecord.created_at >= since)
         records = db.scalars(query).all()
+        update_runs = set(db.scalars(select(Run.id).where(Run.refresh_of.is_not(None))).all())  # runs that are lineup updates of an earlier run
     unresolved = [r for r in records if r.resolved_at is None]
     voided = [r for r in records if r.resolved_at is not None and r.resolved_yes is None]
     scored_pool = [r for r in records if r.resolved_yes is not None]
@@ -221,6 +223,10 @@ def score_records(engine, since: datetime | None = None, series: dict[str, tuple
     updated = {t: g for t, g in by_market.items() if len(g) > 1}
     first = [min(g, key=lambda r: (r.created_at, r.id)) for g in updated.values()]
     latest_of_updated = [max(g, key=lambda r: (r.created_at, r.id)) for g in updated.values()]
+    # the markets whose latest forecast is a lineup update, and how the forecast before the update did against the updated one
+    lineup = {t: g for t, g in updated.items() if max(g, key=lambda r: (r.created_at, r.id)).run_id in update_runs}
+    lineup_first = [min(g, key=lambda r: (r.created_at, r.id)) for g in lineup.values()]
+    lineup_latest = [max(g, key=lambda r: (r.created_at, r.id)) for g in lineup.values()]
 
     ours = [(r.probability, r.resolved_yes) for r in used]
     with_all = [r for r in used if r.baseline_probability is not None and _mid(r) is not None]
@@ -233,6 +239,11 @@ def score_records(engine, since: datetime | None = None, series: dict[str, tuple
             "markets": len(updated),
             "brier_first": _brier([(r.probability, r.resolved_yes) for r in first]),
             "brier_latest": _brier([(r.probability, r.resolved_yes) for r in latest_of_updated]),
+        },
+        "lineup_updates": {
+            "markets": len(lineup), "games": len({g[0].event_ticker for g in lineup.values()}),
+            "brier_first": _brier([(r.probability, r.resolved_yes) for r in lineup_first]),
+            "brier_latest": _brier([(r.probability, r.resolved_yes) for r in lineup_latest]),
         },
         "excluded": {"unresolved": len(unresolved), "voided_or_other": len(voided), "after_start_or_unknown": len(late)},
         "brier_ours": _brier(ours),
@@ -312,6 +323,12 @@ def format_report(s: dict) -> str:
         lines.append(
             f"{u['markets']} markets were forecast more than once: Brier of the first forecast {f(u['brier_first'])}, of the latest {f(u['brier_latest'])} "
             "(lower is better; a few markets prove nothing)."
+        )
+    if s.get("lineup_updates", {}).get("markets"):
+        u = s["lineup_updates"]
+        lines.append(
+            f"Lineup updates: {u['markets']} markets of {u['games']} games: Brier before the update {f(u['brier_first'])}, after {f(u['brier_latest'])} (lower is better)"
+            + (f"; too few: about {MIN_UPDATE_GAMES} updated games are needed" if u["games"] < MIN_UPDATE_GAMES else "") + "."
         )
     if not s["enough_games"]:
         lines.append(f"Fewer than {MIN_GAMES} games: too few to conclude anything.")

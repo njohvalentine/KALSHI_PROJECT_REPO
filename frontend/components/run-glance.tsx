@@ -1,4 +1,6 @@
-import { duration, gapCents, money } from "@/lib/format";
+import Link from "next/link";
+import { UpdateButton } from "@/components/update-button";
+import { ago, duration, gapCents, money } from "@/lib/format";
 import { isMarketFinding, plainReason, sideText } from "@/lib/labels";
 import type { Run } from "@/lib/types";
 
@@ -24,6 +26,15 @@ export function RunGlance({ run }: { run: Run }) {
       <h2 id="glance-heading" className="mb-3 text-lg font-semibold tracking-tight">
         At a glance
       </h2>
+      {run.refresh_of ? (
+        <p className="mb-3 rounded-lg bg-secondary px-3 py-2 text-sm">
+          This forecast is an <span className="font-semibold">update</span> with the confirmed lineups and late team news of{" "}
+          <Link href={`/prediction/${run.previous?.run_id ?? run.refresh_of}`} className="text-primary underline underline-offset-4">
+            the run{run.previous?.finished_at ? ` from ${ago(run.previous.finished_at)}` : ""}
+          </Link>
+          . The facts found then are kept and shown under “Earlier research”; the table shows the earlier probability beside each outcome.
+        </p>
+      ) : null}
       {run.verdict ? (
         <p className={run.verdict.kind === "no_bet" ? "mb-3 text-xl font-bold" : "mb-3 text-xl font-bold text-good"}>
           {run.verdict.label}
@@ -53,6 +64,7 @@ export function RunGlance({ run }: { run: Run }) {
           </ul>
         </div>
       )}
+      {run.update?.allowed ? <UpdateButton runId={run.id} hoursToStart={run.update.hours_to_start} /> : null}
       <dl className="mt-4 grid gap-x-8 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["Facts supported by their page", p?.supported_claims === undefined ? "–" : `${p.supported_claims} of ${cited} cited`],

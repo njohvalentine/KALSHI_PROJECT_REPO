@@ -70,7 +70,17 @@ function GapCell({ market }: { market: ComparisonOutcome | null }) {
   );
 }
 
-function GroupRows({ rows, run }: { rows: Row[]; run: { id: string; event_ticker: string; event_title: string } }) {
+function Change({ now, before }: { now: number; before: number | undefined }) {
+  if (before === undefined) return null;
+  const d = Math.round((now - before) * 100);
+  return (
+    <div className="text-sm font-normal text-muted-foreground" title="The forecast of the run this one updates">
+      was {pct(before)} ({d > 0 ? "+" : d < 0 ? "−" : ""}{Math.abs(d)} points)
+    </div>
+  );
+}
+
+function GroupRows({ rows, run, previous }: { rows: Row[]; run: { id: string; event_ticker: string; event_title: string }; previous?: Record<string, number> | null }) {
   return (
     <>
       <div className="hidden overflow-x-auto rounded-xl border bg-card sm:block">
@@ -89,7 +99,10 @@ function GroupRows({ rows, run }: { rows: Row[]; run: { id: string; event_ticker
           {rows.map(({ outcome, market }) => (
             <TableRow key={outcome.market_ticker}>
               <TableCell className="whitespace-normal px-4 py-3.5 font-medium">{outcome.outcome}</TableCell>
-              <TableCell className="px-4 py-3.5 text-lg font-semibold tabular-nums">{pct(outcome.probability)}</TableCell>
+              <TableCell className="px-4 py-3.5 text-lg font-semibold tabular-nums">
+                {pct(outcome.probability)}
+                <Change now={outcome.probability} before={previous?.[outcome.market_ticker]} />
+              </TableCell>
               <TableCell className="px-4 py-3.5 tabular-nums">
                 {pct(outcome.min)}–{pct(outcome.max)}
               </TableCell>
@@ -113,7 +126,10 @@ function GroupRows({ rows, run }: { rows: Row[]; run: { id: string; event_ticker
         <li key={outcome.market_ticker} className="rounded-xl border bg-card p-4">
           <div className="flex items-baseline justify-between gap-3">
             <span className="font-medium">{outcome.outcome}</span>
-            <span className="text-lg font-semibold tabular-nums">{pct(outcome.probability)}</span>
+            <span className="text-lg font-semibold tabular-nums">
+              {pct(outcome.probability)}
+              <Change now={outcome.probability} before={previous?.[outcome.market_ticker]} />
+            </span>
           </div>
           <dl className="mt-2 grid gap-1 text-sm">
             <div className="flex justify-between gap-3">
@@ -251,11 +267,11 @@ export function PredictionSection({ run }: { run: Run }) {
             defaultOpen={i === 0}
             summary={`${groupRows.length} market${groupRows.length === 1 ? "" : "s"}${flagged > 0 ? `, ${flagged} worth a look` : ""}`}
           >
-            <GroupRows rows={groupRows} run={run} />
+            <GroupRows rows={groupRows} run={run} previous={run.previous?.probabilities} />
           </Fold>
         ) : (
           <div key={kind} className="mb-5">
-            <GroupRows rows={groupRows} run={run} />
+            <GroupRows rows={groupRows} run={run} previous={run.previous?.probabilities} />
           </div>
         );
       })}

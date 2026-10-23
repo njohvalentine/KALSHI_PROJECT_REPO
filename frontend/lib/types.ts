@@ -21,6 +21,7 @@ export type RunSummary = {
   sourced_claims: number;
   stage: string | null;
   flagged_outcomes: number | null;
+  refresh_of?: string | null; // set when this run is an update (lineups and late news) of that earlier run
 };
 
 export type Verdict = "supported" | "not_supported" | "could_not_check";
@@ -111,6 +112,8 @@ export type Run = RunSummary & {
   costs: Record<string, string | null> | null;
   verdict: GameVerdict | null; // null while the run is not done
   book_note?: string | null; // why the game has no bookmaker price
+  update?: { allowed: boolean; reason: string | null; hours_to_start: number | null }; // whether this run can be updated with the confirmed lineups
+  previous?: { run_id: string; finished_at: string | null; probabilities: Record<string, number> } | null; // for an update: the forecast it replaces
 };
 
 /** What the Games list needs from the latest finished run of a game. */
