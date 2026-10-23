@@ -40,11 +40,13 @@ FINDINGS = [{"angle": "Form", "kind": "evidence", "question": "q", "claims": [
 class FakeJudge:
     """Says "supported" for the claim numbers listed per page url; remembers what it was asked."""
 
-    def __init__(self, supported=None):
-        self.supported, self.calls = supported or {}, []
+    def __init__(self, supported=None, fail_urls=()):
+        self.supported, self.calls, self.fail_urls = supported or {}, [], set(fail_urls)
 
     async def judge(self, game_title, page_url, page_title, page_text, cut, claims):
         self.calls.append({"url": page_url, "claims": list(claims)})
+        if page_url in self.fail_urls:
+            raise ValueError("Invalid JSON: EOF while parsing")
         out = []
         for n, claim in enumerate(claims, 1):
             if (page_url, claim) in self.supported:
@@ -74,7 +76,8 @@ def setup(fresh_db, run_id="r1"):
 def test_only_pages_of_other_domains_are_asked_and_a_second_domain_counts_once(fresh_db):
     setup(fresh_db)
     judge = FakeJudge({("https://www.bbc.co.uk/c", "Newcastle beat Arsenal 2-1"): "Newcastle beat Arsenal 2-1 in the league on 10 October 2026"})
-    results, usages = asyncio.run(corroborate_run(fresh_db, "r1", judge, SETTINGS))
+    results, usages, failures = asyncio.run(corroborate_run(fresh_db, "r1", judge, SETTINGS))
+    assert failures == 0
     asked = {c["url"]: c["claims"] for c in judge.calls}
     assert "https://de.uefa.com/b" not in asked and "https://www.uefa.com/a" not in asked  # same registered domain as the page that already supports both claims
     assert "https://down.example/e" not in asked  # a page that could not be read is never asked
@@ -89,7 +92,7 @@ def test_only_pages_of_other_domains_are_asked_and_a_second_domain_counts_once(f
 def test_a_quote_that_is_not_on_the_page_does_not_corroborate(fresh_db):
     setup(fresh_db)
     judge = FakeJudge({("https://www.bbc.co.uk/c", "Newcastle beat Arsenal 2-1"): "a sentence that is not on that page at all"})
-    results, _ = asyncio.run(corroborate_run(fresh_db, "r1", judge, SETTINGS))
+    results, _, _ = asyncio.run(corroborate_run(fresh_db, "r1", judge, SETTINGS))
     assert [r["domains"] for r in sorted(results, key=lambda r: r["claim_index"])] == [["uefa.com"], ["uefa.com"]]  # the app's own quote check applies
 
 
@@ -103,7 +106,7 @@ def test_the_domain_of_the_page_really_reached_is_used_and_nothing_is_written(fr
         db.commit()
         before = (db.scalar(select(func.count()).select_from(ClaimCheck)), db.scalar(select(func.count()).select_from(SourcePage)), db.scalar(select(func.count()).select_from(Run)))
     judge = FakeJudge({("https://www.bbc.co.uk/c", "Newcastle beat Arsenal 2-1"): "Newcastle beat Arsenal 2-1 in the league on 10 October 2026"})
-    results, _ = asyncio.run(corroborate_run(fresh_db, "r1", judge, SETTINGS))
+    results, _, _ = asyncio.run(corroborate_run(fresh_db, "r1", judge, SETTINGS))
     assert "https://www.bbc.co.uk/c" not in {c["url"] for c in judge.calls}  # same domain as the support after the redirect
     assert all(r["domains"] == ["uefa.com"] for r in results)
     with DbSession(fresh_db) as db:
@@ -127,8 +130,24 @@ def result(run, ci, sport, domains, quote=""):
 def test_the_report_arithmetic_and_the_rule_for_the_next_step():
     rows = [result("a", 0, "Soccer", ["uefa.com", "bbc.co.uk"]), result("a", 1, "Soccer", ["uefa.com"]), result("b", 0, "Tennis", ["atptour.com"]),
             result("b", 1, "Tennis", ["atptour.com", "x.com", "y.com"])]
-    s = summarise(rows, [Usage("gpt-5.4-mini", 1_000_000, 0, 0)], runs=2)
+    s = summarise(rows, [Usage("gpt-5.4-mini", 1_000_000, 0, 0)], runs=2, failed_calls=3)
     assert s["claims"] == 4 and s["corroborated"] == 2 and s["share"] == 0.5 and s["by_sport"] == {"Soccer": (1, 2), "Tennis": (1, 2)} and s["distribution"] == {1: 2, 2: 1, 3: 1}
-    assert s["cost_usd"] == pytest.approx(0.75)
+    assert s["cost_usd"] == pytest.approx(0.75) and s["failed_calls"] == 3
     text = format_report(s, rows, sample=2, seed=1)
-    assert "50%" in text and "Soccer" in text and "25 percent" in text and "hand check" in text.lower()
+    assert "3 judge call(s) failed" in text and "50%" in text and "Soccer" in text and "25 percent" in text and "hand check" in text.lower()
+
+
+@needs_db
+def test_many_claims_are_asked_in_batches_of_at_most_ten_and_a_failed_call_is_counted_not_fatal(fresh_db):
+    command.upgrade(alembic_config(), "head")
+    many = [{"text": f"Fact number {i} of the match", "kind": "sourced", "sources": [{"url": "https://www.uefa.com/a", "title": "t"}]} for i in range(25)]
+    with DbSession(fresh_db) as db:
+        db.add(Run(id="r9", event_ticker="KXUCLGAME-X", event_title="A vs B", status="done", result={"findings": [{"angle": "Form", "kind": "evidence", "question": "q", "claims": many}]}))
+        db.flush()
+        db.add_all([page("r9", "https://www.uefa.com/a", TEXT_A), page("r9", "https://www.bbc.co.uk/c", TEXT_B), page("r9", "https://other.example/d", TEXT_C)])
+        db.add_all(ClaimCheck(run_id="r9", finding_index=0, claim_index=i, source_url="https://www.uefa.com/a", verdict="supported", reason="ok", model="m") for i in range(25))
+        db.commit()
+    judge = FakeJudge(fail_urls={"https://other.example/d"})
+    results, usages, failures = asyncio.run(corroborate_run(fresh_db, "r9", judge, SETTINGS))
+    sizes = [len(c["claims"]) for c in judge.calls if c["url"] == "https://www.bbc.co.uk/c"]
+    assert sizes == [10, 10, 5] and failures == 3 and len(results) == 25  # the failing page: three batches, each counted; the run still produced its rows
