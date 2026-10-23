@@ -67,7 +67,11 @@ class _HideKey(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         # The library passes the URL as an object, not a string, so the arguments cannot be masked one by one: the
         # finished message is.
-        record.msg = KEY_IN_TEXT.sub("apiKey=<hidden>", record.getMessage())
+        try:
+            message = record.getMessage()
+        except Exception:  # a malformed log call (arguments that do not fit the text) must not raise from inside the filter; mask what is there
+            message = str(record.msg)
+        record.msg = KEY_IN_TEXT.sub("apiKey=<hidden>", message)
         record.args = None
         return True
 

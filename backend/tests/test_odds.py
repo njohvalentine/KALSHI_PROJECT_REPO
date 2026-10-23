@@ -156,6 +156,13 @@ def test_the_key_is_hidden_in_the_log_lines_the_real_http_library_writes(caplog)
     assert "HTTP Request" in caplog.text and KEY not in caplog.text and "apiKey=<hidden>" in caplog.text
 
 
+def test_a_malformed_log_call_does_not_make_the_key_filter_raise_and_is_still_masked():
+    from app.odds import _HideKey
+
+    record = logging.LogRecord("httpx2", logging.INFO, "f.py", 1, f"GET https://api.the-odds-api.com/v4/sports?apiKey={KEY} %s %s", ("only one",), None)
+    assert _HideKey().filter(record) is True and KEY not in record.getMessage() and "apiKey=<hidden>" in record.getMessage()
+
+
 def test_the_record_keeps_the_bookmaker_price_or_the_reason_and_only_winner_markets_get_one():
     game = GameInfo(event_ticker="KXUCLGAME-26OCT14ROMRMA", title="Roma vs Real Madrid", starts_at=START.isoformat(), outcome_names=["Roma", "Real Madrid", "Tie"],
                     outcome_tickers=["T-ROM", "T-RMA", "T-TIE"])
