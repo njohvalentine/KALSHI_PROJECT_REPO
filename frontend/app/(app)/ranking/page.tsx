@@ -52,7 +52,7 @@ function Row({ o }: { o: RankedOutcome }) {
       </TableCell>
       <TableCell className="min-w-40 whitespace-normal">
         <div className="font-medium">{o.market}</div>
-        <div className="text-sm text-muted-foreground">{o.kind === "winner" ? "match result" : `our pick: “${o.side}”`}</div>
+        <div className="text-sm text-muted-foreground">{o.kind === "winner" ? "match result" : o.kind === "h1_winner" ? "first-half result" : `our pick: “${o.side}”`}</div>
         {o.flagged ? <Badge className="mt-1 bg-good-soft text-good">Worth a look</Badge> : null}
       </TableCell>
       <TableCell className="text-right tabular-nums">

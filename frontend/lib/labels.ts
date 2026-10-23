@@ -79,6 +79,10 @@ export const KIND_HEADING: Record<string, string> = {
   total: "Total goals, runs or points",
   btts: "Both teams to score",
   spread: "Margin of victory",
+  h1_winner: "First half: winner",
+  h1_total: "First half: total goals",
+  h1_btts: "First half: both teams to score",
+  h1_spread: "First half: margin of victory",
 };
 
 export const ORDER_STATE: Record<string, string> = {

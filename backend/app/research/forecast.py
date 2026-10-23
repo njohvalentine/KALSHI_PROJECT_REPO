@@ -95,27 +95,39 @@ def enforce_consistency(game: GameInfo, probs: dict[str, float]) -> list[str]:
     too high (and reported); large ones raise InvalidForecast. Changes `probs` in place and returns the notes."""
     notes: list[str] = []
     winner = dict(zip(game.outcome_names, game.outcome_tickers))
-    totals_15 = None
+    by_kind = {g.kind: g for g in game.groups}
+    half_winner = {t: t_ for g in game.groups if g.kind == "h1_winner" for t, t_ in zip(g.teams, g.tickers) if t}
+    line = lambda kind, at: next((t for t, s in zip(by_kind[kind].tickers, by_kind[kind].strikes) if s == at), None) if kind in by_kind else None  # noqa: E731
     for group in game.groups:
         lines: dict[str | None, list[tuple[float, str]]] = {}
         for ticker, strike, team in zip(group.tickers, group.strikes, group.teams):
             lines.setdefault(team, []).append((strike if strike is not None else 0.0, ticker))
-        if group.kind in ("total", "spread"):
+        if group.kind in ("total", "spread", "h1_total", "h1_spread"):
             for items in lines.values():
                 items.sort()
                 for (_, lower), (_, higher) in zip(items, items[1:]):  # a higher line is never more likely
                     _clip(probs, higher, probs[lower], f"{group.kind}: a higher line is more likely than a lower one", notes)
-        if group.kind == "spread":
-            for ticker, team in zip(group.tickers, group.teams):  # winning by more than 1.5 needs winning
-                if team in winner:
-                    _clip(probs, ticker, probs[winner[team]], "spread: winning by a margin is more likely than winning", notes)
-        if group.kind == "total":
-            totals_15 = next((t for t, strike in zip(group.tickers, group.strikes) if strike == 1.5), totals_15)
-    if totals_15:
-        for group in game.groups:
-            if group.kind == "btts":
-                for ticker in group.tickers:  # both teams scoring needs at least two goals
-                    _clip(probs, ticker, probs[totals_15], "btts: both teams to score is more likely than over 1.5 goals", notes)
+        for kind, wins in (("spread", winner), ("h1_spread", half_winner)):
+            if group.kind == kind:
+                for ticker, team in zip(group.tickers, group.teams):  # winning by more than 1.5 needs winning (the game, or the half)
+                    if team in wins:
+                        _clip(probs, ticker, probs[wins[team]], f"{kind}: winning by a margin is more likely than winning", notes)
+        if group.kind == "h1_total":
+            for ticker, strike in zip(group.tickers, group.strikes):  # goals in the half are goals in the game
+                full = line("total", strike)
+                if full:
+                    _clip(probs, ticker, probs[full], "h1_total: first-half goals are more likely than full-game goals at the same line", notes)
+    total_15, half_15 = line("total", 1.5), line("h1_total", 1.5)
+    for group in game.groups:
+        if group.kind == "btts" and total_15:
+            for ticker in group.tickers:  # both teams scoring needs at least two goals
+                _clip(probs, ticker, probs[total_15], "btts: both teams to score is more likely than over 1.5 goals", notes)
+        if group.kind == "h1_btts":
+            for ticker in group.tickers:  # in the half too, and a first-half goal each is a goal each in the game
+                if half_15:
+                    _clip(probs, ticker, probs[half_15], "h1_btts: first-half both teams to score is more likely than first-half over 1.5 goals", notes)
+                for both in by_kind["btts"].tickers if "btts" in by_kind else []:
+                    _clip(probs, ticker, probs[both], "h1_btts: first-half both teams to score is more likely than both teams to score in the game", notes)
     return notes
 
 
@@ -137,6 +149,13 @@ def validate_full(game: GameInfo, answer: ForecastAnswer) -> tuple[dict[str, flo
         for i in range(1, winners + 1):
             probs[i] = probs[i] / total
     by_ticker = {game.market_tickers[num - 1]: p for num, p in probs.items()}
+    for group in game.groups:
+        if group.kind == "h1_winner":  # exactly one of home, away, Tie happens in the first half: same rule as the match result
+            total = sum(by_ticker[t] for t in group.tickers)
+            if abs(total - 1) > SUM_TOLERANCE:
+                raise InvalidForecast(f"the first half outcomes are exclusive but the probabilities add up to {total:.3f}")
+            for t in group.tickers:
+                by_ticker[t] /= total
     return by_ticker, enforce_consistency(game, by_ticker)
 
 

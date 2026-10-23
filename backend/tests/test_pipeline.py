@@ -41,7 +41,7 @@ def kalshi_mock(price_failures_after=None, companions=False):
         if companions and ticker.startswith("KXTSPREAD"):
             return httpx2.Response(200, json={"event": {"event_ticker": ticker, "series_ticker": "KXTSPREAD", "title": "Spread"}, "markets": [
                 {"ticker": f"{ticker}-H2", "status": "active", "yes_sub_title": "Home wins by more than 1.5 goals", "floor_strike": 1.5, "yes_bid_dollars": "0.20", "yes_ask_dollars": "0.22", "yes_ask_size_fp": "100", "yes_bid_size_fp": "100"}]})
-        if companions and ticker.startswith("KXTBTTS"):
+        if ticker.startswith(("KXTBTTS", "KXT1H")):  # not offered: both teams to score and the first half markets
             return httpx2.Response(404)
         calls["event"] += 1
         if price_failures_after is not None and calls["event"] > price_failures_after:
@@ -194,7 +194,8 @@ def test_a_game_with_total_and_spread_markets_is_forecast_compared_and_recorded_
     p = run["prediction"]
     kinds = [o["kind"] for o in p["outcomes"]]
     assert kinds == ["winner", "winner", "total", "total", "spread"]
-    assert p["markets_not_offered"] == ["both teams to score: not offered for this game"]
+    assert p["markets_not_offered"] == [f"{k}: not offered for this game" for k in (
+        "both teams to score", "first half winner", "first half total goals", "first half both teams to score", "first half margin of victory")]
     totals = [o for o in p["outcomes"] if o["kind"] == "total"]
     assert [o["outcome"] for o in totals] == ["Over 1.5 goals scored", "Over 2.5 goals scored"] and totals[0]["probability"] > totals[1]["probability"]
     assert sum(o["probability"] for o in p["outcomes"] if o["kind"] == "winner") == pytest.approx(1.0, abs=0.001)

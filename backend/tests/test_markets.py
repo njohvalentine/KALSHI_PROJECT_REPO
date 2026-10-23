@@ -74,9 +74,10 @@ def test_attach_finds_what_exists_and_notes_what_does_not(caplog):
     with caplog.at_level(logging.WARNING):
         game = attach_companions(winner_game(), WINNER, "Soccer", kalshi)
     assert [g.kind for g in game.groups] == ["total", "spread"] and game.market_tickers[:3] == ["W-A", "W-M", "W-T"]
-    assert game.group_notes == ["both teams to score: could not be read from Kalshi"] and "KXUCLBTTS" in caplog.text
+    assert game.group_notes[0] == "both teams to score: could not be read from Kalshi" and "KXUCLBTTS" in caplog.text
+    assert game.group_notes[1:] == [f"{k}: not offered for this game" for k in ("first half winner", "first half total goals", "first half both teams to score", "first half margin of victory")]
     missing = attach_companions(winner_game(), WINNER, "Soccer", FakeKalshi())
-    assert missing.groups == [] and len(missing.group_notes) == 3 and "not offered for this game" in missing.group_notes[0]
+    assert missing.groups == [] and len(missing.group_notes) == 7 and "not offered for this game" in missing.group_notes[0]
 
 
 def test_baseball_has_no_btts_and_unknown_sports_are_left_alone():
@@ -165,5 +166,5 @@ def test_prediction_has_a_kind_for_each_market_the_adjustments_and_the_markets_n
     assert [o["kind"] for o in p["outcomes"]] == ["winner"] * 3 + ["total"] * 3 + ["spread"] * 3
     assert sum(o["probability"] for o in p["outcomes"] if o["kind"] == "winner") == pytest.approx(1.0, abs=0.001)
     assert next(o for o in p["outcomes"] if o["market_ticker"] == "T-3")["probability"] == 0.80
-    assert p["markets_not_offered"] == ["both teams to score: not offered for this game"]
+    assert p["markets_not_offered"][0] == "both teams to score: not offered for this game" and len(p["markets_not_offered"]) == 5
     assert len(p["adjustments"]) == 3 and p["adjustments"][0]["note"].startswith("total:")

@@ -44,7 +44,7 @@ export type ForecastRow = {
   reasoning: string;
   model: string;
 };
-export type MarketKind = "winner" | "total" | "btts" | "spread";
+export type MarketKind = "winner" | "total" | "btts" | "spread" | "h1_winner" | "h1_total" | "h1_btts" | "h1_spread";
 export type PredictionOutcome = {
   market_ticker: string;
   kind?: MarketKind;

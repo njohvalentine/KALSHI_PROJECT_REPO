@@ -12,13 +12,17 @@ from app.research.schemas import GameInfo, MarketGroup
 
 log = logging.getLogger("app.research.markets")
 
-# (kind, ticker part) per sport. More kinds (first half, corners, team totals, tennis) are added here.
+# (kind, ticker part) per sport. More kinds (corners, team totals, tennis) are added here. A kind name is at most 10 characters (runs.market_kind).
 COMPANIONS: dict[str, tuple[tuple[str, str], ...]] = {
-    "Soccer": (("total", "TOTAL"), ("btts", "BTTS"), ("spread", "SPREAD")),
+    "Soccer": (("total", "TOTAL"), ("btts", "BTTS"), ("spread", "SPREAD"),
+               ("h1_winner", "1H"), ("h1_total", "1HTOTAL"), ("h1_btts", "1HBTTS"), ("h1_spread", "1HSPREAD")),  # first half, read live for the Premier League 2026-10-23
     "Baseball": (("total", "TOTAL"), ("spread", "SPREAD")),
     "Basketball": (("total", "TOTAL"), ("spread", "SPREAD")),  # NBA read live 2026-10-15; other leagues are tried by the same rule
 }
-KIND_NAMES = {"total": "total goals, runs or points", "btts": "both teams to score", "spread": "margin of victory"}
+KIND_NAMES = {"total": "total goals, runs or points", "btts": "both teams to score", "spread": "margin of victory",
+              "h1_winner": "first half winner", "h1_total": "first half total goals", "h1_btts": "first half both teams to score",
+              "h1_spread": "first half margin of victory"}
+TEAM_KINDS = ("spread", "h1_winner", "h1_spread")  # the markets whose text starts with the team they are about
 OPEN = (None, "active", "open")
 
 
@@ -41,13 +45,14 @@ def group_from_event(kind: str, data: dict, names: list[str]) -> MarketGroup | N
     markets = [m for m in (data.get("markets") or event.get("markets") or []) if m.get("status") in OPEN]
     if not markets:
         return None
-    markets.sort(key=lambda m: (_team_of(m, names) or "", m.get("floor_strike") is None, m.get("floor_strike") or 0))
+    team = (lambda m: _team_of(m, names)) if kind in TEAM_KINDS else (lambda m: None)
+    markets.sort(key=lambda m: (team(m) or "" if kind in ("spread", "h1_spread") else "", m.get("floor_strike") is None, m.get("floor_strike") or 0))  # the first-half winner keeps Kalshi's order
     return MarketGroup(
         kind=kind, title=event.get("title") or kind, event_ticker=event.get("event_ticker") or "",
         series_ticker=event.get("series_ticker"), tickers=[m["ticker"] for m in markets],
         outcomes=[m.get("yes_sub_title") or m.get("title") or m["ticker"] for m in markets],
         strikes=[m.get("floor_strike") for m in markets],
-        teams=[_team_of(m, names) if kind == "spread" else None for m in markets],
+        teams=[team(m) for m in markets],
     )
 
 

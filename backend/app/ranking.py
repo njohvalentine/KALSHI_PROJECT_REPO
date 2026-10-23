@@ -31,6 +31,9 @@ FACTS_HIGH = 8  # supported facts needed for "high"
 BOOK_DISAGREE = 0.10
 
 
+EXCLUSIVE_KINDS = ("winner", "h1_winner")  # a result with exactly one outcome: always shown as "yes" on the outcome itself
+
+
 def _points(x: float) -> int:
     return round(x * 100)
 
@@ -77,7 +80,7 @@ def rows_for_game(game: dict, comparison: dict, settings: Settings, now: datetim
     for o in prediction["outcomes"]:
         p = o["probability"]
         # A match result (the outcomes of a game are exclusive) always shows the outcome itself: "Torino wins 47%", never "Monza wins: no 78%". Any other market shows the side that is more probable.
-        side = "yes" if o.get("kind", "winner") == "winner" or p >= 0.5 else "no"
+        side = "yes" if o.get("kind", "winner") in EXCLUSIVE_KINDS or p >= 0.5 else "no"
         ours = p if side == "yes" else 1 - p
         low, high = (o["min"], o["max"]) if side == "yes" else (1 - o["max"], 1 - o["min"])
         comp = by_ticker.get(o["market_ticker"]) or {}

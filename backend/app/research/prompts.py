@@ -216,12 +216,18 @@ GROUP_HEADINGS = {
     "total": "Total goals, runs or points",
     "btts": "Both teams to score",
     "spread": "Margin of victory",
+    "h1_winner": "First half: winner",
+    "h1_total": "First half: total goals",
+    "h1_btts": "First half: both teams to score",
+    "h1_spread": "First half: margin of victory",
 }
 GROUP_RULE = (
     "- Some outcomes are separate yes or no questions about the same game (totals, both teams to score, margin of "
     "victory). Give each its own probability, and keep them consistent: a higher line is never more likely than a "
     "lower one, a team cannot win by more than 1.5 goals, runs or points more often than it wins, and both teams to score "
-    "is never more likely than more than 1.5 goals.\n"
+    "is never more likely than more than 1.5 goals. The first half markets are about the first 45 minutes plus stoppage time "
+    "only: the three first half outcomes (a team ahead at half time, or a tie) add up to 100%, first half goals are never "
+    "more likely than goals in the whole game at the same line, and start from your numbers for the whole game.\n"
 )
 
 FACTS_TAG = re.compile(r"<\s*/?\s*checked_facts[^>]*>?", re.I)
@@ -269,7 +275,8 @@ def forecaster_input(game, claims: list[dict], today: str) -> str:
     lines += [f"{i}. {_one_line(name)}" for i, name in enumerate(game.outcomes, 1)]
     number = len(game.outcomes)
     for group in game.groups:
-        lines.append(f"\n{GROUP_HEADINGS.get(group.kind, group.kind)} (each line is a separate yes or no question about this game):")
+        what = "exactly one of these happens, so the probabilities add up to 100%" if group.kind == "h1_winner" else "each line is a separate yes or no question about this game"
+        lines.append(f"\n{GROUP_HEADINGS.get(group.kind, group.kind)} ({what}):")
         for name in group.outcomes:
             number += 1
             lines.append(f"{number}. {_one_line(name)}")
