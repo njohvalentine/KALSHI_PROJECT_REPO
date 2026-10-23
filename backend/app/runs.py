@@ -126,29 +126,33 @@ def _kickoff(kalshi, event_ticker: str) -> str | None:
 
 
 class DailyLimitReached(Exception):
-    """RESEARCH_MAX_PER_DAY runs were already made in the last 24 hours. `opens_at` is when the next slot opens."""
+    """The limit was already reached in the last 24 hours: RESEARCH_MAX_PER_DAY researched games (`kind` "game") or RESEARCH_UPDATES_MAX_PER_DAY updates (`kind`
+    "update"). `opens_at` is when the next slot opens."""
 
-    def __init__(self, used: int, opens_at: datetime):
+    def __init__(self, used: int, opens_at: datetime, kind: str = "game"):
         super().__init__(f"{used} runs in the last 24 hours")
-        self.used, self.opens_at = used, opens_at
+        self.used, self.opens_at, self.kind = used, opens_at, kind
 
 
 LIMIT_LOCK = 7243001  # a fixed number for the database lock that makes "count, then insert" one step
 
 
-def _insert_run(engine, run_id: str, game: GameInfo, user_id: int | None, trigger: str = "manual", limit: int = 0) -> None:
+def _insert_run(engine, run_id: str, game: GameInfo, user_id: int | None, trigger: str = "manual", limit: int = 0, refresh_of: str | None = None, update_limit: int = 0) -> None:
     from sqlalchemy.orm import Session
 
     with Session(engine) as db:
-        if limit:
+        # A researched game and an update have separate limits: an update never uses a game slot and a game never uses an update slot.
+        cap, kind = (update_limit, "update") if refresh_of else (limit, "game")
+        if cap:
             # One caller at a time counts and inserts, so two presses at once cannot both take the last slot.
             # The lock is released when this transaction ends.
             db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": LIMIT_LOCK})
-            made = db.scalars(select(Run.created_at).where(Run.created_at >= datetime.now(UTC) - timedelta(hours=24)).order_by(Run.created_at)).all()
-            if len(made) >= limit:
-                # the slot opens when enough of the oldest runs are 24 hours old that fewer than `limit` remain
-                raise DailyLimitReached(len(made), made[len(made) - limit] + timedelta(hours=24))
-        db.add(Run(id=run_id, event_ticker=game.event_ticker, event_title=game.title, status="queued", created_by=user_id, trigger=trigger))
+            is_update = Run.refresh_of.is_not(None) if refresh_of else Run.refresh_of.is_(None)
+            made = db.scalars(select(Run.created_at).where(Run.created_at >= datetime.now(UTC) - timedelta(hours=24), is_update).order_by(Run.created_at)).all()
+            if len(made) >= cap:
+                # the slot opens when enough of the oldest runs are 24 hours old that fewer than `cap` remain
+                raise DailyLimitReached(len(made), made[len(made) - cap] + timedelta(hours=24), kind)
+        db.add(Run(id=run_id, event_ticker=game.event_ticker, event_title=game.title, status="queued", created_by=user_id, trigger=trigger, refresh_of=refresh_of))
         db.commit()
 
 

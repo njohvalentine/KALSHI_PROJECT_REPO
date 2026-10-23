@@ -70,6 +70,9 @@ def dashboard(request: Request, db: Annotated[DbSession, Depends(get_db)]):
     series = {e.ticker: (e.sport, e.league) for e in s.sports_series}
     score = score_records(request.app.state.engine, None, series, s.min_supported_claims)
     total, runs = db.execute(select(func.coalesce(func.sum(Run.cost_usd), 0), func.count()).where(Run.status == "done", Run.cost_usd.is_not(None))).one()
-    window = db.scalar(select(func.count()).select_from(Run).where(Run.created_at >= datetime.now(UTC) - timedelta(hours=24))) or 0
+    since = datetime.now(UTC) - timedelta(hours=24)
+    window = db.scalar(select(func.count()).select_from(Run).where(Run.created_at >= since, Run.refresh_of.is_(None))) or 0  # researched games: an update has its own count
+    updates = db.scalar(select(func.count()).select_from(Run).where(Run.created_at >= since, Run.refresh_of.is_not(None))) or 0
     return build(score, {"total_usd": float(total), "runs": runs, "last_24h": window, "limit": s.research_max_per_day,
+                         "updates_24h": updates, "updates_limit": s.research_updates_max_per_day,
                          "note": "Calculated by the app from the tokens used and the prices it stores; it is not the OpenAI bill."})

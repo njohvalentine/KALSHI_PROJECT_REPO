@@ -305,7 +305,7 @@ export type DashboardResponse = {
   bookmakers: { games: number; n: number; ours: number | null; baseline: number | null; market: number | null; book: number | null; pinnacle: number | null; pinnacle_n: number; too_few: boolean } | null;
   chosen_side: { bets: number; won: number; average_result: number | null; total_result: number | null };
   flagged: { bets: number; won: number; average_result: number | null; total_result: number | null; too_few: boolean };
-  spend: { total_usd: number; runs: number; last_24h: number; limit: number; note: string };
+  spend: { total_usd: number; runs: number; last_24h: number; limit: number; updates_24h: number; updates_limit: number; note: string };
 };
 
 export type ScreenResult = {

@@ -62,7 +62,7 @@ export default async function DashboardPage() {
           value={`${f.won} / ${f.bets}`}
           sub={f.bets === 0 ? "none yet" : `won · paper result ${centsPrecise(f.average_result)} per contract${f.too_few ? " (too few to read)" : ""}`}
         />
-        <Stat label="Research spend" value={`$${d.spend.total_usd.toFixed(2)}`} sub={`all time · ${d.spend.runs} runs · estimated${d.spend.limit ? ` · ${d.spend.last_24h} of ${d.spend.limit} games researched in the last 24 hours` : ""}`} />
+        <Stat label="Research spend" value={`$${d.spend.total_usd.toFixed(2)}`} sub={`all time · ${d.spend.runs} runs · estimated${d.spend.limit ? ` · ${d.spend.last_24h} of ${d.spend.limit} games researched in the last 24 hours` : ""}${d.spend.updates_limit ? ` · ${d.spend.updates_24h} of ${d.spend.updates_limit} lineup updates` : ""}`} />
       </div>
       <Suspense fallback={<p className="mb-4 text-sm text-muted-foreground">Reading today’s prices…</p>}>
         <RankingCard />
