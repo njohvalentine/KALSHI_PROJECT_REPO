@@ -14,6 +14,7 @@ from app.research.pipeline import run_later_stages
 from app.research.pricing import total_cost
 from app.research.schemas import GameInfo, Usage
 from app.research.sources import save_sources
+from app.research.update import carry_over, update_angles
 
 log = logging.getLogger("app.research")
 
@@ -49,13 +50,13 @@ def _update(engine, run_id: str, **fields) -> None:
         db.commit()
 
 
-def _save_research(engine, run_id: str, fields: dict, findings: list[dict], saved_at: datetime) -> None:
-    """Research is done: keep its result and the cited pages now, and leave the run running for the later stages."""
+def _save_research(engine, run_id: str, fields: dict, findings: list[dict], saved_at: datetime, skip_urls: set[str] | frozenset[str] = frozenset()) -> None:
+    """Research is done: keep its result and the cited pages now, and leave the run running for the later stages. `skip_urls`: pages already copied from an earlier run (an update)."""
     with DbSession(engine) as db:
         db.execute(update(Run).where(Run.id == run_id).values(
             plan=fields["plan"], result=fields["result"], stage="fetch", **{k: fields[k] for k in (
                 "input_tokens", "output_tokens", "search_calls", "cost_usd", "cost_note", "over_budget")}))
-        save_sources(db, run_id, findings, saved_at)  # commits
+        save_sources(db, run_id, findings, saved_at, skip_urls)  # commits
 
 
 def _finish(engine, run_id: str, fields: dict, finished_at: datetime, prediction: dict | None) -> None:
@@ -66,7 +67,7 @@ def _finish(engine, run_id: str, fields: dict, finished_at: datetime, prediction
 
 async def execute_run(
     *, engine, graph, settings: Settings, run_id: str, game: dict, judge=None, forecaster=None, kalshi=None,
-    fetch_options: dict | None = None, odds=None,
+    fetch_options: dict | None = None, odds=None, update_of: str | None = None,
 ) -> None:
     await asyncio.to_thread(_update, engine, run_id, status="running", started_at=datetime.now(UTC), stage="research")
     config = {
@@ -77,12 +78,20 @@ async def execute_run(
         "metadata": {"run_id": run_id, "event_ticker": game["event_ticker"]},
     }
     try:
-        state = await graph.ainvoke({"game": game}, config)
-        findings = state.get("findings", [])
+        # An update (a later look at lineups and late news) researches one fixed angle instead of planning, then carries the earlier checked evidence over.
+        fixed = [a.model_dump() for a in update_angles(game.get("sport"))] if update_of else None
+        state = await graph.ainvoke({"game": game, **({"fixed_angles": fixed} if fixed else {})}, config)
+        new_findings = state.get("findings", [])
+        carried: list[dict] = []
+        if update_of and new_findings:
+            carried = await asyncio.to_thread(carry_over, engine, update_of, run_id, len(new_findings), datetime.now(UTC))
+        findings = new_findings + carried
+        state = {**state, "findings": findings}
         fields = summarize(state, settings)
         prediction = None
         if findings:
-            await asyncio.to_thread(_save_research, engine, run_id, fields, findings, datetime.now(UTC))
+            skip = {s["url"] for f in carried for c in f["claims"] for s in c["sources"]}
+            await asyncio.to_thread(_save_research, engine, run_id, fields, new_findings, datetime.now(UTC), skip)
             async def set_stage(name: str) -> None:
                 await asyncio.to_thread(_update, engine, run_id, stage=name)
 

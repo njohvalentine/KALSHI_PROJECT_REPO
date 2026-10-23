@@ -25,6 +25,7 @@ class ResearchState(TypedDict, total=False):
     angles: list[dict]
     cut_angles: int  # how many planned angles were dropped to stay within the cap
     dropped_odds_angles: int  # how many angles about betting odds were dropped (nothing uses their result)
+    fixed_angles: list[dict]  # an update run: these angles are researched and the planner is not called
     findings: Annotated[list[dict], operator.add]  # one entry per researcher that produced findings
     usages: Annotated[list[dict], operator.add]
     errors: Annotated[list[dict], operator.add]
@@ -32,6 +33,8 @@ class ResearchState(TypedDict, total=False):
 
 def build_graph(model: ResearchModel, settings: Settings, checkpointer=None):
     async def plan(state: ResearchState) -> dict:
+        if state.get("fixed_angles"):  # a lineup update: the angle is fixed, no planner call, no planner cost
+            return {"angles": state["fixed_angles"][: settings.max_researchers], "cut_angles": 0, "dropped_odds_angles": 0, "usages": []}
         game = GameInfo(**state["game"])
         plan_, usage = await model.plan(game, settings.max_researchers)
         # Nothing uses research about betting odds (the checker never lets it go forward, the forecasters ignore odds, the app reads the

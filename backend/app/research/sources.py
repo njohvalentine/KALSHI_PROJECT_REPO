@@ -39,8 +39,9 @@ def source_rows(run_id: str, findings: list[dict], retrieved_at: datetime) -> li
     return rows
 
 
-def save_sources(db: DbSession, run_id: str, findings: list[dict], retrieved_at: datetime) -> int:
-    rows = source_rows(run_id, findings, retrieved_at)
+def save_sources(db: DbSession, run_id: str, findings: list[dict], retrieved_at: datetime, skip_urls: set[str] | frozenset[str] = frozenset()) -> int:
+    """`skip_urls`: pages the run already has (carried over from an earlier run), so a page cited again is not saved twice."""
+    rows = [r for r in source_rows(run_id, findings, retrieved_at) if r.url not in skip_urls]
     db.add_all(rows)
     db.commit()
     return len(rows)

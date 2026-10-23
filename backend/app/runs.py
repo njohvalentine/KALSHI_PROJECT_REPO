@@ -39,6 +39,19 @@ def _flagged(run: Run) -> int | None:
     return None if outcomes is None else sum(1 for o in outcomes if o.get("meaningful"))
 
 
+def update_state(db: DbSession, run: Run, now: datetime) -> dict:
+    """Whether this run can be updated with the confirmed lineups and late news, and if not, why: it has a forecast, it is the newest run of its game, the game has not
+    started, and nothing is running for the game. `hours_to_start` is None when the start time is not known."""
+    if run.status != "done" or "outcomes" not in (run.prediction or {}):
+        return {"allowed": False, "reason": "This run has no forecast to update.", "hours_to_start": None}
+    if db.scalar(select(Run.id).where(Run.event_ticker == run.event_ticker, Run.created_at > run.created_at, Run.status.in_(("queued", "running", "done"))).limit(1)):
+        return {"allowed": False, "reason": "A newer run of this game exists: update that one.", "hours_to_start": None}
+    start = db.scalar(select(OutcomeRecord.game_start).where(OutcomeRecord.run_id == run.id, OutcomeRecord.game_start.is_not(None)).limit(1))
+    if start is not None and start <= now:
+        return {"allowed": False, "reason": "The game has started: nothing to update.", "hours_to_start": None}
+    return {"allowed": True, "reason": None, "hours_to_start": None if start is None else round((start - now).total_seconds() / 3600, 1)}
+
+
 def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None, measured_min_games: int | None = None) -> dict:
     def iso(value: datetime | None):
         return value.isoformat() if value else None
@@ -62,6 +75,7 @@ def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None, measur
         "sourced_claims": sum(1 for f in findings for c in f["claims"] if c["kind"] == "sourced"),
         "stage": run.stage,
         "flagged_outcomes": _flagged(run),
+        "refresh_of": run.refresh_of,
     }
     if full:
         summary["plan"] = run.plan
@@ -94,6 +108,11 @@ def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None, measur
             summary["book_note"] = None if any(r.book_probability is not None for r in records) else next((r.book_note for r in records if r.book_note), None)
             sport = db.scalar(select(OutcomeRecord.sport).where(OutcomeRecord.run_id == run.id, OutcomeRecord.sport.is_not(None)).limit(1))
             summary["sport"] = sport
+            summary["update"] = update_state(db, run, datetime.now(UTC))
+            old = db.get(Run, run.refresh_of) if run.refresh_of else None
+            # for an update: the forecast it replaces, outcome by outcome, to show before and after
+            summary["previous"] = None if old is None or "outcomes" not in (old.prediction or {}) else {
+                "run_id": old.id, "finished_at": iso(old.finished_at), "probabilities": {o["market_ticker"]: o["probability"] for o in old.prediction["outcomes"]}}
             # False when the sport has fewer scored games than MEASURED_MIN_GAMES (the flag has not been tested there); None when unknown
             summary["measured"] = None if not sport or measured_min_games is None else scored_games_in(db).get(sport, 0) >= measured_min_games
             summary["forecasts"] = [
@@ -163,13 +182,13 @@ def _active_run_id(engine, event_ticker: str) -> str | None:
         return db.scalar(select(Run.id).where(Run.event_ticker == event_ticker, Run.status.in_(("queued", "running"))))
 
 
-async def _run_and_release(request_app, run_id: str, game: GameInfo) -> None:
+async def _run_and_release(request_app, run_id: str, game: GameInfo, update_of: str | None = None) -> None:
     state = request_app.state
     try:
         await execute_run(
             engine=state.engine, graph=state.research_graph, settings=state.settings,
             run_id=run_id, game=asdict(game), judge=state.judge, forecaster=state.forecaster, kalshi=state.kalshi,
-            fetch_options=state.fetch_options, odds=state.odds,
+            fetch_options=state.fetch_options, odds=state.odds, update_of=update_of,
         )
     finally:
         state.active_runs -= 1
@@ -191,6 +210,29 @@ def _recent_run(engine, event_ticker: str, hours: float) -> tuple[float, Decimal
         run = db.scalar(select(Run).where(Run.event_ticker == event_ticker, Run.status == "done", Run.finished_at >= datetime.now(UTC) - timedelta(hours=hours))
                         .order_by(Run.finished_at.desc()).limit(1))
         return None if run is None else ((datetime.now(UTC) - run.finished_at).total_seconds() / 3600, run.cost_usd)
+
+
+async def _prepare_game(state, event_ticker: str) -> GameInfo:
+    """The server's copy of a game from Kalshi: the event, the real start time, the sport and league, and the companion markets. Raises RunStartError."""
+    try:
+        raw = await run_in_threadpool(state.kalshi.get_event, event_ticker)
+    except KalshiNotFound as exc:
+        raise RunStartError(404, "Game not found") from exc
+    except KalshiError as exc:
+        raise RunStartError(502, f"Kalshi request failed: {exc}") from exc
+    try:
+        starts_at = await run_in_threadpool(_kickoff, state.kalshi, event_ticker)
+        game = GameInfo.from_kalshi_event(raw, starts_at=starts_at)  # the server's copy of the game
+        series = (raw.get("event") or {}).get("series_ticker")
+        entry = await run_in_threadpool(state.games.entry_of, series)
+        sport = entry.sport if entry else None
+        if not game.exclusive or len(game.outcomes) not in (2, 3):
+            raise RunStartError(422, "This game has an unusual market structure (not two or three exclusive outcomes), so it cannot be researched yet.")
+        game = GameInfo(**(game.__dict__ | {"sport": sport, "league": entry.league if entry else None}))
+        game = await run_in_threadpool(attach_companions, game, raw, sport, state.kalshi)  # total, btts, spread if offered
+    except ValueError as exc:
+        raise RunStartError(502, "Kalshi returned game data we cannot use") from exc
+    return game
 
 
 async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: str = "manual", confirm_repeat: bool = False) -> dict:
@@ -218,24 +260,7 @@ async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: s
                     "today's limit. Prices may have moved, which you can see on the Opportunities page without a new run.",
                     extra={"code": "recently_researched", "hours_ago": round(hours, 1), "cost_usd": None if cost is None else float(cost)},
                 )
-        try:
-            raw = await run_in_threadpool(state.kalshi.get_event, event_ticker)
-        except KalshiNotFound as exc:
-            raise RunStartError(404, "Game not found") from exc
-        except KalshiError as exc:
-            raise RunStartError(502, f"Kalshi request failed: {exc}") from exc
-        try:
-            starts_at = await run_in_threadpool(_kickoff, state.kalshi, event_ticker)
-            game = GameInfo.from_kalshi_event(raw, starts_at=starts_at)  # the server's copy of the game
-            series = (raw.get("event") or {}).get("series_ticker")
-            entry = await run_in_threadpool(state.games.entry_of, series)
-            sport = entry.sport if entry else None
-            if not game.exclusive or len(game.outcomes) not in (2, 3):
-                raise RunStartError(422, "This game has an unusual market structure (not two or three exclusive outcomes), so it cannot be researched yet.")
-            game = GameInfo(**(game.__dict__ | {"sport": sport, "league": entry.league if entry else None}))
-            game = await run_in_threadpool(attach_companions, game, raw, sport, state.kalshi)  # total, btts, spread if offered
-        except ValueError as exc:
-            raise RunStartError(502, "Kalshi returned game data we cannot use") from exc
+        game = await _prepare_game(state, event_ticker)
         run_id = uuid.uuid4().hex
         try:
             await run_in_threadpool(_insert_run, state.engine, run_id, game, user_id, trigger, state.settings.research_max_per_day)
@@ -258,6 +283,67 @@ async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: s
     finally:
         if not task_owns_slot:
             state.active_runs -= 1
+
+
+async def start_update(app, run_id: str, user_id: int | None) -> dict:
+    """Starts a lineup update of the run `run_id` in the background and returns {"id", "status"}. One researcher on a fixed angle; the earlier checked evidence is carried over.
+    Raises RunStartError."""
+    state = app.state
+    if state.research_graph is None:
+        raise RunStartError(503, "Research is not configured. Set OPENAI_API_KEY and restart the backend.")
+    if state.active_runs >= state.settings.max_concurrent_runs:
+        raise RunStartError(429, "Too many runs in progress. Wait for one to finish.", headers={"Retry-After": "30"})
+    state.active_runs += 1  # reserve the slot before any await, as a normal run does
+    task_owns_slot = False
+    try:
+        def check():
+            from sqlalchemy.orm import Session
+
+            with Session(state.engine) as db:
+                run = db.get(Run, run_id)
+                if run is None:
+                    raise RunStartError(404, "Run not found")
+                answer = update_state(db, run, datetime.now(UTC))
+                if not answer["allowed"]:
+                    raise RunStartError(409, answer["reason"], extra={"code": "not_updatable"})
+                return run.event_ticker
+
+        event_ticker = await run_in_threadpool(check)
+        game = await _prepare_game(state, event_ticker)
+        if game.starts_at and datetime.fromisoformat(game.starts_at.replace("Z", "+00:00")) <= datetime.now(UTC):
+            raise RunStartError(409, "The game has started: nothing to update.", extra={"code": "not_updatable"})
+        new_id = uuid.uuid4().hex
+        try:
+            await run_in_threadpool(_insert_run, state.engine, new_id, game, user_id, "manual", 0, run_id, state.settings.research_updates_max_per_day)
+        except DailyLimitReached as limit:
+            wait = max(int((limit.opens_at - datetime.now(UTC)).total_seconds()), 1)
+            raise RunStartError(
+                429,
+                f"The daily update limit is reached: {limit.used} updates in the last 24 hours. The next slot opens at {limit.opens_at:%H:%M} (UTC), "
+                "when the oldest of them is 24 hours old. The limit is set by RESEARCH_UPDATES_MAX_PER_DAY.",
+                headers={"Retry-After": str(wait)},
+            ) from None
+        except IntegrityError:
+            existing = await run_in_threadpool(_active_run_id, state.engine, game.event_ticker)
+            raise RunStartError(409, "A run for this game is already in progress", run_id=existing) from None
+        task = asyncio.create_task(_run_and_release(app, new_id, game, update_of=run_id))
+        task_owns_slot = True
+        state.tasks.add(task)
+        task.add_done_callback(state.tasks.discard)
+        return {"id": new_id, "status": "queued"}
+    finally:
+        if not task_owns_slot:
+            state.active_runs -= 1
+
+
+@router.post("/{run_id}/update", status_code=202, dependencies=[Depends(require_requested_with)])
+async def update_run(run_id: str, request: Request, user: Annotated[User, Depends(require_user)]):
+    try:
+        return await start_update(request.app, run_id, user.id)
+    except RunStartError as exc:
+        if exc.status_code == 409:
+            return JSONResponse(status_code=409, content={"detail": exc.detail, "run_id": exc.run_id, **(exc.extra or {})})
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail, headers=exc.headers) from exc
 
 
 @router.post("", status_code=202, dependencies=[Depends(require_requested_with)])
