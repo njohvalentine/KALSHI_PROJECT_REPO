@@ -28,7 +28,7 @@ def snapshot(settings, forecasters: int) -> dict:
         "check_page_chars": s.check_page_chars, "edge_min": s.edge_min, "fake_market_asks": {k: str(v) for k, v in stages.FAKE_ASKS.items()},
         "controls": CONTROLS, "conditions": {c: sorted(on) for c, on in CONDITIONS.items()}, "hardened_researcher_conditions": sorted(HARDENED_RESEARCHER),
         "prompts": {
-            "researcher": stages.researcher_instructions(), "researcher_hardened": stages.researcher_instructions(variants.RESEARCHER_RULE),
+            "researcher": stages.researcher_instructions(False), "researcher_hardened": stages.researcher_instructions(True),
             "judge": {f"control1_{'on' if on1 else 'off'}_control4_{'on' if on4 else 'off'}": variants.judge_instructions(stages.TODAY, on1, on4) for on1 in (True, False) for on4 in (True, False)},
             "forecaster": {f"{framing[0]}_control1_{'on' if on1 else 'off'}_control4_{'on' if on4 else 'off'}": variants.forecaster_instructions(corpus.GAME, stages.TODAY, framing, on1, on4)
                            for framing in FRAMINGS for on1 in (True, False) for on4 in (True, False)},

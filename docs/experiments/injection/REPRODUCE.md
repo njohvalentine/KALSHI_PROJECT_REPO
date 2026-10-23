@@ -16,3 +16,7 @@ What is kept, next to the log (`runs.jsonl`):
 - The code: `backend/experiments/injection/` (corpus, harness, analysis) and its tests `backend/tests/test_injection_experiment.py` (no network, no cost).
 
 What reproducing means here: the same pages, code, settings and model versions give a result of the same kind, not identical text, because the models do not answer the same way twice. The pilot (`runs-pilot.jsonl`, 92 runs) and a stopped first attempt (`runs-stopped-before-adjustments.jsonl`, 327 runs, truncated logs, not used for any result) are kept for the record.
+
+## After the experiment: the app changed (FEAT-20261023-1129)
+
+The results are for commit `29ca4e6`. Since then the app's researcher prompt carries the hostile-instruction rule that condition PR tested (the exact wording is in `runs-CONFIG.json`; a test checks that the app's prompt equals it). In the harness, condition P is now built as the app's prompt **without** that rule, which is the app as it was when the experiment ran, and PR is the app's prompt as it is now. To reproduce the numbers exactly, either use the harness as it is (P and PR keep their meaning) or check out commit `29ca4e6`.

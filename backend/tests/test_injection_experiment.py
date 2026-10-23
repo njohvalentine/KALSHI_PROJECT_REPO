@@ -11,7 +11,7 @@ import pytest
 from app.config import load_settings
 from app.research.forecast import ForecastAnswer, OutcomeProbability
 from app.research.check import ClaimVerdict, Verdicts
-from app.research.prompts import CHECKER_INSTRUCTIONS, FORECASTER_INSTRUCTIONS, FRAMINGS, RESEARCHER_INSTRUCTIONS, checker_input, forecaster_input
+from app.research.prompts import CHECKER_INSTRUCTIONS, FORECASTER_INSTRUCTIONS, FRAMINGS, HOSTILE_INSTRUCTION_RULE, RESEARCHER_INSTRUCTIONS, checker_input, forecaster_input
 from experiments.injection import analysis, canary, corpus, runner, stages, variants
 from experiments.injection.conditions import CONDITIONS, CONTROLS, HARDENED_RESEARCHER
 
@@ -62,17 +62,22 @@ def test_the_conditions_are_baseline_protected_one_control_off_each_and_protecte
     assert CONDITIONS["PR"] == CONDITIONS["P"] and HARDENED_RESEARCHER == {"PR"}
 
 
-def test_the_researcher_rule_is_added_in_pr_only_and_everything_else_in_the_prompt_is_the_apps():
-    base = stages.researcher_instructions()
-    assert variants.RESEARCHER_RULE not in base and base.startswith(RESEARCHER_INSTRUCTIONS.format(today=stages.TODAY).rstrip("\n"))
-    hardened = stages.researcher_instructions(variants.RESEARCHER_RULE)
-    assert variants.RESEARCHER_RULE in hardened and hardened.replace(variants.RESEARCHER_RULE, "") == base
+def test_the_researcher_rule_is_in_the_app_and_the_experiments_p_is_the_app_without_it():
+    plain, hardened = stages.researcher_instructions(False), stages.researcher_instructions(True)
+    assert HOSTILE_INSTRUCTION_RULE not in plain and HOSTILE_INSTRUCTION_RULE in hardened and hardened.replace("\n" + HOSTILE_INSTRUCTION_RULE, "") == plain
+    assert HOSTILE_INSTRUCTION_RULE in RESEARCHER_INSTRUCTIONS.format(today=stages.TODAY)  # the app itself has it now
     seen = {}
     for cond in ("P", "PR"):
         client = FakeClient({"research": [response(text="- x. [http://news.test/a]")]})
         run(stages.research(ctx(cond, client, pages=corpus.site())))
-        seen[cond] = variants.RESEARCHER_RULE.strip() in client.calls[0][1]["instructions"]
+        seen[cond] = HOSTILE_INSTRUCTION_RULE in client.calls[0][1]["instructions"]
     assert seen == {"P": False, "PR": True}
+
+
+def test_the_app_prompt_is_the_wording_the_experiment_tested():
+    """The saved settings of the finished run hold the exact prompt of its PR condition; the app's wording must be that."""
+    saved = json.loads((pathlib.Path(__file__).resolve().parents[2] / "docs/experiments/injection/runs-CONFIG.json").read_text())["prompts"]["researcher_hardened"]
+    assert HOSTILE_INSTRUCTION_RULE in saved and saved == stages.researcher_instructions(True)
 
 
 def test_the_hardened_condition_is_run_end_to_end_only():

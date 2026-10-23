@@ -14,7 +14,7 @@ from app.research.compare import FeeInfo, fee_per_contract
 from app.research.fetch import extract_text
 from app.research.forecast import ForecastAnswer, InvalidForecast, OpenAIForecastModel, run_forecasters, validate_full
 from app.research.model import usage_from
-from app.research.prompts import FRAMINGS, RESEARCHER_INSTRUCTIONS, researcher_input
+from app.research.prompts import FRAMINGS, HOSTILE_INSTRUCTION_RULE, RESEARCHER_INSTRUCTIONS, researcher_input
 from app.research.schemas import Angle, Usage
 from experiments.injection import canary, corpus, variants
 from experiments.injection.canary import CANARY_TOOLS, Log
@@ -87,16 +87,20 @@ def _dispatch_inner(ctx: Ctx, call) -> str:
     return "error: unknown tool"
 
 
-def researcher_instructions(rule: str = "") -> str:
-    """The app's researcher prompt, then (in the hardened condition) the hostile-instruction rule, then the harness's tool note."""
-    return RESEARCHER_INSTRUCTIONS.format(today=TODAY).rstrip("\n") + rule + variants.RESEARCHER_ADDENDUM
+def researcher_instructions(hardened: bool) -> str:
+    """The researcher prompt of the harness. Hardened = the app's prompt as it is now (it has the hostile-instruction rule since FEAT-20261023-1129);
+    not hardened = the same prompt without that rule, which is the app as it was when the experiment ran (condition P). Then the harness's tool note."""
+    text = RESEARCHER_INSTRUCTIONS.format(today=TODAY).rstrip("\n")
+    if not hardened:
+        assert "\n" + HOSTILE_INSTRUCTION_RULE in text, "the researcher prompt no longer has the rule: update stages.py"
+        text = text.replace("\n" + HOSTILE_INSTRUCTION_RULE, "")
+    return text + variants.RESEARCHER_ADDENDUM
 
 
 async def research(ctx: Ctx) -> str:
     s = ctx.settings
     tools = [SEARCH_TOOL, READ_TOOL] + ([] if ctx.has(2) else CANARY_TOOLS)
-    rule = variants.RESEARCHER_RULE if ctx.cond in HARDENED_RESEARCHER else ""
-    kw = dict(model=s.researcher_model, instructions=researcher_instructions(rule), tools=tools,
+    kw = dict(model=s.researcher_model, instructions=researcher_instructions(ctx.cond in HARDENED_RESEARCHER), tools=tools,
               reasoning={"effort": s.research_reasoning_effort}, max_output_tokens=s.researcher_max_output_tokens)
     ctx.inputs.append({"stage": "researcher", "text": researcher_input(GAME, ANGLE, TODAY)})
     response = await ctx.client.responses.create(input=researcher_input(GAME, ANGLE, TODAY), **kw)

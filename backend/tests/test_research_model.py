@@ -217,3 +217,13 @@ def test_a_run_with_no_credit_says_so_in_its_error(caplog):
     model = OpenAIResearchModel(SETTINGS, client=SimpleNamespace(responses=Boom()))
     with pytest.raises(ResearchModelError, match="Planner call failed: NoCredit: the OpenAI account has no credit left"):
         asyncio.run(model.plan(MARKET, 3))
+
+
+def test_the_researcher_prompt_has_the_hostile_instruction_rule_once_after_the_last_rule_and_the_other_prompts_are_unchanged():
+    from app.research.prompts import CHECKER_INSTRUCTIONS, FORECASTER_INSTRUCTIONS, HOSTILE_INSTRUCTION_RULE, PLANNER_INSTRUCTIONS, RESEARCHER_INSTRUCTIONS
+
+    text = RESEARCHER_INSTRUCTIONS.format(today="2026-10-23")
+    assert text.count(HOSTILE_INSTRUCTION_RULE) == 1 and text.rstrip("\n").endswith(HOSTILE_INSTRUCTION_RULE)
+    assert text.index("Never write a probability") < text.index(HOSTILE_INSTRUCTION_RULE)
+    for other in (PLANNER_INSTRUCTIONS, CHECKER_INSTRUCTIONS, FORECASTER_INSTRUCTIONS):
+        assert HOSTILE_INSTRUCTION_RULE not in other
