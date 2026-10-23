@@ -319,6 +319,10 @@ The full report, with all numbers and caveats, is `docs/ACCURACY-REPORT-2026-10-
 
 ---
 
+### Lineup update
+
+A second, cheaper look at a game close to its start: one researcher asks for the confirmed lineups and late team news, the earlier checked facts are kept (labelled "Earlier research"), and the forecasters make a new forecast. It has its own daily limit. Whether it helps is measured, not assumed (`docs/RUNBOOK.md`, 7d).
+
 ### Source tier (trust label)
 
 The kind of website that supports a fact: **official** (the league, tour, tournament or club itself), **news** (an independent news outlet) or **other** (anything else, and every site we have not reviewed). The forecasters see it on each fact and weigh "other" less; a person sees it on the result page. It is a label and never a reason to drop a fact. It says who runs the site, not whether the page is right (`docs/RUNBOOK.md`, 7b).
