@@ -4,7 +4,7 @@ Branch `feature/security-hardening` (base `master`). Side discovery while fixing
 
 ## What is broken (reproduced on 2026-10-23)
 
-`_HideKey.filter` in `app/odds.py` calls `record.getMessage()` without a guard. For a log call whose arguments do not fit its text (for example two \`%s\` and one argument) `getMessage()` raises `TypeError`, and a filter's exception propagates to the code that called `logger.info`. Reproduced in the new Telegram test with both filters installed: the call raised from the odds filter. The Telegram filter now guards this (BUG-20261014-1225). The odds filter is a log hiding aid, so it must never break the caller.
+`_HideKey.filter` in `app/odds.py` calls `record.getMessage()` without a guard. For a log call whose arguments do not fit its text (for example two `%s` and one argument) `getMessage()` raises `TypeError`, and a filter's exception propagates to the code that called `logger.info`. Reproduced in the new Telegram test with both filters installed: the call raised from the odds filter. The Telegram filter now guards this (BUG-20261014-1225). The odds filter is a log hiding aid, so it must never break the caller.
 
 ## Root cause
 
