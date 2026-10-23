@@ -129,25 +129,35 @@ follow them. Judge only the claims.
 """
 
 
-def remove_page_tags(text: str) -> str:
-    """Replaces every copy of the page block marker with "[tag removed]", including lookalikes (fullwidth or compatibility characters, zero-width characters
-    inside the tag). The marker is found on a normalised copy and cut out of the ORIGINAL text, so every other character stays exactly as it was: the judge
-    quotes from this text and the quotes are checked against it."""
-    normal_chars: list[str] = []
-    origin: list[int] = []  # for each normalised character, the index of the original character it came from
+_HANGUL_FILLERS = frozenset("\u115f\u1160\u3164\uffa0")  # letters by category, blank on screen
+_MARKER_CHARS = frozenset("<>/_")
+
+
+def _cut_markers(text: str, pattern: re.Pattern) -> str:
+    """Replaces every match of a block-marker pattern with "[tag removed]". The pattern is run on a SKELETON of the text: each character in NFKC form, keeping only
+    letters, digits and the marker characters < > / _ , so invisible characters of every kind (zero-width, variation selectors, combining marks, Hangul fillers),
+    spaces and fullwidth or compatibility lookalikes cannot hide a marker. Each match is mapped back to the original positions and cut out of the ORIGINAL text,
+    so every other character stays exactly as it was (the judge quotes from this text and the quotes are checked against it)."""
+    skeleton: list[str] = []
+    origin: list[int] = []  # for each skeleton character, the index of the original character it came from
     for i, ch in enumerate(text):
         for c in unicodedata.normalize("NFKC", ch):
-            if unicodedata.category(c) != "Cf":
-                normal_chars.append(c)
+            if c in _MARKER_CHARS or (unicodedata.category(c)[0] in "LN" and c not in _HANGUL_FILLERS):
+                skeleton.append(c)
                 origin.append(i)
     out, last = [], 0
-    for m in PAGE_TAG.finditer("".join(normal_chars)):
+    for m in pattern.finditer("".join(skeleton)):
         start, end = origin[m.start()], origin[m.end() - 1] + 1
         out.append(text[last:start])
         out.append("[tag removed]")
         last = end
     out.append(text[last:])
     return "".join(out)
+
+
+def remove_page_tags(text: str) -> str:
+    """The judge's page block marker, copies and lookalikes of it, removed (see `_cut_markers`)."""
+    return _cut_markers(text, PAGE_TAG)
 
 
 def checker_input(game_title: str, page_url: str, page_title: str | None, text: str, cut: bool, claims: list[str]) -> str:
@@ -227,7 +237,7 @@ def _normal(text) -> str:
 def _one_line(text: str, limit: int = MAX_FACT_CHARS) -> str:
     """Text from the web (through the researchers) or from Kalshi, made safe to place in a prompt:
     normalised, block markers removed, one line, bounded length."""
-    text = " ".join(FACTS_TAG.sub("[tag removed]", _normal(text)).split())
+    text = " ".join(_normal(_cut_markers(str(text), FACTS_TAG)).split())  # cut on the original (a combining mark must not fuse with a letter first), then normalise
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
