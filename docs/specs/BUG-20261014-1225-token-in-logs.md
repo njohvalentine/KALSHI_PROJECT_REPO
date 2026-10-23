@@ -1,6 +1,6 @@
 # Spec: the Telegram token reaches the log (BUG-20261014-1225)
 
-Branch `feature/sports-games-list` (base `master`). For approval; the fix is not written yet.
+Branch `feature/security-hardening` (base `master`). For approval; the fix is not written yet. Update 2026-10-23: Telegram alerts are now switched on in the user's `.env`, so the first alert writes the token to the log; a count of the current backend log found 0 such lines (no alert sent yet). After the fix the user should still rotate the bot token if any earlier log was shared.
 
 ## What is broken (reproduced)
 
