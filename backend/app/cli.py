@@ -176,6 +176,32 @@ def _source_hosts_command(args) -> int:
     return 0
 
 
+def _corroboration_command(args) -> int:
+    """Corroboration, phase 1: a read-only measurement on saved runs (it asks the judge about the saved pages and writes only a report file)."""
+    import asyncio
+    import json
+    from pathlib import Path
+
+    from app.config import SettingsError, load_settings
+    from app.research.check import OpenAIClaimJudge
+    from app.research.corroboration import run_test
+
+    try:
+        settings = load_settings(os.environ)
+    except SettingsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    engine = create_engine(settings.sqlalchemy_url)
+    report, rows, _ = asyncio.run(run_test(engine, settings, OpenAIClaimJudge(settings), args.runs, args.seed, log=lambda line: print(line, file=sys.stderr)))
+    if args.out:
+        Path(args.out).write_text(report)
+        Path(args.out).with_suffix(".jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        print(f"Report written to {args.out}")
+    else:
+        print(report)
+    return 0
+
+
 def _moment(text: str | None, name: str):
     from datetime import UTC, datetime
 
@@ -272,6 +298,10 @@ def main(argv: list[str] | None = None) -> int:
                           ("--edge-min", "EDGE_MIN"), ("--min-supported-claims", "MIN_SUPPORTED_CLAIMS"), ("--min-research-shift", "MIN_RESEARCH_SHIFT"),
                           ("--edge-plausible-max", "EDGE_PLAUSIBLE_MAX"), ("--min-ask-size", "MIN_ASK_SIZE")):
         rp.add_argument(flag, dest=setting, metavar=setting, help=f"Replay with this value of {setting} instead of the current setting")
+    ct = sub.add_parser("corroboration-test", help="Phase 1 of the corroboration item: how many supported facts could get a second independent website, on saved runs (read-only; the judge is asked about saved pages)")
+    ct.add_argument("--runs", type=int, default=30, help="How many saved runs (a seeded sample)")
+    ct.add_argument("--seed", type=int, default=20261023)
+    ct.add_argument("--out", help="Write the report here (and the raw rows next to it as .jsonl)")
     sub.add_parser("source-hosts", help="Hosts in saved runs that are not on the source trust lists yet (read-only)")
     pt = sub.add_parser("price-test", help="Free price-only test on Kalshi's own history: is the price an hour before a game exploitable after fees (read-only)")
     pt.add_argument("--sample", type=int, default=400, help="Games per series at most (every k-th game in order of settlement; the rule was fixed at 400)")
@@ -286,6 +316,8 @@ def main(argv: list[str] | None = None) -> int:
     lt.add_argument("--out", help="Write the report to this file instead of printing it")
     args = parser.parse_args(argv)
 
+    if args.command == "corroboration-test":
+        return _corroboration_command(args)
     if args.command == "source-hosts":
         return _source_hosts_command(args)
     if args.command == "late-test":

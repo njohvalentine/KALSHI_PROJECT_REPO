@@ -111,6 +111,20 @@ def host_of(url: str) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
+_SECOND_LEVELS = frozenset({"co", "com", "org", "net", "gov", "ac", "edu", "ne", "or", "go"})
+
+
+def registered_domain(host: str) -> str:
+    """The registrable part of a host: the last two labels, or three when the second-to-last is a common second level under a two-letter country code
+    (bbc.co.uk, news.com.au). A short built-in rule, not the full public suffix list: it can be wrong for rare suffixes."""
+    labels = [l for l in host.lower().split(".") if l]
+    if len(labels) <= 2:
+        return ".".join(labels)
+    if len(labels[-1]) == 2 and labels[-2] in _SECOND_LEVELS:
+        return ".".join(labels[-3:])
+    return ".".join(labels[-2:])
+
+
 def _matches(host: str, entries) -> bool:
     return any(host == e or host.endswith("." + e) for e in entries)
 
