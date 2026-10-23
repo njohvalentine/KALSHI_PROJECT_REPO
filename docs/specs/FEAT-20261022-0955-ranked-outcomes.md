@@ -37,3 +37,13 @@ Lateral: the same side, gap and fee arithmetic as `compare.py` (a test compares 
 ## Tests
 
 The side choice and the probability of that side; the gap equals the comparison's edge for the same side; both sort orders; the 95-cent filter; the confidence rule on a table of cases (stale, thin, wide range, high, medium) with its reasons; the risks; games that have started are left out; the endpoint needs a login; the validation function on a small known set of records. The full backend suite, the frontend lint and build, and a screenshot of the page in the notes.
+
+## Changes after the first version, approved by the user (2026-10-23)
+
+The first version ran on real data (three researched Champions-and-league games, screenshot `docs/design/screenshots-2026-10-23/ranking-first-version.png`) and showed two design faults, both reported before being changed:
+1. **The "more probable side" rule gave every outcome of a three-way match as "no"** ("Monza wins: no 78%"), and the real most probable result ("Torino wins 47%") never appeared. **Now a match result (the winner markets) always shows the outcome itself (the "yes" side);** any other market keeps the more probable side.
+2. **The 95-cent default hid nothing** (0 of 36 rows) and the top of the list was near-certain markets with no gap ("Over 5.5 goals: no, 94%"). **The default is now 90 cents** (7 of 36 rows were at 90 or more); the filter can still be switched off.
+3. **The Dashboard card shows the five most probable match results only** (winner markets), not every market.
+4. **The table is tighter:** evidence moved into the confidence cell and the risks into a fold, so the table fits a normal screen.
+Also measured: the first ranking load takes about 7 seconds (the Kalshi reads, as on Opportunities, about 4.7); a second load within a minute takes 0.01 seconds; the database work is 0.2 seconds in all, so it was not the cause.
+

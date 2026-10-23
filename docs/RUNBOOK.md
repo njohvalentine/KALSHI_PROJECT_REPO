@@ -97,6 +97,12 @@ docker compose exec backend uv run --no-sync python -m app.cli source-hosts
 
 Add the ones you trust to `OFFICIAL` or `NEWS` (a tested change; unknown hosts stay "other", the safe direction). Runs made before this change have no counts on their page. Forecasts made after it (2026-10-23) use a different input than earlier ones, and a replay of an old run now shows the labels to the forecasters too.
 
+## 7c. The Ranking page
+
+The Ranking page lists the outcomes of every researched game that has not started (no model call: today's prices are read, as on Opportunities, and cached for a minute; the first load takes a few seconds). A **match result** (who wins, the tie) shows the outcome itself; **any other market** (total goals, both teams to score, margin) shows the side Our Agent thinks more likely. Each row has our probability and the range of the three forecasts, the Kalshi price, the **gap after fees** beside it, the bookmakers' view for match results, a **confidence level** with its reasons, the evidence by kind of source, and the risks. Two orders: "Most probable" (default) and "Biggest gap". Outcomes priced at 90 cents or more are hidden by default (nothing to gain); a switch shows them. Filters for sport and kind of market. The Dashboard shows the five most probable match results.
+
+**Likely is not good value, and confidence is not a chance of being right.** The likeliest outcomes are the favourites, priced the same. The confidence level is a rule: *low* if the forecast is stale, has fewer than `MIN_SUPPORTED_CLAIMS` supported facts or the three forecasts differ by more than 10 points; *high* if they agree within 5 points, at least 8 facts are supported and at least half come from official or news sources; *medium* otherwise. On the scored records it separates our accuracy only a little (the page shows the numbers), and Kalshi's price scored better in both groups.
+
 ## 8. Scoring the forecasts
 
 Every run with a forecast saves a record (our probabilities, the market price at that moment, the plain-AI comparison). After the games finish:

@@ -76,7 +76,8 @@ def rows_for_game(game: dict, comparison: dict, settings: Settings, now: datetim
     rows = []
     for o in prediction["outcomes"]:
         p = o["probability"]
-        side = "yes" if p >= 0.5 else "no"
+        # A match result (the outcomes of a game are exclusive) always shows the outcome itself: "Torino wins 47%", never "Monza wins: no 78%". Any other market shows the side that is more probable.
+        side = "yes" if o.get("kind", "winner") == "winner" or p >= 0.5 else "no"
         ours = p if side == "yes" else 1 - p
         low, high = (o["min"], o["max"]) if side == "yes" else (1 - o["max"], 1 - o["min"])
         comp = by_ticker.get(o["market_ticker"]) or {}
@@ -161,7 +162,7 @@ def confidence_vs_accuracy(engine, settings: Settings) -> dict:
 
 
 @router.get("")
-async def ranking(request: Request, sort: Annotated[str, Query(pattern="^(probability|gap)$")] = "probability", hide_at: Annotated[float, Query(gt=0, le=1)] = 0.95,
+async def ranking(request: Request, sort: Annotated[str, Query(pattern="^(probability|gap)$")] = "probability", hide_at: Annotated[float, Query(gt=0, le=1)] = 0.90,
                   sport: Annotated[str | None, Query()] = None, kind: Annotated[str | None, Query()] = None, limit: Annotated[int | None, Query(ge=1, le=500)] = None):
     state = request.app.state
     entry = state.ranking_cache.get("all")

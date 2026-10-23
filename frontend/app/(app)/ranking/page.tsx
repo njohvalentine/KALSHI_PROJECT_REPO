@@ -31,21 +31,17 @@ function Choice({ to, active, children }: { to: string; active: boolean; childre
   );
 }
 
-function Evidence({ o }: { o: RankedOutcome }) {
+function evidenceLine(o: RankedOutcome): string {
   const t = o.source_tiers;
-  return (
-    <div className="text-sm">
-      {o.supported_claims} supported fact{o.supported_claims === 1 ? "" : "s"}
-      {t ? <div className="text-muted-foreground">{t.official} official, {t.news} news, {t.other} other</div> : null}
-    </div>
-  );
+  const facts = `${o.supported_claims} supported fact${o.supported_claims === 1 ? "" : "s"}`;
+  return t ? `${facts}: ${t.official} official, ${t.news} news, ${t.other} other` : facts;
 }
 
 function Row({ o }: { o: RankedOutcome }) {
   const stale = o.confidence.reasons.some((r) => r.includes("older than"));
   return (
     <TableRow className={cn("align-top", stale && "opacity-70")}>
-      <TableCell className="min-w-36 whitespace-normal">
+      <TableCell className="min-w-32 whitespace-normal">
         <Link href={`/prediction/${o.run_id}`} className="font-semibold text-primary underline-offset-4 hover:underline">
           {o.title}
         </Link>
@@ -56,7 +52,7 @@ function Row({ o }: { o: RankedOutcome }) {
       </TableCell>
       <TableCell className="min-w-40 whitespace-normal">
         <div className="font-medium">{o.market}</div>
-        <div className="text-sm text-muted-foreground">our pick: “{o.side}”</div>
+        <div className="text-sm text-muted-foreground">{o.kind === "winner" ? "match result" : `our pick: “${o.side}”`}</div>
         {o.flagged ? <Badge className="mt-1 bg-good-soft text-good">Worth a look</Badge> : null}
       </TableCell>
       <TableCell className="text-right tabular-nums">
@@ -75,11 +71,24 @@ function Row({ o }: { o: RankedOutcome }) {
       <TableCell className={cn("text-right text-lg tabular-nums", o.flagged ? "font-bold text-good" : "font-semibold")}>{gapCents(o.gap)}</TableCell>
       <TableCell className="min-w-44 max-w-64 whitespace-normal">
         <Confidence level={o.confidence.level} reasons={o.confidence.reasons} />
+        <div className="mt-1 text-sm">{evidenceLine(o)}</div>
       </TableCell>
-      <TableCell className="whitespace-normal">
-        <Evidence o={o} />
+      <TableCell className="min-w-28 max-w-56 whitespace-normal text-sm text-muted-foreground">
+        {o.risks.length ? (
+          <details>
+            <summary className="cursor-pointer text-primary">
+              {o.risks.length} risk{o.risks.length === 1 ? "" : "s"}
+            </summary>
+            <ul className="mt-1 list-disc pl-4">
+              {o.risks.map((r) => (
+                <li key={r}>{plainReason(r)}</li>
+              ))}
+            </ul>
+          </details>
+        ) : (
+          "none noted"
+        )}
       </TableCell>
-      <TableCell className="min-w-48 max-w-72 whitespace-normal text-sm text-muted-foreground">{o.risks.length ? o.risks.map(plainReason).join("; ") + "." : "–"}</TableCell>
     </TableRow>
   );
 }
@@ -87,7 +96,7 @@ function Row({ o }: { o: RankedOutcome }) {
 export default async function RankingPage({ searchParams }: { searchParams: Promise<Search> }) {
   const search = await searchParams;
   const sort = search.sort === "gap" ? "gap" : "probability";
-  const q = new URLSearchParams({ sort, hide_at: search.all ? "1" : "0.95" });
+  const q = new URLSearchParams({ sort, hide_at: search.all ? "1" : "0.90" });
   if (search.sport) q.set("sport", search.sport);
   if (search.kind) q.set("kind", search.kind);
   const res = await backendFetch(`/api/ranking?${q}`);
@@ -107,7 +116,7 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
   const lc = d.label_check;
   return (
     <>
-      <PageHeader title="Ranking" description="Every market of the researched games that have not started, on the side Our Agent thinks more likely, with the Kalshi price and the gap beside it." />
+      <PageHeader title="Ranking" description="Every market of the researched games that have not started, with the Kalshi price and the gap beside it. A match result shows the outcome itself; any other market shows the side Our Agent thinks more likely." />
       <Alert className="mb-4">
         <AlertTitle>How to read this</AlertTitle>
         <AlertDescription>
@@ -135,7 +144,7 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
           <Choice to={href(cur, { sort: "gap" })} active={sort === "gap"}>Biggest gap</Choice>
         </div>
         <div className="flex flex-wrap items-center gap-1">
-          <span className="mr-1 text-sm text-muted-foreground">Priced at 95¢ or more:</span>
+          <span className="mr-1 text-sm text-muted-foreground">Priced at 90¢ or more:</span>
           <Choice to={href(cur, { all: undefined })} active={!search.all}>Hidden</Choice>
           <Choice to={href(cur, { all: "1" })} active={!!search.all}>Shown</Choice>
         </div>
@@ -173,8 +182,7 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
                 <TableHead className="text-right">Our probability</TableHead>
                 <TableHead className="text-right">Kalshi</TableHead>
                 <TableHead className="text-right">Gap after fees</TableHead>
-                <TableHead>Confidence</TableHead>
-                <TableHead>Evidence</TableHead>
+                <TableHead>Confidence and evidence</TableHead>
                 <TableHead>Risks</TableHead>
               </TableRow>
             </TableHeader>

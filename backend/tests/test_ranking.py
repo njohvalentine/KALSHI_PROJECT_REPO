@@ -45,7 +45,7 @@ def migrated(fresh_db):
 
 
 @needs_db
-def test_one_row_per_market_on_its_more_probable_side_with_that_sides_price_and_gap(fresh_db):
+def test_a_match_result_shows_the_outcome_and_any_other_market_its_more_probable_side_with_that_sides_price_and_gap(fresh_db):
     engine = migrated(fresh_db)
     add_run(engine, "KX-1", "Home vs Away", GOOD, baseline=GOOD_BASELINE)
     result = rows_for(engine, kalshi_for_good())
@@ -53,9 +53,9 @@ def test_one_row_per_market_on_its_more_probable_side_with_that_sides_price_and_
     assert set(by) == {"KX-1-H", "KX-1-A", "KXTTOTAL-1-1"} and result["games_considered"] == 1
     home, away, over = by["KX-1-H"], by["KX-1-A"], by["KXTTOTAL-1-1"]
     assert (home["side"], home["our_probability"], home["price"]) == ("yes", 0.55, 0.42)
-    assert (away["side"], away["our_probability"], away["price"]) == ("no", 0.55, 0.43)  # 45 percent for the team, so the likelier bet is "no" at 1 minus the bid
+    assert (away["side"], away["our_probability"], away["price"]) == ("yes", 0.45, 0.59)  # a match result always shows the outcome itself, the "yes" side, even under 50 percent
     assert (over["side"], over["our_probability"], over["price"]) == ("yes", 0.7, 0.52)
-    assert home["range"] == {"low": 0.5, "high": 0.6} and away["range"] == {"low": 0.5, "high": 0.6}  # the mirrored range for the "no" side
+    assert home["range"] == {"low": 0.5, "high": 0.6} and away["range"] == {"low": 0.4, "high": 0.5}
     assert home["market"] == "Home wins" and home["title"] == "Home vs Away" and home["run_id"] == "run-KX-1"
 
 
@@ -79,7 +79,7 @@ def test_the_two_orders_and_the_filters(fresh_db):
     assert [r["market_ticker"] for r in by_probability][0] == "KXTTOTAL-1-1" and [r["our_probability"] for r in by_probability] == sorted((r["our_probability"] for r in rows), reverse=True)
     by_gap = arrange(rows, sort="gap", hide_at=1.0, sport=None, kind=None)
     assert [r["gap"] for r in by_gap] == sorted((r["gap"] for r in rows), reverse=True)
-    assert [r["market_ticker"] for r in arrange(rows, "probability", 0.5, None, None)] == ["KX-1-H", "KX-1-A"]  # priced at 50 cents or more is hidden (the total at 52)
+    assert [r["market_ticker"] for r in arrange(rows, "probability", 0.5, None, None)] == ["KX-1-H"]  # priced at 50 cents or more is hidden (the total at 52, the away win at 59)
     assert [r["market_ticker"] for r in arrange(rows, "probability", 1.0, None, "total")] == ["KXTTOTAL-1-1"]
     assert arrange(rows, "probability", 1.0, "Tennis", None) == [] and len(arrange(rows, "probability", 1.0, None, None)) == 3
     assert len(arrange(rows, "probability", 1.0, None, None, limit=2)) == 2
@@ -129,7 +129,8 @@ def test_the_endpoint_needs_login_arranges_the_rows_caches_and_carries_the_accur
         assert data["sports"] == [] and data["kinds"] == ["total", "winner"] and set(data["accuracy"]) == {"games", "ours", "kalshi"} and set(data["label_check"]) == {"low", "medium_or_high"}
         by_gap = client.get("/api/ranking?sort=gap").json()["rows"]
         assert [r["gap"] for r in by_gap] == sorted((r["gap"] for r in by_gap), reverse=True) and len(kalshi.calls) == calls  # another order is served from the cache
-        assert len(client.get("/api/ranking?limit=1").json()["rows"]) == 1 and len(client.get("/api/ranking?hide_at=0.5").json()["rows"]) == 2
+        assert len(client.get("/api/ranking?limit=1").json()["rows"]) == 1 and len(client.get("/api/ranking?hide_at=0.5").json()["rows"]) == 1
+        assert [r["kind"] for r in client.get("/api/ranking?kind=winner").json()["rows"]] == ["winner", "winner"]
         assert client.get("/api/ranking?sort=nonsense").status_code == 422 and client.get("/api/ranking?hide_at=0").status_code == 422
     finally:
         client.__exit__(None, None, None)
@@ -152,3 +153,20 @@ def test_the_label_check_reports_the_brier_score_of_our_probability_inside_each_
     out = confidence_vs_accuracy(engine, SETTINGS)
     assert out["medium_or_high"]["n"] == 2 and out["low"]["n"] == 2  # tiers are unknown in records, so nothing is "high": the strongest label here is "medium"
     assert out["medium_or_high"]["ours"] == pytest.approx(((0.9 - 1) ** 2 + (0.9 - 0) ** 2) / 2) and out["medium_or_high"]["kalshi"] == pytest.approx(((0.8 - 1) ** 2 + (0.8 - 0) ** 2) / 2)
+
+
+@needs_db
+def test_by_default_outcomes_priced_at_90_cents_or_more_are_hidden_and_hide_at_1_shows_them(make_client):
+    from tests.conftest import EMAIL, PASSWORD
+
+    client = make_client()
+    client.__enter__()
+    try:
+        client.post("/auth/login", json={"email": EMAIL, "password": PASSWORD}, headers={"X-Requested-With": "t"})
+        add_run(make_client.engine, "KX-1", "Home vs Away", GOOD, baseline=GOOD_BASELINE)
+        client.app.state.kalshi = FakeKalshi({"KX-1": event("KX-1", "KXTGAME", market("KX-1-H", "0.40", "0.42"), market("KX-1-A", "0.57", "0.59")),
+                                              "KXTTOTAL-1": event("KXTTOTAL-1", "KXTTOTAL", market("KXTTOTAL-1-1", "0.90", "0.92"))})
+        assert [r["market_ticker"] for r in client.get("/api/ranking").json()["rows"]] == ["KX-1-H", "KX-1-A"]  # the total at 92 cents is hidden by default
+        assert "KXTTOTAL-1-1" in [r["market_ticker"] for r in client.get("/api/ranking?hide_at=1").json()["rows"]]
+    finally:
+        client.__exit__(None, None, None)
