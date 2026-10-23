@@ -67,14 +67,44 @@ def test_an_unreachable_telegram_is_a_network_error_without_the_url():
     assert TOKEN not in str(caught.value) and caught.value.__cause__ is None and caught.value.__suppress_context__
 
 
-def test_the_token_is_hidden_from_the_http_libraries_log_lines(caplog):
+def test_the_token_is_hidden_in_the_log_lines_the_real_http_library_writes(caplog):
+    """The library logs the URL as an object (not a string), so this runs a real request through a mock transport."""
     hide_token_in_logs()
     hide_token_in_logs()  # twice is fine
+
+    async def go():
+        async with httpx2.AsyncClient(transport=httpx2.MockTransport(lambda r: httpx2.Response(200, json={"ok": True}))) as c:
+            await c.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": "1", "text": "x"})
+
+    with caplog.at_level(logging.INFO, logger="httpx2"):
+        asyncio.run(go())
+    assert "HTTP Request" in caplog.text and TOKEN not in caplog.text and "bot123456789" not in caplog.text and "bot<hidden>" in caplog.text
+
+
+def test_the_token_is_hidden_when_it_is_in_the_text_of_a_message_and_when_the_odds_filter_is_installed_too(caplog):
+    from app.odds import hide_key_in_logs
+
+    hide_token_in_logs()
+    hide_key_in_logs()
     logger = logging.getLogger("httpx2")
     with caplog.at_level(logging.INFO, logger="httpx2"):
-        logger.info('HTTP Request: %s %s "%s"', "POST", f"https://api.telegram.org/bot{TOKEN}/sendMessage", "HTTP/1.1 200 OK")
         logger.info(f"HTTP Request: POST https://api.telegram.org/bot{TOKEN}/getUpdates")
-    assert TOKEN not in caplog.text and "bot<hidden>" in caplog.text
+        logger.info('HTTP Request: %s %s "%s"', "POST", f"https://api.telegram.org/bot{TOKEN}/sendMessage", "HTTP/1.1 200 OK")
+    assert TOKEN not in caplog.text and caplog.text.count("bot<hidden>") == 2
+
+
+def test_sending_a_message_through_the_notifier_leaves_no_token_in_the_log(caplog):
+    hide_token_in_logs()
+    with caplog.at_level(logging.DEBUG):  # everything any logger writes during a real send
+        asyncio.run(notifier(lambda r: httpx2.Response(200, json={"ok": True, "result": {}})).send("Worth a look: A vs B."))
+    assert TOKEN not in caplog.text and TOKEN.split(":")[1] not in caplog.text
+
+
+def test_a_malformed_log_call_does_not_make_the_token_filter_raise_and_is_still_masked():
+    from app.telegram import _HideToken
+
+    record = logging.LogRecord("httpx2", logging.INFO, "f.py", 1, f"bot{TOKEN.split(':')[0]}:{TOKEN.split(':')[1]} %s %s", ("only one",), None)
+    assert _HideToken().filter(record) is True and TOKEN not in record.getMessage() and "bot<hidden>" in record.getMessage()
 
 
 def test_alerts_need_both_telegram_values_and_they_must_look_right():

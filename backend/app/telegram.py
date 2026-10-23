@@ -40,10 +40,13 @@ class TelegramNetworkError(TelegramError):
 
 class _HideToken(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg = TOKEN_IN_TEXT.sub("bot<hidden>", str(record.msg))
-        if record.args:
-            args = record.args if isinstance(record.args, tuple) else (record.args,)
-            record.args = tuple(TOKEN_IN_TEXT.sub("bot<hidden>", a) if isinstance(a, str) else a for a in args)
+        # The library passes the URL as an object, not a string, so the arguments cannot be masked one by one: the finished message is.
+        try:
+            message = record.getMessage()
+        except Exception:  # a malformed log call (arguments that do not fit the text) must not raise from inside the filter; mask what is there
+            message = str(record.msg)
+        record.msg = TOKEN_IN_TEXT.sub("bot<hidden>", message)
+        record.args = None
         return True
 
 
