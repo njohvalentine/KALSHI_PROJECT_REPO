@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { ChangesCard } from "@/components/changes-card";
 import { GroupTable } from "@/components/group-table";
 import { PageHeader } from "@/components/page-header";
 import { RankingCard } from "@/components/ranking-card";
@@ -66,6 +67,9 @@ export default async function DashboardPage() {
       </div>
       <Suspense fallback={<p className="mb-4 text-sm text-muted-foreground">Reading today’s prices…</p>}>
         <RankingCard />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ChangesCard />
       </Suspense>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border bg-card p-5" aria-labelledby="all-heading">

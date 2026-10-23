@@ -10,7 +10,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { backendFetch } from "@/lib/backend";
 import { ago, cents, gapCents, pct } from "@/lib/format";
-import { plainReason } from "@/lib/labels";
+import { ALERT_KIND, plainReason } from "@/lib/labels";
 import type { AlertsResponse, OpportunitiesResponse, Opportunity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -100,12 +100,6 @@ function Row({ o }: { o: Opportunity }) {
   );
 }
 
-const ALERT_KIND: Record<string, string> = {
-  run_flagged: "Worth a look",
-  market_moved: "Market moved",
-  no_longer_flagged: "No longer worth a look",
-  start_soon: "Starting soon",
-};
 const ALERT_STATUS: Record<string, string> = { recorded: "Recorded here", sent: "Sent", failed: "Could not be sent", held_back: "Held back" };
 
 async function Alerts() {
@@ -125,6 +119,9 @@ async function Alerts() {
         {monitor.auto_research_cap > 0
           ? ` Automatic research: ${monitor.auto_research_started_today} of ${monitor.auto_research_cap} games today.`
           : " Automatic research is off."}
+        {monitor.auto_update_cap > 0
+          ? ` Automatic lineup updates: ${monitor.auto_update_started_today} of ${monitor.auto_update_cap} today.`
+          : " Automatic lineup updates are off."}
       </p>
       {alerts.length === 0 ? (
         <p className="text-sm text-muted-foreground">No alerts yet.</p>

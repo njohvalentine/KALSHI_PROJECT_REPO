@@ -76,6 +76,17 @@ The watcher is off unless `MONITOR_ENABLED=true`. When on, it looks every `MONIT
 
 The Opportunities page then shows "Alerts are also sent to Telegram" and each alert in the history is marked Sent, or "Could not be sent" with the kind of error (`TelegramUnauthorized`: wrong token; `TelegramChatNotFound`: wrong chat id or Start not pressed; `TelegramBotBlocked`; `TelegramRateLimited`; `TelegramNetworkError`). The token is hidden from the logs and never shown on a page.
 
+### Alerts about a changed forecast and about lineups
+
+Two more alerts (FEAT-20261022-0958), both only when the watcher is on:
+
+- **Forecast changed:** a new run or lineup update of the same game moved an outcome by at least `ALERT_FORECAST_CHANGE_POINTS` (5.0) points. The text gives before and after and the verdict. A changed forecast does not mean the new one is right.
+- **Update due:** the game starts within `ALERT_UPDATE_DUE_MINUTES` (90) minutes and its forecast is more than 3 hours old, so lineups are probably out. The text tells you to press **Update with lineups** (about $0.20).
+
+`AUTO_UPDATE_MAX_PER_DAY` is **off** (0). Above 0, the watcher starts that many lineup updates per day by itself when "update due" fires, at most one per look, with its own count (updates are not counted as researched games). It spends money without a button press, so set it deliberately. To turn it on, add `AUTO_UPDATE_MAX_PER_DAY=3` to `.env` and run `docker compose up -d`.
+
+What the watcher cannot see: news. It sees prices, new forecasts and the clock. The Dashboard card "What changed" shows the latest alerts.
+
 ## 7. Looking at results
 
 - **Dashboard** (the page after sign-in): how the forecasts compare with the Kalshi price. Four cards (finished games scored, researched games worth a look today, flagged bets, research spend) and two bar charts (all games, and by sport; Brier score, lower is better). The line at the top is written by the app from the scores: "too few to say anything yet" below 30 finished games; "ahead of the Kalshi price" only when our score is at least 0.005 better than Kalshi's (a smaller gap counts as noise, and the line still says it is not proof); otherwise "No sign of an edge yet". Below the charts, two tables give the accuracy (ours, plain AI, Kalshi) by sport and by kind of market, with a plain "ahead by" or "behind by" against Kalshi and "too few games to read" under 5 games. The numbers come from the same code as `score-records`. The research spend is the app's own calculation from the tokens used, not the OpenAI bill; compare it with the OpenAI usage page now and then.

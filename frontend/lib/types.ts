@@ -230,6 +230,8 @@ export type AlertsResponse = {
     last_error: string | null;
     auto_research_cap: number;
     auto_research_started_today: number;
+    auto_update_cap: number;
+    auto_update_started_today: number;
   };
 };
 

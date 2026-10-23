@@ -104,3 +104,13 @@ export const CHECK_NAME: Record<string, string> = {
   enough_contracts: "Enough contracts are offered at that price",
   still_worth_a_look: "Still worth a look at today’s prices",
 };
+
+/** The alert kinds the watcher records, as the people reading them see them. */
+export const ALERT_KIND: Record<string, string> = {
+  run_flagged: "Worth a look",
+  market_moved: "Market moved",
+  no_longer_flagged: "No longer worth a look",
+  start_soon: "Starting soon",
+  forecast_changed: "Forecast changed",
+  update_due: "Update due",
+};
