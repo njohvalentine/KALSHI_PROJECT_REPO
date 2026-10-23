@@ -14,6 +14,7 @@ from app.alerts import router as alerts_router
 from app.screening import router as screening_router
 from app.dashboard import router as dashboard_router
 from app.monitor import Monitor
+from app.ranking import router as ranking_router
 from app.opportunities import router as opportunities_router
 from app.measured import scored_games_by_sport
 from app.odds import OddsClient, hide_key_in_logs
@@ -58,6 +59,8 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
         app.state.fetch_options = fetch_options or {}
         app.state.opportunity_cache = {}
         app.state.opportunity_lock = asyncio.Lock()
+        app.state.ranking_cache = {}
+        app.state.ranking_lock = asyncio.Lock()
         app.state.fee_cache = {}
         hide_token_in_logs()
         hide_key_in_logs()
@@ -94,6 +97,7 @@ def create_app(settings: Settings | None = None, research_model=None, judge=None
     app.include_router(screening_router)
     app.include_router(runs_router)
     app.include_router(opportunities_router)
+    app.include_router(ranking_router)
     app.include_router(alerts_router)
     app.include_router(orders_router)
     app.include_router(dashboard_router)
