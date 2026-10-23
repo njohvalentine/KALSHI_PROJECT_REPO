@@ -244,7 +244,7 @@ async def check_run(engine, run_id: str, judge: ClaimJudge, settings: Settings) 
     return summary
 
 
-def supported_claims(findings: list[dict], checks) -> list[dict]:
+def supported_claims(findings: list[dict], checks, final_urls: dict[str, str] | None = None) -> list[dict]:
     """The claims that go forward to the forecasters: those with at least one page that supports them, each with the best trust tier of the pages that
     support it (`source_tier`: official, news or other; a label, nothing is dropped for it). Findings about odds or market prices (see is_market_angle) never go forward.
 
@@ -260,5 +260,5 @@ def supported_claims(findings: list[dict], checks) -> list[dict]:
         for ci, claim in enumerate(finding.get("claims", [])):
             if claim.get("kind") == "sourced" and (fi, ci) in supporting:
                 out.append({"finding_index": fi, "claim_index": ci, "angle": finding.get("angle"),
-                            "text": claim["text"], "supported_by": supporting[(fi, ci)], "source_tier": best_tier(supporting[(fi, ci)])})
+                            "text": claim["text"], "supported_by": supporting[(fi, ci)], "source_tier": best_tier(supporting[(fi, ci)], final_urls)})
     return out

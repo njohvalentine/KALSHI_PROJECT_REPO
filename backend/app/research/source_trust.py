@@ -126,9 +126,18 @@ def tier_of(url: str) -> str:
     return "other"
 
 
-def best_tier(urls) -> str:
-    """The highest tier among the pages (official over news over other); "other" when there are none."""
-    return max((tier_of(u) for u in urls), key=_RANK.__getitem__, default="other")
+def page_tier(cited_url: str, final_url: str | None = None) -> str:
+    """The tier of a page: the lower of the tier of the address that was cited and of the address the fetcher really reached after redirects (`final_url`).
+    A cited address on a listed host that redirects to a stranger's page must not give the stranger's text the label; an unlisted address that lands on a
+    listed one is not promoted either. No final address recorded: the cited one."""
+    tiers = (tier_of(cited_url), tier_of(final_url) if final_url else tier_of(cited_url))
+    return min(tiers, key=_RANK.__getitem__)
+
+
+def best_tier(urls, final_urls: dict[str, str] | None = None) -> str:
+    """The highest tier among the pages (official over news over other); "other" when there are none. `final_urls` maps a cited address to the address reached."""
+    finals = final_urls or {}
+    return max((page_tier(u, finals.get(u)) for u in urls), key=_RANK.__getitem__, default="other")
 
 
 def unlisted_hosts(seen: dict[str, int]) -> list[tuple[str, int]]:

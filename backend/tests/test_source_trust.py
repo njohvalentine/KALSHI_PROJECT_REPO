@@ -14,7 +14,7 @@ from tests.conftest import alembic_config, needs_db
 from app.research.check import supported_claims
 from app.research.prompts import FORECASTER_INSTRUCTIONS, FRAMINGS, HOSTILE_INSTRUCTION_RULE, forecaster_input
 from app.research.schemas import GameInfo
-from app.research.source_trust import best_tier, host_of, tier_of, unlisted_hosts
+from app.research.source_trust import best_tier, host_of, page_tier, tier_of, unlisted_hosts
 
 GAME = GameInfo(event_ticker="KX-1", title="A vs B", outcomes=["A wins", "Tie", "B wins"], outcome_tickers=["a", "t", "b"], exclusive=True)
 
@@ -89,3 +89,49 @@ def test_the_source_hosts_command_lists_only_hosts_that_are_not_reviewed_yet(fre
     assert cli.main(["source-hosts"]) == 0
     out = capsys.readouterr().out
     assert "1 host(s)" in out and "2\tnew-club.example" in out and "uefa.com" not in out and "agentbets.ai" not in out
+
+
+@pytest.mark.parametrize("cited,final,tier", [
+    ("https://www.uefa.com/r?to=x", "https://evil.example/page", "other"),  # an official address that redirects to a stranger
+    ("https://www.uefa.com/a", "https://de.uefa.com/b", "official"),  # the same site, another subdomain
+    ("http://uefa.com/a", "https://www.uefa.com/a", "official"),  # http to https and www
+    ("https://x.example/go", "https://www.uefa.com/a", "other"),  # an unlisted address that lands on an official one stays other: the lower of the two
+    ("https://www.sportsnet.ca/a", "https://www.uefa.com/a", "news"),  # between two listed tiers: the lower
+    ("https://www.uefa.com/a", None, "official"), ("https://www.uefa.com/a", "", "official"),  # no redirect recorded: the cited address
+])
+def test_the_tier_of_a_page_is_the_lower_of_the_cited_and_the_final_address(cited, final, tier):
+    assert page_tier(cited, final) == tier
+
+
+def test_a_claim_supported_through_a_redirect_gets_the_tier_of_where_the_page_really_was():
+    findings = [{"angle": "Form", "kind": "evidence", "claims": [{"text": "c1", "kind": "sourced", "sources": []}, {"text": "c2", "kind": "sourced", "sources": []}]}]
+    checks = [SimpleNamespace(finding_index=0, claim_index=0, source_url="https://www.uefa.com/r?to=x", verdict="supported"),
+              SimpleNamespace(finding_index=0, claim_index=1, source_url="https://www.uefa.com/ok", verdict="supported"),
+              SimpleNamespace(finding_index=0, claim_index=1, source_url="https://x.example/p", verdict="supported")]
+    finals = {"https://www.uefa.com/r?to=x": "https://evil.example/page", "https://www.uefa.com/ok": "https://www.uefa.com/ok"}
+    assert [(c["text"], c["source_tier"]) for c in supported_claims(findings, checks, finals)] == [("c1", "other"), ("c2", "official")]
+    assert [c["source_tier"] for c in supported_claims(findings, checks)] == ["official", "official"]  # without the map: the cited address (the old behaviour)
+    assert best_tier(["https://www.uefa.com/r?to=x"], finals) == "other"
+
+
+@needs_db
+def test_the_run_detail_and_the_forecaster_claims_use_the_final_address(fresh_db):
+    from datetime import UTC, datetime
+
+    from app.models import ClaimCheck
+    from app.runs import run_to_dict
+    from app.research.pipeline import _supported
+
+    command.upgrade(alembic_config(), "head")
+    now = datetime.now(UTC)
+    findings = [{"angle": "Form", "kind": "evidence", "question": "q", "claims": [{"text": "c1", "kind": "sourced", "sources": [{"url": "https://www.uefa.com/r?to=x", "title": "t"}]}]}]
+    with DbSession(fresh_db) as db:
+        run = Run(id="r1", event_ticker="KX-1", event_title="A vs B", status="done", created_at=now, result={"findings": findings})
+        db.add(run)
+        db.flush()
+        db.add(SourcePage(run_id="r1", url="https://www.uefa.com/r?to=x", final_url="https://evil.example/page", retrieved_at=now, fetch_status="ok", content_hash="1", content="x", page_text="x", page_text_hash="1"))
+        db.add(ClaimCheck(run_id="r1", finding_index=0, claim_index=0, source_url="https://www.uefa.com/r?to=x", verdict="supported", reason="ok", model="gpt-5.4-mini"))
+        db.commit()
+        detail = run_to_dict(run, full=True, db=db)
+    assert detail["claim_checks"][0]["source_tier"] == "other"
+    assert [c["source_tier"] for c in _supported(fresh_db, "r1", findings)] == ["other"]

@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
 from app.config import Settings
-from app.models import ClaimCheck
+from app.models import ClaimCheck, SourcePage
 from app.research.check import ClaimJudge, check_run, supported_claims
 from app.research.compare import compare_run
 from app.research.fetch import fetch_run_sources
@@ -63,7 +63,8 @@ def _start(game: GameInfo) -> datetime | None:
 def _supported(engine, run_id: str, findings: list[dict]) -> list[dict]:
     with DbSession(engine) as db:
         checks = db.scalars(select(ClaimCheck).where(ClaimCheck.run_id == run_id)).all()
-    return supported_claims(findings, checks)
+        finals = {url: final for url, final in db.execute(select(SourcePage.url, SourcePage.final_url).where(SourcePage.run_id == run_id)) if final}
+    return supported_claims(findings, checks, finals)
 
 
 async def run_later_stages(

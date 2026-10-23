@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
 from app.config import Settings
-from app.models import ClaimCheck, OutcomeRecord, Run
+from app.models import ClaimCheck, OutcomeRecord, Run, SourcePage
 from app.research.check import supported_claims
 from app.research.compare import FEE_RATE, FeeInfo, compare_outcome
 from app.research.forecast import ForecastModel, run_forecasters
@@ -71,7 +71,8 @@ def split_test_set(items: list[Candidate], tune_until: datetime | None, final: b
 def _claims_of(engine, run: Run) -> list[dict]:
     with DbSession(engine) as db:
         checks = db.scalars(select(ClaimCheck).where(ClaimCheck.run_id == run.id)).all()
-    return supported_claims((run.result or {}).get("findings", []), checks)
+        finals = {url: final for url, final in db.execute(select(SourcePage.url, SourcePage.final_url).where(SourcePage.run_id == run.id)) if final}
+    return supported_claims((run.result or {}).get("findings", []), checks, finals)
 
 
 def judge(prediction: dict, records: list[OutcomeRecord], settings: Settings) -> dict[str, dict]:

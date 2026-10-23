@@ -20,7 +20,7 @@ from app.auth import require_requested_with, require_user
 from app.db import get_db
 from app.kalshi import KalshiError, KalshiNotFound
 from app.measured import scored_games_in
-from app.research.source_trust import tier_of
+from app.research.source_trust import page_tier
 from app.models import ClaimCheck, Forecast, OutcomeRecord, Run, SourcePage, User
 from app.research.markets import attach_companions
 from app.research.runner import execute_run
@@ -70,14 +70,16 @@ def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None, measur
         summary["costs"] = (run.result or {}).get("costs")
         if db is not None:
             # Page text stays in the database: it is a copy of third-party pages and large.
+            page_rows = db.scalars(select(SourcePage).where(SourcePage.run_id == run.id).order_by(SourcePage.id)).all()
             summary["pages"] = [
                 {"url": p.url, "title": p.title, "fetch_status": p.fetch_status, "fetch_detail": p.fetch_detail,
                  "fetch_method": p.fetch_method, "http_status": p.http_status, "fetched_at": iso(p.fetched_at)}
-                for p in db.scalars(select(SourcePage).where(SourcePage.run_id == run.id).order_by(SourcePage.id))
+                for p in page_rows
             ]
+            finals = {p.url: p.final_url for p in page_rows if p.final_url}  # the tier is that of the page really reached, not only of the cited address
             summary["claim_checks"] = [
                 {"finding_index": c.finding_index, "claim_index": c.claim_index, "source_url": c.source_url,
-                 "verdict": c.verdict, "reason": c.reason, "source_tier": tier_of(c.source_url)}
+                 "verdict": c.verdict, "reason": c.reason, "source_tier": page_tier(c.source_url, finals.get(c.source_url))}
                 for c in db.scalars(select(ClaimCheck).where(ClaimCheck.run_id == run.id).order_by(
                     ClaimCheck.finding_index, ClaimCheck.claim_index, ClaimCheck.source_url))
             ]
