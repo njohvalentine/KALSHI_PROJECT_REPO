@@ -314,3 +314,43 @@ export type ScreenResult = {
   best: { market: string; side: "yes" | "no"; price: number; book_probability: number; book_count: number; edge: number; enough_contracts: boolean } | null;
 };
 export type ScreenResponse = { results: Record<string, ScreenResult>; notes: string[]; credits: { remaining: number | null; used: number | null } | null };
+
+export type ConfidenceLevel = "low" | "medium" | "high";
+export type RankedOutcome = {
+  run_id: string;
+  event_ticker: string;
+  title: string;
+  sport: string | null;
+  league: string | null;
+  starts_at: string | null;
+  forecast_at: string | null;
+  age_hours: number | null;
+  market_ticker: string;
+  kind: string;
+  market: string;
+  side: "yes" | "no";
+  our_probability: number;
+  range: { low: number; high: number };
+  spread: number;
+  price: number | null;
+  gap: number | null;
+  bookmaker_probability: number | null;
+  bookmaker_count: number | null;
+  flagged: boolean;
+  supported_claims: number;
+  source_tiers: Record<SourceTier, number> | null;
+  risks: string[];
+  confidence: { level: ConfidenceLevel; reasons: string[] };
+};
+export type LabelGroup = { n: number; ours: number | null; kalshi: number | null };
+export type RankingResponse = {
+  rows: RankedOutcome[];
+  total_rows: number;
+  games_considered: number;
+  generated_at: string;
+  max_age_hours: number;
+  sports: string[];
+  kinds: string[];
+  accuracy: { games: number; ours: number | null; kalshi: number | null };
+  label_check: { low: LabelGroup; medium_or_high: LabelGroup };
+};

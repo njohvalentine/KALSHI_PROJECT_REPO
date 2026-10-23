@@ -126,7 +126,7 @@ def test_the_endpoint_needs_login_arranges_the_rows_caches_and_carries_the_accur
         data = client.get("/api/ranking").json()
         calls = len(kalshi.calls)
         assert [r["market_ticker"] for r in data["rows"]][0] == "KXTTOTAL-1-1" and data["total_rows"] == 3 and data["games_considered"] == 1
-        assert data["sports"] == [] and data["kinds"] == ["total", "winner"] and set(data["accuracy"]) == {"games", "ours", "kalshi"}
+        assert data["sports"] == [] and data["kinds"] == ["total", "winner"] and set(data["accuracy"]) == {"games", "ours", "kalshi"} and set(data["label_check"]) == {"low", "medium_or_high"}
         by_gap = client.get("/api/ranking?sort=gap").json()["rows"]
         assert [r["gap"] for r in by_gap] == sorted((r["gap"] for r in by_gap), reverse=True) and len(kalshi.calls) == calls  # another order is served from the cache
         assert len(client.get("/api/ranking?limit=1").json()["rows"]) == 1 and len(client.get("/api/ranking?hide_at=0.5").json()["rows"]) == 2

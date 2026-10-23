@@ -127,7 +127,8 @@ async def build_ranking(engine, client: KalshiClient, settings: Settings, fee_ca
     score = await asyncio.to_thread(score_records, engine, None, series, settings.min_supported_claims)
     track = score.get("same_records") or {}
     return {"rows": rows, "games_considered": len(games), "generated_at": now.isoformat(), "max_age_hours": settings.opportunity_max_age_hours,
-            "accuracy": {"games": score.get("games", 0), "ours": track.get("ours"), "kalshi": track.get("market")}}
+            "accuracy": {"games": score.get("games", 0), "ours": track.get("ours"), "kalshi": track.get("market")},
+            "label_check": await asyncio.to_thread(confidence_vs_accuracy, engine, settings)}
 
 
 def arrange(rows: list[dict], sort: str, hide_at: float, sport: str | None, kind: str | None, limit: int | None = None) -> list[dict]:

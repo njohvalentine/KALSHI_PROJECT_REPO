@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { GroupTable } from "@/components/group-table";
 import { PageHeader } from "@/components/page-header";
+import { RankingCard } from "@/components/ranking-card";
 import { Stat } from "@/components/stat";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { backendFetch } from "@/lib/backend";
@@ -63,7 +64,10 @@ export default async function DashboardPage() {
         />
         <Stat label="Research spend" value={`$${d.spend.total_usd.toFixed(2)}`} sub={`all time · ${d.spend.runs} runs · estimated${d.spend.limit ? ` · ${d.spend.last_24h} of ${d.spend.limit} games researched in the last 24 hours` : ""}`} />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <Suspense fallback={<p className="mb-4 text-sm text-muted-foreground">Reading today’s prices…</p>}>
+        <RankingCard />
+      </Suspense>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border bg-card p-5" aria-labelledby="all-heading">
           <h2 id="all-heading" className="text-lg font-semibold">Forecast error, all games</h2>
           <p className="mb-3 text-sm text-muted-foreground">Brier score on the same {d.scores.n} outcomes. Lower is better.</p>
