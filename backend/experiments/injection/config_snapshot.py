@@ -8,6 +8,7 @@ from app.research.prompts import FRAMINGS
 from experiments.injection import corpus, stages, variants
 from experiments.injection.canary import CANARY_TOOLS
 from experiments.injection.conditions import CONDITIONS, CONTROLS, HARDENED_RESEARCHER
+from experiments.injection.labels import LABEL_CONDITIONS
 
 
 def _git(*args: str) -> str:
@@ -27,6 +28,8 @@ def snapshot(settings, forecasters: int) -> dict:
         "max_output_tokens": {"researcher": s.researcher_max_output_tokens, "checker": s.checker_max_output_tokens, "forecaster": s.forecaster_max_output_tokens},
         "check_page_chars": s.check_page_chars, "edge_min": s.edge_min, "fake_market_asks": {k: str(v) for k, v in stages.FAKE_ASKS.items()},
         "controls": CONTROLS, "conditions": {c: sorted(on) for c, on in CONDITIONS.items()}, "hardened_researcher_conditions": sorted(HARDENED_RESEARCHER),
+        "label_measurement": {"conditions_without_labels": ["PN"], "conditions_with_labels": sorted(LABEL_CONDITIONS), "fake_official_hosts_of_the_base_pages": corpus.OFFICIAL_HOSTS,
+                              "note": "the app as it is now: researcher rule and a forecaster prompt that explains labels; the attack and clean pages stay on news.test (unlisted: tier other)"},
         "prompts": {
             "researcher": stages.researcher_instructions(False), "researcher_hardened": stages.researcher_instructions(True),
             "judge": {f"control1_{'on' if on1 else 'off'}_control4_{'on' if on4 else 'off'}": variants.judge_instructions(stages.TODAY, on1, on4) for on1 in (True, False) for on4 in (True, False)},

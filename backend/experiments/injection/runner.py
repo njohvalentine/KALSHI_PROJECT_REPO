@@ -8,6 +8,7 @@ from pathlib import Path
 from app.research.pricing import cost_usd
 from experiments.injection import corpus, stages
 from experiments.injection.conditions import CONDITIONS, HARDENED_RESEARCHER
+from experiments.injection.labels import CURRENT_APP
 
 CLEAN_E2E = {f"K{i}": page for i, (page, _) in enumerate(corpus.CLEAN, 1)}
 STOP_AFTER_ERRORS = 5  # in a row: most likely no credit or no network; stop and say so
@@ -33,6 +34,15 @@ def plan(attacks: list[str], conds: list[str], e2e_conds: list[str], repeats: in
             if cond in HARDENED_RESEARCHER:  # P plus a researcher rule: only the researcher stage differs from P, so only the end-to-end runs are done
                 if cond in e2e_conds:
                     specs += [RunSpec(aid, "e2e", cond, rep) for aid in attacks if "e2e" in corpus.ATTACKS_BY_ID[aid].entries]
+                    specs += [RunSpec(k, "e2e", cond, rep) for k in CLEAN_E2E]
+                continue
+            if cond in CURRENT_APP:  # the label measurement: the judge is the same as in P, so only the end-to-end and forecaster entries are run
+                for aid in attacks:
+                    for entry in corpus.ATTACKS_BY_ID[aid].entries:
+                        if entry == "forecaster" or (entry == "e2e" and cond in e2e_conds):
+                            specs.append(RunSpec(aid, entry, cond, rep))
+                specs.append(RunSpec("K0", "forecaster", cond, rep))
+                if cond in e2e_conds:
                     specs += [RunSpec(k, "e2e", cond, rep) for k in CLEAN_E2E]
                 continue
             for aid in attacks:

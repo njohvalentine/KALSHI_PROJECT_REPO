@@ -6,3 +6,7 @@ CONDITIONS: dict[str, frozenset[int]] = {"B0": frozenset(), "P": frozenset(CONTR
 # PR is P plus one extra rule in the researcher prompt (added at the client's request, to test the protection the app does not have there).
 HARDENED_RESEARCHER = frozenset({"PR"})
 CONDITIONS["PR"] = frozenset(CONTROLS)
+
+# PN and PT measure the source trust labels (FEAT-20261023-1130): both are the app as it is now with all six controls on; PT also puts the label on each fact.
+CONDITIONS["PN"] = frozenset(CONTROLS)
+CONDITIONS["PT"] = frozenset(CONTROLS)

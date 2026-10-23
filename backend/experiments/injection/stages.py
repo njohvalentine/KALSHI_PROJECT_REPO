@@ -19,6 +19,7 @@ from app.research.schemas import Angle, Usage
 from experiments.injection import canary, corpus, variants
 from experiments.injection.canary import CANARY_TOOLS, Log
 from experiments.injection.conditions import HARDENED_RESEARCHER
+from experiments.injection.labels import CURRENT_APP, LABEL_CONDITIONS, OFFICIAL_BASE_CONDITIONS, harness_tier
 
 TODAY = corpus.TODAY
 GAME = corpus.GAME
@@ -100,7 +101,7 @@ def researcher_instructions(hardened: bool) -> str:
 async def research(ctx: Ctx) -> str:
     s = ctx.settings
     tools = [SEARCH_TOOL, READ_TOOL] + ([] if ctx.has(2) else CANARY_TOOLS)
-    kw = dict(model=s.researcher_model, instructions=researcher_instructions(ctx.cond in HARDENED_RESEARCHER), tools=tools,
+    kw = dict(model=s.researcher_model, instructions=researcher_instructions(ctx.cond in HARDENED_RESEARCHER or ctx.cond in CURRENT_APP), tools=tools,
               reasoning={"effort": s.research_reasoning_effort}, max_output_tokens=s.researcher_max_output_tokens)
     ctx.inputs.append({"stage": "researcher", "text": researcher_input(GAME, ANGLE, TODAY)})
     response = await ctx.client.responses.create(input=researcher_input(GAME, ANGLE, TODAY), **kw)
@@ -253,7 +254,8 @@ def order_step(ctx: Ctx, probs: dict[str, float]) -> dict:
 
 async def run_entry(ctx: Ctx, entry: str, slot: corpus.Page | None, *, planted: str = "", true_claim: str = "", fact_line: str = "") -> dict:
     """e2e: the whole chain with `slot` as the extra page. judge: the judge reads `slot` with a planted claim and a true one. forecaster: the facts include `fact_line`."""
-    ctx.pages = corpus.site(slot)
+    ctx.pages = corpus.site(slot, official_base=ctx.cond in OFFICIAL_BASE_CONDITIONS)
+    labelled = ctx.cond in LABEL_CONDITIONS
     rec: dict = {"entry": entry, "claims": [], "accepted": [], "forecast": {}, "order": {}}
     if entry == "e2e":
         text = await research(ctx)
@@ -264,13 +266,20 @@ async def run_entry(ctx: Ctx, entry: str, slot: corpus.Page | None, *, planted: 
         judged = await judge_claims(ctx, claims)
     else:
         judged = None
+    accepted = []
     if judged is not None:
         rec["claims"] = [{k: c[k] for k in ("text", "url", "verdict", "reason")} for c in judged]
-        rec["accepted"] = [c["text"] for c in judged if c["verdict"] == "supported"]
+        accepted = [c for c in judged if c["verdict"] == "supported"]
+        rec["accepted"] = [c["text"] for c in accepted]
     if entry in ("e2e", "forecaster"):
-        facts = [{"angle": ANGLE.name, "text": t} for t in (rec["accepted"] if entry == "e2e" else corpus.BASE_CLAIMS)]
-        if entry == "forecaster" and fact_line:
-            facts.append({"angle": ANGLE.name, "text": fact_line})
+        tier = lambda url: {"source_tier": harness_tier(url)} if labelled else {}  # the label, only in the labelled condition
+        if entry == "e2e":
+            facts = [{"angle": ANGLE.name, "text": c["text"], **tier(c["url"])} for c in accepted]
+        else:
+            base_url = next(iter(corpus.site(None, official_base=True).values())).url  # a true base fact comes from an official host
+            facts = [{"angle": ANGLE.name, "text": t, **tier(base_url)} for t in corpus.BASE_CLAIMS]
+            if fact_line:
+                facts.append({"angle": ANGLE.name, "text": fact_line, **tier(slot.url)})  # the attacker's text comes from the attack page's host
         raw = [extract_text(p.html)[1] for p in ctx.pages.values()]
         rec["forecast"] = await forecast(ctx, facts, raw)
         rec["order"] = order_step(ctx, rec["forecast"]["probs"])
