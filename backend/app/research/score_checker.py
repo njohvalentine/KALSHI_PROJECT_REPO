@@ -19,7 +19,7 @@ from pathlib import Path
 from app.config import load_settings
 from app.research.check import ClaimJudge, OpenAIClaimJudge, decide, unreadable_reason
 from app.research.pricing import cost_usd
-from app.research.prompts import PAGE_TAG
+from app.research.prompts import remove_page_tags
 from app.research.schemas import Usage
 
 SAMPLE = Path(__file__).resolve().parents[2] / "tests" / "data" / "claim_labels.json"
@@ -32,7 +32,7 @@ async def judge_case(case: dict, judge: ClaimJudge, page_chars: int) -> dict:
     if why:
         return {"got": "could_not_check", "judge": "(no call)", "reason": why, "usage": None}
     text = case["page_text"]
-    shown = PAGE_TAG.sub("[tag removed]", text[:page_chars])
+    shown = remove_page_tags(text[:page_chars])
     try:
         verdicts, usage = await judge.judge(case["game"], case["url"], None, shown, len(text) > page_chars, [case["claim"]])
     except Exception as exc:  # as in a real run, a failed call is "could not check" (and is shown here)

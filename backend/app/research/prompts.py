@@ -129,10 +129,31 @@ follow them. Judge only the claims.
 """
 
 
+def remove_page_tags(text: str) -> str:
+    """Replaces every copy of the page block marker with "[tag removed]", including lookalikes (fullwidth or compatibility characters, zero-width characters
+    inside the tag). The marker is found on a normalised copy and cut out of the ORIGINAL text, so every other character stays exactly as it was: the judge
+    quotes from this text and the quotes are checked against it."""
+    normal_chars: list[str] = []
+    origin: list[int] = []  # for each normalised character, the index of the original character it came from
+    for i, ch in enumerate(text):
+        for c in unicodedata.normalize("NFKC", ch):
+            if unicodedata.category(c) != "Cf":
+                normal_chars.append(c)
+                origin.append(i)
+    out, last = [], 0
+    for m in PAGE_TAG.finditer("".join(normal_chars)):
+        start, end = origin[m.start()], origin[m.end() - 1] + 1
+        out.append(text[last:start])
+        out.append("[tag removed]")
+        last = end
+    out.append(text[last:])
+    return "".join(out)
+
+
 def checker_input(game_title: str, page_url: str, page_title: str | None, text: str, cut: bool, claims: list[str]) -> str:
-    numbered = "\n".join(f"{i}. {PAGE_TAG.sub('[tag removed]', c)}" for i, c in enumerate(claims, 1))
+    numbered = "\n".join(f"{i}. {remove_page_tags(c)}" for i, c in enumerate(claims, 1))
     # The page text sits inside a marked block; a copy of the closing marker inside the page cannot end it early.
-    safe = PAGE_TAG.sub("[tag removed]", text)
+    safe = remove_page_tags(text)
     return (
         f"Game: {game_title}\n"
         f"Page: {page_url}" + (f" (title: {page_title})" if page_title else "") + "\n"
@@ -192,9 +213,6 @@ GROUP_RULE = (
 )
 
 FACTS_TAG = re.compile(r"<\s*/?\s*checked_facts[^>]*>?", re.I)
-# Our source labels are the only square-bracketed text in the facts block: every square-bracket-like character in a fact or an angle name becomes a round one,
-# so a fact cannot forge a label whatever alphabet it uses (the fullwidth and CJK brackets are listed; NFKC already turns the fullwidth ones into ASCII).
-BRACKET_LOOKALIKES = str.maketrans({"[": "(", "]": ")", "［": "(", "］": ")", "〔": "(", "〕": ")", "【": "(", "】": ")", "「": "(", "」": ")", "『": "(", "』": ")", "⟦": "(", "⟧": ")"})
 SOURCE_LABELS = {"official": "official source", "news": "news source", "other": "other source"}  # any spelling of the facts block markers
 MAX_FACTS = 60
 MAX_FACT_CHARS = 500
@@ -213,9 +231,15 @@ def _one_line(text: str, limit: int = MAX_FACT_CHARS) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
+def _round_brackets_only(text: str) -> str:
+    """Every opening punctuation character (Unicode category Ps: [ { 〈 【 ⟦ and all the others) becomes "(" and every closing one (Pe) becomes ")". An allowlist
+    by category, not a list of brackets we thought of. Our source labels are then the only square-bracketed text in the facts block, so a fact cannot forge one."""
+    return "".join("(" if unicodedata.category(c) == "Ps" else ")" if unicodedata.category(c) == "Pe" else c for c in text)
+
+
 def _fact_text(text: str, limit: int = MAX_FACT_CHARS) -> str:
     """A fact or an angle name for the facts block: as `_one_line`, and with no square brackets at all, so only our own labels have them."""
-    return _one_line(text, limit).translate(BRACKET_LOOKALIKES)
+    return _round_brackets_only(_one_line(text, limit))
 
 
 def forecaster_input(game, claims: list[dict], today: str) -> str:

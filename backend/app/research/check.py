@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.config import Settings
 from app.models import ClaimCheck, Run, SourcePage
 from app.research.model import ResearchModelError, _today, error_kind, openai_client, usage_from
-from app.research.prompts import CHECKER_INSTRUCTIONS, PAGE_TAG, checker_input
+from app.research.prompts import CHECKER_INSTRUCTIONS, checker_input, remove_page_tags
 from app.research.schemas import Usage, is_market_angle
 from app.research.source_trust import best_tier
 
@@ -216,7 +216,7 @@ async def check_run(engine, run_id: str, judge: ClaimJudge, settings: Settings) 
             save([("could_not_check", why)] * len(todo))
             return
         cut = len(job.text) > settings.check_page_chars
-        shown = PAGE_TAG.sub("[tag removed]", job.text[: settings.check_page_chars])  # exactly what the judge sees
+        shown = remove_page_tags(job.text[: settings.check_page_chars])  # exactly what the judge sees
         async with semaphore:
             try:
                 verdicts, usage = await judge.judge(
