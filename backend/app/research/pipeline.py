@@ -97,6 +97,7 @@ async def run_later_stages(
         result.usages["forecast"] = forecast_set.usages
         result.usages["baseline"] = [baseline_usage] if baseline_usage else []
         prediction = build_prediction(game, forecast_set, len(claims))
+        prediction["source_tiers"] = {t: sum(1 for c in claims if c["source_tier"] == t) for t in ("official", "news", "other")}  # the supported facts by trust tier
         prediction["pipeline"] = {"pages": fetched, "claim_checks": summary.counts, "baseline": baseline is not None}
         if forecast_set.ok:
             await asyncio.to_thread(save_forecasts, engine, run_id, forecast_set)

@@ -24,6 +24,7 @@ from app.models import ClaimCheck, Run, SourcePage
 from app.research.model import ResearchModelError, _today, error_kind, openai_client, usage_from
 from app.research.prompts import CHECKER_INSTRUCTIONS, PAGE_TAG, checker_input
 from app.research.schemas import Usage, is_market_angle
+from app.research.source_trust import best_tier
 
 log = logging.getLogger("app.research.check")
 
@@ -244,8 +245,8 @@ async def check_run(engine, run_id: str, judge: ClaimJudge, settings: Settings) 
 
 
 def supported_claims(findings: list[dict], checks) -> list[dict]:
-    """The claims that go forward to the forecasters: those with at least one page that supports them.
-    Findings about odds or market prices (see is_market_angle) never go forward.
+    """The claims that go forward to the forecasters: those with at least one page that supports them, each with the best trust tier of the pages that
+    support it (`source_tier`: official, news or other; a label, nothing is dropped for it). Findings about odds or market prices (see is_market_angle) never go forward.
 
     `checks` is any iterable of objects with finding_index, claim_index, source_url and verdict."""
     supporting: dict[tuple[int, int], list[str]] = {}
@@ -259,5 +260,5 @@ def supported_claims(findings: list[dict], checks) -> list[dict]:
         for ci, claim in enumerate(finding.get("claims", [])):
             if claim.get("kind") == "sourced" and (fi, ci) in supporting:
                 out.append({"finding_index": fi, "claim_index": ci, "angle": finding.get("angle"),
-                            "text": claim["text"], "supported_by": supporting[(fi, ci)]})
+                            "text": claim["text"], "supported_by": supporting[(fi, ci)], "source_tier": best_tier(supporting[(fi, ci)])})
     return out

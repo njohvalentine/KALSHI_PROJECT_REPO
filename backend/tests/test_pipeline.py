@@ -132,6 +132,7 @@ def test_a_run_goes_through_every_stage_and_stores_everything(make_client, monke
 
     assert [p["fetch_status"] for p in run["pages"]] == ["ok", "ok"] and "page_text" not in str(run)
     assert [c["verdict"] for c in run["claim_checks"]] == ["supported", "supported"]
+    assert [c["source_tier"] for c in run["claim_checks"]] == ["other", "other"]  # form.test is not on the trust lists: unknown hosts are "other"
     assert len(run["forecasts"]) == 3 * 2 and {f["variant"] for f in run["forecasts"]} == {"evidence_first", "base_rate_first", "devils_advocate"}
 
     p = run["prediction"]
@@ -139,6 +140,7 @@ def test_a_run_goes_through_every_stage_and_stores_everything(make_client, monke
     home = next(o for o in p["outcomes"] if o["market_ticker"] == "KX-1-H")
     assert home["probability"] == pytest.approx(0.60, abs=0.001) and home["spread"] == pytest.approx(0.04, abs=0.001)
     assert p["pipeline"] == {"pages": {"ok": 2}, "claim_checks": {"supported": 2}, "baseline": True}
+    assert p["source_tiers"] == {"official": 0, "news": 0, "other": 2}
     comparison = p["comparison"]
     assert comparison["fee"]["source"] == "series" and comparison["outcomes"][0]["yes_ask"] == 0.42
     assert comparison["outcomes"][0]["meaningful"] is False  # only 2 supported claims, MIN_SUPPORTED_CLAIMS is 5

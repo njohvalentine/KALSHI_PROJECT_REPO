@@ -319,6 +319,10 @@ The full report, with all numbers and caveats, is `docs/ACCURACY-REPORT-2026-10-
 
 ---
 
+### Source tier (trust label)
+
+The kind of website that supports a fact: **official** (the league, tour, tournament or club itself), **news** (an independent news outlet) or **other** (anything else, and every site we have not reviewed). The forecasters see it on each fact and weigh "other" less; a person sees it on the result page. It is a label and never a reason to drop a fact. It says who runs the site, not whether the page is right (`docs/RUNBOOK.md`, 7b).
+
 ## 9. Limits and what is not built
 
 - **No edge found yet.** See section 7. The system is for now a research assistant, not a proven way to beat the market.
@@ -328,7 +332,8 @@ The full report, with all numbers and caveats, is `docs/ACCURACY-REPORT-2026-10-
 - **Sample size.** Sixty-two finished games is a modest sample, and the markets of one game move together, so the real sample is about 62 and not 485.
 - **The bookmaker comparison is built but switched off.** It records the bookmakers' consensus next to our forecast, but it has no scored results yet.
 - **Legal position.** Sports contracts on Kalshi are legally contested in several US states. What can be traded depends on where the user lives. We have not yet been told the client's state.
-- **Secrets.** The Telegram bot token can appear in the backend log when alerts are on. Logs must not be shared.
+- **A page that lies.** The checker confirms that a page supports a claim, not that the claim is true (measured in the injection experiment, `docs/experiments/injection/SUMMARY.md`). The source label and the forecasters' weighing of "other" sources reduce the risk but do not remove it: a false fact on an official or news site would be trusted, and the label has not been measured yet.
+- **Secrets.** The Telegram token and the odds key are masked in the backend log (fixed 2026-10-23), but logs written before that fix, if any were shared, may hold the token: rotate it.
 
 ---
 

@@ -74,7 +74,7 @@ The browser tests need extra steps (a test account and a browser download). They
 - `.env` is git-ignored. Keep it that way.
 - These are secrets: `OPENAI_API_KEY`, `SESSION_SECRET`, `POSTGRES_PASSWORD`, `LANGSMITH_API_KEY`, the Telegram bot token, the Odds API key and any Kalshi key.
 - The app only reads Kalshi, so no Kalshi key is needed to run it.
-- Backend logs can contain the Telegram token when alerts are on. Do not share logs.
+- The Telegram token and the odds key are masked in the backend log (since 2026-10-23). Logs from before that date may hold the token: rotate it if one was ever shared.
 
 ## More
 

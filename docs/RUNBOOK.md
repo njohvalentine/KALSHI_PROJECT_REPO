@@ -85,6 +85,18 @@ The Opportunities page then shows "Alerts are also sent to Telegram" and each al
 - **Approval**: orders waiting for a person (with their checks, Approve and Reject) and a table of the recent orders.
 - **Results**: simulated orders and what they would have paid, with cards for the settled orders, the chosen side at the ask over all scored outcomes, and the flagged bets, and two tables of the simulated result by sport and by kind of market (bets, won, average per contract after fees, total, and the flagged bets of each group; "too few to read" under 30 bets).
 
+## 7b. Source trust labels
+
+Every supported fact has a label for the kind of website that supports it: **official** (the league, tour, tournament or club itself), **news** (an independent news outlet) or **other** (everything else, including betting, odds, tip, statistics and forum sites, Wikipedia, and every host we have not reviewed). The forecasters see the label on each fact and are told to weigh "other" less; the result page shows it next to each source and a count by kind. **Nothing is dropped and the flag rule is unchanged.** The label says who runs the site, not whether a page is true: a lying page on a listed site would be trusted.
+
+The list is in `backend/app/research/source_trust.py` (reviewed 2026-10-23; the review document is `docs/discussion/SOURCE-TRUST-HOSTS-2026-10-23.md`). New club and tournament sites appear with every league. To see which hosts in saved runs are not reviewed yet (read-only):
+
+```
+docker compose exec backend uv run --no-sync python -m app.cli source-hosts
+```
+
+Add the ones you trust to `OFFICIAL` or `NEWS` (a tested change; unknown hosts stay "other", the safe direction). Runs made before this change have no counts on their page. Forecasts made after it (2026-10-23) use a different input than earlier ones, and a replay of an old run now shows the labels to the forecasters too.
+
 ## 8. Scoring the forecasts
 
 Every run with a forecast saves a record (our probabilities, the market price at that moment, the plain-AI comparison). After the games finish:

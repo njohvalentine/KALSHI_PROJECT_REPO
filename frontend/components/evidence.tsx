@@ -2,13 +2,16 @@ import { Fold } from "@/components/fold";
 import { Badge } from "@/components/ui/badge";
 import { host } from "@/lib/format";
 import { fetchLabel, isMarketFinding, VERDICT } from "@/lib/labels";
-import type { Claim, ClaimCheck, Finding, PageInfo, Run, Verdict } from "@/lib/types";
+import type { Claim, ClaimCheck, Finding, PageInfo, Run, SourceTier, Verdict } from "@/lib/types";
 
 const VERDICT_STYLE: Record<Verdict, string> = {
   supported: "bg-good-soft text-good",
   not_supported: "bg-destructive/10 text-destructive",
   could_not_check: "bg-warn-soft text-warn",
 };
+
+const TIER_LABEL: Record<SourceTier, string> = { official: "Official source", news: "News source", other: "Other source" };
+const TIER_STYLE: Record<SourceTier, string> = { official: "bg-good-soft text-good", news: "bg-secondary text-secondary-foreground", other: "bg-warn-soft text-warn" };
 
 function ClaimItem({ claim, checks }: { claim: Claim; checks: ClaimCheck[] }) {
   return (
@@ -29,6 +32,7 @@ function ClaimItem({ claim, checks }: { claim: Claim; checks: ClaimCheck[] }) {
               <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4">
                 {s.title || host(s.url)} <span className="text-muted-foreground">({host(s.url)})</span>
               </a>
+              {check?.source_tier ? <Badge className={TIER_STYLE[check.source_tier]}>{TIER_LABEL[check.source_tier]}</Badge> : null}
               {check ? <span className="basis-full">{check.reason}</span> : null}
             </li>
           );
@@ -73,6 +77,14 @@ export function EvidenceSection({ run }: { run: Run }) {
         “Supported” means the page itself says it; “Could not check” means the page could not be read, does not say it, or the claim was worked
         out rather than stated. Only supported facts are used.
       </p>
+      {run.prediction?.source_tiers ? (
+        <p className="mb-4 text-sm text-muted-foreground">
+          By kind of source: {run.prediction.source_tiers.official} official, {run.prediction.source_tiers.news} news, {run.prediction.source_tiers.other} other.
+          “Official” is the league, tour, tournament or club itself, “news” an independent news outlet; “other” is anything else, including betting, odds,
+          tip and statistics sites and every site we have not reviewed. The forecasters see this label on each fact and are told to weigh “other” less.
+          It says who runs the site, not whether a page is right.
+        </p>
+      ) : null}
       {findings.map((f, i) => (
         <FindingBlock key={f.angle} finding={f} index={i} checks={run.claim_checks} />
       ))}

@@ -20,6 +20,7 @@ from app.auth import require_requested_with, require_user
 from app.db import get_db
 from app.kalshi import KalshiError, KalshiNotFound
 from app.measured import scored_games_in
+from app.research.source_trust import tier_of
 from app.models import ClaimCheck, Forecast, OutcomeRecord, Run, SourcePage, User
 from app.research.markets import attach_companions
 from app.research.runner import execute_run
@@ -76,7 +77,7 @@ def run_to_dict(run: Run, full: bool = True, db: DbSession | None = None, measur
             ]
             summary["claim_checks"] = [
                 {"finding_index": c.finding_index, "claim_index": c.claim_index, "source_url": c.source_url,
-                 "verdict": c.verdict, "reason": c.reason}
+                 "verdict": c.verdict, "reason": c.reason, "source_tier": tier_of(c.source_url)}
                 for c in db.scalars(select(ClaimCheck).where(ClaimCheck.run_id == run.id).order_by(
                     ClaimCheck.finding_index, ClaimCheck.claim_index, ClaimCheck.source_url))
             ]

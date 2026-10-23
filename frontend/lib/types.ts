@@ -24,7 +24,8 @@ export type RunSummary = {
 };
 
 export type Verdict = "supported" | "not_supported" | "could_not_check";
-export type ClaimCheck = { finding_index: number; claim_index: number; source_url: string; verdict: Verdict; reason: string };
+export type SourceTier = "official" | "news" | "other";
+export type ClaimCheck = { finding_index: number; claim_index: number; source_url: string; verdict: Verdict; reason: string; source_tier?: SourceTier };
 export type PageInfo = {
   url: string;
   title: string | null;
@@ -91,6 +92,7 @@ export type Prediction = {
   dropped?: { index: number; variant: string; reason: string }[];
   evidence?: "supported" | "none";
   supported_claims?: number;
+  source_tiers?: Record<SourceTier, number>; // the supported facts by trust tier (runs from before the labels have none)
   markets_not_offered?: string[];
   adjustments?: { forecaster: number; note: string }[];
   comparison?: Comparison;

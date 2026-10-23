@@ -153,6 +153,29 @@ def _late_test_command(args) -> int:
     return 0
 
 
+def _source_hosts_command(args) -> int:
+    """The hosts in saved runs that are on none of the trust lists yet (read-only), so the list can be extended."""
+    from sqlalchemy import func, select
+    from sqlalchemy.orm import Session as DbSession
+
+    from app.config import SettingsError, load_settings
+    from app.models import SourcePage
+    from app.research.source_trust import unlisted_hosts
+
+    try:
+        settings = load_settings(os.environ)
+    except SettingsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    with DbSession(create_engine(settings.sqlalchemy_url)) as db:
+        seen = {url: n for url, n in db.execute(select(SourcePage.url, func.count()).group_by(SourcePage.url))}
+    rows = unlisted_hosts(seen)
+    print(f"{len(rows)} host(s) in saved runs are not reviewed yet (they count as 'other'); pages, host:")
+    for host, n in rows:
+        print(f"{n}\t{host}")
+    return 0
+
+
 def _moment(text: str | None, name: str):
     from datetime import UTC, datetime
 
@@ -249,6 +272,7 @@ def main(argv: list[str] | None = None) -> int:
                           ("--edge-min", "EDGE_MIN"), ("--min-supported-claims", "MIN_SUPPORTED_CLAIMS"), ("--min-research-shift", "MIN_RESEARCH_SHIFT"),
                           ("--edge-plausible-max", "EDGE_PLAUSIBLE_MAX"), ("--min-ask-size", "MIN_ASK_SIZE")):
         rp.add_argument(flag, dest=setting, metavar=setting, help=f"Replay with this value of {setting} instead of the current setting")
+    sub.add_parser("source-hosts", help="Hosts in saved runs that are not on the source trust lists yet (read-only)")
     pt = sub.add_parser("price-test", help="Free price-only test on Kalshi's own history: is the price an hour before a game exploitable after fees (read-only)")
     pt.add_argument("--sample", type=int, default=400, help="Games per series at most (every k-th game in order of settlement; the rule was fixed at 400)")
     pt.add_argument("--series", help="Comma-separated series tickers instead of all fourteen (for a quick check)")
@@ -262,6 +286,8 @@ def main(argv: list[str] | None = None) -> int:
     lt.add_argument("--out", help="Write the report to this file instead of printing it")
     args = parser.parse_args(argv)
 
+    if args.command == "source-hosts":
+        return _source_hosts_command(args)
     if args.command == "late-test":
         return _late_test_command(args)
     if args.command == "price-test":
