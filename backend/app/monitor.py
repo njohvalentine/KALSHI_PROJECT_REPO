@@ -6,11 +6,14 @@ code, no model call) and records an alert when something is worth saying:
 - market_moved: a market moved ALERT_MOVE_CENTS or more since the forecast (the market may know
   something we do not, so the alert says to research again, not to bet),
 - no_longer_flagged: the markets that were worth a look no longer are,
-- start_soon: a game worth a look starts within ALERT_START_SOON_MINUTES (the forecast may be out of date).
+- start_soon: a game worth a look starts within ALERT_START_SOON_MINUTES (the forecast may be out of date),
+- forecast_changed: a new run of a game (a lineup update or a repeat run) moved a match result ALERT_FORECAST_CHANGE_POINTS or more,
+- update_due: a researched game starts within ALERT_UPDATE_DUE_MINUTES, its forecast is more than 3 hours old and it has no update: the lineups are probably out.
 Alerts are recorded in the app and, when ALERTS_ENABLED is true, also sent to Telegram through `deliver`.
 
 Automatic research (AUTO_RESEARCH_MAX_PER_DAY, 0 = off) starts ordinary runs for the next games on a
-plain rule. Each run costs real money, hence the explicit cap."""
+plain rule. Each run costs real money, hence the explicit cap. Automatic update (AUTO_UPDATE_MAX_PER_DAY, 0 = off) starts a lineup
+update for a game that is due one, at most one per cycle, with its own cap. The watcher cannot see news: it sees prices, new forecasts and the clock."""
 
 import asyncio
 import logging
@@ -21,7 +24,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from app.models import Alert, Run
 from app.opportunities import collect
-from app.runs import RunStartError, start_game_run
+from app.runs import RunStartError, start_game_run, start_update
 
 log = logging.getLogger("app.monitor")
 
@@ -50,6 +53,15 @@ def alert_text(kind: str, game: dict, row: dict, now: datetime, detail: dict) ->
     if kind == "market_moved":
         return (f"The market moved {detail['cents']}¢ on {detail['market']} since our forecast of {title} ({age}). The forecast may be out of date: "
                 f"the market may know something we do not. Consider researching again. {NOT_ADVICE}")
+    if kind == "forecast_changed":
+        changes = ", ".join(f"{label} went from {round(before * 100)}% to {round(after * 100)}%" for label, before, after in detail["changes"])
+        v = row["verdict"]
+        return (f"Forecast changed: {title}. {detail['cause']}, {changes}. Verdict: {v['label']}.{caution} A changed forecast is not a sign that the new one is right. {NOT_ADVICE}")
+    if kind == "update_due":
+        hours = max((now - game["finished_at"]).total_seconds() / 3600, 0) if game["finished_at"] else None
+        made = "at an unknown time" if hours is None else ("less than an hour ago" if hours < 1 else f"{round(hours)} hours ago")
+        return (f"Lineups are probably out for {title} (starts in {detail['minutes']} minutes; forecast made {made}). Open the result page and press Update with lineups "
+                f"(about $0.20). {NOT_ADVICE}")
     if kind == "no_longer_flagged":
         return f"No longer worth a look: {title}. The markets we flagged no longer show a gap at today's prices (forecast made {age}). NO BET. {NOT_ADVICE}"
     return (f"Starting soon: {title}, worth a look at today's prices, but the forecast was made {age} and lineups may have changed. "
@@ -59,7 +71,7 @@ def alert_text(kind: str, game: dict, row: dict, now: datetime, detail: dict) ->
 class Monitor:
     def __init__(self, app):
         self.app = app
-        self.status = {"last_cycle_at": None, "last_error": None, "auto_research_started_today": 0}
+        self.status = {"last_cycle_at": None, "last_error": None, "auto_research_started_today": 0, "auto_update_started_today": 0}
 
     # ---- alerts -------------------------------------------------------------------------------------------
 
@@ -106,9 +118,39 @@ class Monitor:
             db.commit()
         log.info("Alert %s for %s: %s", kind, game["event_ticker"], status)
 
-    async def alert_cycle(self, now: datetime) -> None:
+    def _is_due(self, game: dict, now: datetime) -> bool:
+        """The game's newest run is an ordinary run (no update after it), the game starts within ALERT_UPDATE_DUE_MINUTES and the forecast is more than 3 hours old."""
+        start, finished = game["start"], game["finished_at"]
+        if game["refresh_of"] is not None or start is None or finished is None:
+            return False
+        return now < start <= now + timedelta(minutes=self.app.state.settings.alert_update_due_minutes) and now - finished > timedelta(hours=3)
+
+    def _previous_probabilities(self, game: dict) -> dict[str, float] | None:
+        """The probabilities of the run this one updates, else of the previous finished run of the same game; None when there is none."""
+        with DbSession(self.app.state.engine) as db:
+            previous = game["refresh_of"] or db.scalar(select(Run.id).where(
+                Run.event_ticker == game["event_ticker"], Run.status == "done", Run.prediction.is_not(None), Run.created_at < game["created_at"]).order_by(Run.created_at.desc()).limit(1))
+            old = db.get(Run, previous) if previous else None
+            outcomes = (old.prediction or {}).get("outcomes") if old else None
+            return {o["market_ticker"]: o["probability"] for o in outcomes} if outcomes else None
+
+    async def _forecast_changed(self, game: dict, row: dict, now: datetime) -> None:
+        before = await asyncio.to_thread(self._previous_probabilities, game)
+        if not before:
+            return
+        outcomes = [o for o in game["prediction"]["outcomes"] if o["market_ticker"] in before]
+        pool = [o for o in outcomes if o.get("kind", "winner") == "winner"] or outcomes  # the match results first; if there are none, any market
+        changes = sorted(((o["outcome"], before[o["market_ticker"]], o["probability"]) for o in pool), key=lambda c: -abs(c[2] - c[1]))
+        if changes and abs(changes[0][2] - changes[0][1]) * 100 >= self.app.state.settings.alert_forecast_change_points:
+            shown = [c for c in changes if abs(c[2] - c[1]) >= 0.01][:3]
+            await self._raise("forecast_changed", game, row, now, {"changes": shown, "cause": "After the lineup update" if game["refresh_of"] else "After a new run"})
+
+    async def alert_cycle(self, now: datetime) -> list:
         s, state = self.app.state.settings, self.app.state
-        for game, comparison, row in await collect(state.engine, state.kalshi, s, state.fee_cache, now):
+        collected = await collect(state.engine, state.kalshi, s, state.fee_cache, now)
+        for game, comparison, row in collected:
+            if self._is_due(game, now):  # before the stale check: a forecast made yesterday is exactly the one that needs the update
+                await self._raise("update_due", game, row, now, {"minutes": max(round((game["start"] - now).total_seconds() / 60), 1)})
             if row["stale"] or "unavailable" in comparison:
                 continue
             best = row["best"]
@@ -129,13 +171,15 @@ class Monitor:
             start = game["start"]
             if row["flagged"] and start and now < start <= now + timedelta(minutes=s.alert_start_soon_minutes):
                 await self._raise("start_soon", game, row, now, {})
+            await self._forecast_changed(game, row, now)
+        return collected
 
     # ---- automatic research -------------------------------------------------------------------------------
 
     def _auto_started_today(self, now: datetime) -> int:
         midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
         with DbSession(self.app.state.engine) as db:
-            return db.scalar(select(func.count()).select_from(Run).where(Run.trigger == "auto", Run.created_at >= midnight)) or 0
+            return db.scalar(select(func.count()).select_from(Run).where(Run.trigger == "auto", Run.refresh_of.is_(None), Run.created_at >= midnight)) or 0
 
     def _recently_researched(self, tickers: list[str], now: datetime, hours: float) -> set[str]:
         with DbSession(self.app.state.engine) as db:
@@ -172,13 +216,40 @@ class Monitor:
                 if exc.status_code in (429, 503):
                     break  # no room or not configured: the next cycle tries again
 
+    # ---- automatic update ---------------------------------------------------------------------------------
+
+    def _auto_updates_today(self, now: datetime) -> int:
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        with DbSession(self.app.state.engine) as db:
+            return db.scalar(select(func.count()).select_from(Run).where(Run.trigger == "auto", Run.refresh_of.is_not(None), Run.created_at >= midnight)) or 0
+
+    async def auto_update_cycle(self, now: datetime, collected: list) -> None:
+        """Starts a lineup update for the soonest game that is due one: at most one per cycle, within AUTO_UPDATE_MAX_PER_DAY. start_update applies every other rule
+        (the update limit, the newest run only, not started, no run in progress), so a refusal is logged and the next cycle tries again."""
+        s, state = self.app.state.settings, self.app.state
+        started = await asyncio.to_thread(self._auto_updates_today, now)
+        self.status["auto_update_started_today"] = started
+        if s.auto_update_max_per_day <= 0 or state.research_graph is None:
+            return
+        if min(s.auto_update_max_per_day - started, s.max_concurrent_runs - state.active_runs) <= 0:
+            return
+        due = sorted((g["start"], g["run_id"]) for g, _, _ in collected if self._is_due(g, now))
+        for _, run_id in due[:1]:
+            try:
+                await start_update(self.app, run_id, None, "auto")
+                self.status["auto_update_started_today"] += 1
+                log.info("Automatic update started for run %s", run_id)
+            except RunStartError as exc:
+                log.warning("Automatic update of run %s did not start: %s", run_id, exc.detail)
+
     # ---- the loop -----------------------------------------------------------------------------------------
 
     async def cycle(self, now: datetime | None = None) -> None:
         now = now or datetime.now(UTC)
         try:
-            await self.alert_cycle(now)
+            collected = await self.alert_cycle(now)
             await self.auto_research_cycle(now)
+            await self.auto_update_cycle(now, collected)
             self.status["last_error"] = None
         except Exception as exc:  # the loop must survive; the kind is shown in the app, the full text is in the log
             log.exception("A watcher cycle failed")

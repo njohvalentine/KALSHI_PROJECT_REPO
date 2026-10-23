@@ -29,5 +29,6 @@ def recent_alerts(request: Request, db: Annotated[DbSession, Depends(get_db)], l
             "last_cycle_at": monitor.status["last_cycle_at"], "last_error": monitor.status["last_error"],
             "auto_research_cap": settings.auto_research_max_per_day,
             "auto_research_started_today": monitor.status["auto_research_started_today"],
+            "auto_update_cap": settings.auto_update_max_per_day, "auto_update_started_today": monitor.status["auto_update_started_today"],
         },
     }

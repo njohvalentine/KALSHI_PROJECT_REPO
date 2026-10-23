@@ -42,7 +42,7 @@ def _game_inputs(db: DbSession, run: Run) -> dict:
     """What the comparison needs from a stored run: its forecast, the plain-AI baseline and the market as it was."""
     records = db.scalars(select(OutcomeRecord).where(OutcomeRecord.run_id == run.id)).all()
     return {
-        "run_id": run.id, "event_ticker": run.event_ticker, "title": run.event_title,
+        "run_id": run.id, "event_ticker": run.event_ticker, "title": run.event_title, "refresh_of": run.refresh_of, "created_at": run.created_at,
         "sport": next((r.sport for r in records if r.sport), None), "league": next((r.league for r in records if r.league), None),
         "start": next((r.game_start for r in records if r.game_start), None),
         "finished_at": run.finished_at, "prediction": run.prediction,

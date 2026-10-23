@@ -285,7 +285,7 @@ async def start_game_run(app, event_ticker: str, user_id: int | None, trigger: s
             state.active_runs -= 1
 
 
-async def start_update(app, run_id: str, user_id: int | None) -> dict:
+async def start_update(app, run_id: str, user_id: int | None, trigger: str = "manual") -> dict:
     """Starts a lineup update of the run `run_id` in the background and returns {"id", "status"}. One researcher on a fixed angle; the earlier checked evidence is carried over.
     Raises RunStartError."""
     state = app.state
@@ -314,7 +314,7 @@ async def start_update(app, run_id: str, user_id: int | None) -> dict:
             raise RunStartError(409, "The game has started: nothing to update.", extra={"code": "not_updatable"})
         new_id = uuid.uuid4().hex
         try:
-            await run_in_threadpool(_insert_run, state.engine, new_id, game, user_id, "manual", 0, run_id, state.settings.research_updates_max_per_day)
+            await run_in_threadpool(_insert_run, state.engine, new_id, game, user_id, trigger, 0, run_id, state.settings.research_updates_max_per_day)
         except DailyLimitReached as limit:
             wait = max(int((limit.opens_at - datetime.now(UTC)).total_seconds()), 1)
             raise RunStartError(

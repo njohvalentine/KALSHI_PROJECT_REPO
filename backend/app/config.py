@@ -117,6 +117,9 @@ class Settings:
     alert_start_soon_minutes: float
     alert_cooldown_minutes: float
     alert_max_per_hour: int
+    alert_forecast_change_points: float  # a new forecast that moves a match result this many points raises an alert
+    alert_update_due_minutes: float  # a researched game starting within this time, with an old forecast and no update, raises an alert (lineups are probably out)
+    auto_update_max_per_day: int  # automatic lineup updates per UTC day; 0 = off. Each costs real money (about 0.20 USD)
     auto_research_max_per_day: int
     research_max_per_day: int  # games researched in the last 24 hours, whoever starts them; 0 = no limit
     research_updates_max_per_day: int  # lineup updates of researched games in the last 24 hours (they do not use the game limit); 0 = no limit
@@ -320,6 +323,14 @@ def load_settings(env: Mapping[str, str]) -> Settings:
     alert_start_soon = _parse_positive_float("ALERT_START_SOON_MINUTES", env.get("ALERT_START_SOON_MINUTES", "60"), problems)
     alert_cooldown = _parse_positive_float("ALERT_COOLDOWN_MINUTES", env.get("ALERT_COOLDOWN_MINUTES", "60"), problems)
     alert_max_per_hour = _parse_positive_int("ALERT_MAX_PER_HOUR", env.get("ALERT_MAX_PER_HOUR", "6"), problems)
+    alert_forecast_change = _parse_positive_float("ALERT_FORECAST_CHANGE_POINTS", env.get("ALERT_FORECAST_CHANGE_POINTS", "5"), problems)
+    alert_update_due = _parse_positive_float("ALERT_UPDATE_DUE_MINUTES", env.get("ALERT_UPDATE_DUE_MINUTES", "90"), problems)
+    raw_auto_update = env.get("AUTO_UPDATE_MAX_PER_DAY", "0").strip() or "0"
+    if raw_auto_update.isdigit():
+        auto_update_per_day = int(raw_auto_update)  # 0 is allowed and means off
+    else:
+        auto_update_per_day = 0
+        problems.append(f"AUTO_UPDATE_MAX_PER_DAY must be a whole number, 0 or more (0 means off), got {raw_auto_update!r}")
     raw_auto = env.get("AUTO_RESEARCH_MAX_PER_DAY", "0").strip() or "0"
     if raw_auto.isdigit():
         auto_per_day = int(raw_auto)  # 0 is allowed and means off
@@ -478,6 +489,9 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         alert_start_soon_minutes=alert_start_soon,
         alert_cooldown_minutes=alert_cooldown,
         alert_max_per_hour=alert_max_per_hour,
+        alert_forecast_change_points=alert_forecast_change,
+        alert_update_due_minutes=alert_update_due,
+        auto_update_max_per_day=auto_update_per_day,
         auto_research_max_per_day=auto_per_day,
         research_max_per_day=research_cap,
         research_updates_max_per_day=updates_cap,
