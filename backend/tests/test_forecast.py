@@ -184,7 +184,7 @@ def test_the_real_model_class_sends_the_right_request():
             usage = ResponseUsage.model_validate({"input_tokens": 2000, "output_tokens": 900, "total_tokens": 2900,
                                                   "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
                                                   "output_tokens_details": {"reasoning_tokens": 400}})
-            return SimpleNamespace(output_parsed=answer(0.4, 0.3, 0.3), usage=usage)
+            return SimpleNamespace(output=[], output_parsed=answer(0.4, 0.3, 0.3), usage=usage)
 
     model = OpenAIForecastModel(SETTINGS, client=SimpleNamespace(responses=Responses()))
     got, usage = asyncio.run(model.forecast(GAME, CLAIMS, FRAMINGS[1]))
@@ -203,7 +203,7 @@ def test_the_exclusive_rule_is_left_out_when_outcomes_are_not_exclusive():
             usage = ResponseUsage.model_validate({"input_tokens": 1, "output_tokens": 1, "total_tokens": 2,
                                                   "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
                                                   "output_tokens_details": {"reasoning_tokens": 0}})
-            return SimpleNamespace(output_parsed=answer(0.8, 0.5), usage=usage)
+            return SimpleNamespace(output=[], output_parsed=answer(0.8, 0.5), usage=usage)
 
     game = GameInfo(event_ticker="K", title="T", outcomes=["Over 1.5", "Over 2.5"], outcome_tickers=["A", "B"], exclusive=False)
     asyncio.run(OpenAIForecastModel(SETTINGS, client=SimpleNamespace(responses=Responses())).forecast(game, [], FRAMINGS[0]))

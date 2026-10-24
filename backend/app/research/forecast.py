@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.config import Settings
 from app.models import Forecast as ForecastRow
 from app.research.model import ResearchModelError, _today, error_kind, openai_client, usage_from
+from app.research.privileges import check_response, request
 from app.research.prompts import EXCLUSIVE_RULE, FORECASTER_INSTRUCTIONS, FRAMINGS, GROUP_RULE, forecaster_input
 from app.research.schemas import GameInfo, Usage
 
@@ -55,7 +56,8 @@ class OpenAIForecastModel:
     async def forecast(self, game, claims, framing):
         today = self._today or _today()
         try:
-            response = await self._client.responses.parse(
+            response = await self._client.responses.parse(**request(
+                "forecaster",
                 model=self._s.forecaster_model,
                 instructions=FORECASTER_INSTRUCTIONS.format(
                     today=today, framing=framing[1], exclusive_rule=EXCLUSIVE_RULE if game.sums_to_one else "",
@@ -66,7 +68,8 @@ class OpenAIForecastModel:
                 reasoning={"effort": self._s.forecaster_reasoning_effort},
                 max_output_tokens=self._s.forecaster_max_output_tokens,
                 store=False,
-            )
+            ))
+            check_response("forecaster", response)
         except Exception as exc:
             raise ResearchModelError(f"Forecaster call failed: {type(exc).__name__}: {exc}") from exc
         if response.output_parsed is None:

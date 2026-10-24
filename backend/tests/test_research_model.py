@@ -80,7 +80,7 @@ class FakeResponses:
 
     async def parse(self, **kw):
         self.calls.append(("parse", kw))
-        return SimpleNamespace(output_parsed=Plan(angles=[Angle(name="Form", question="How has A played?")]), usage=usage(500, 0, 100))
+        return SimpleNamespace(output=[], output_parsed=Plan(angles=[Angle(name="Form", question="How has A played?")]), usage=usage(500, 0, 100))
 
 
 def make_model():
@@ -127,7 +127,7 @@ def test_api_errors_become_clear_model_errors_without_secrets():
             raise RuntimeError("rate limit hit")
 
         async def parse(self, **kw):
-            return SimpleNamespace(output_parsed=None, usage=usage())
+            return SimpleNamespace(output=[], output_parsed=None, usage=usage())
 
     model = OpenAIResearchModel(SETTINGS, client=SimpleNamespace(responses=Boom()))
     with pytest.raises(ResearchModelError, match="Researcher call failed: RuntimeError$") as caught:

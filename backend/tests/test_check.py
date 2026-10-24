@@ -299,7 +299,7 @@ def test_the_real_judge_sends_the_right_request_and_returns_usage():
                                                   "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
                                                   "output_tokens_details": {"reasoning_tokens": 5}})
             from app.research.check import Verdicts
-            return SimpleNamespace(output_parsed=Verdicts(verdicts=[v(1, "could_not_check")]), usage=usage)
+            return SimpleNamespace(output=[], output_parsed=Verdicts(verdicts=[v(1, "could_not_check")]), usage=usage)
 
     judge = OpenAIClaimJudge(SETTINGS, client=SimpleNamespace(responses=Responses()))
     verdicts, usage = asyncio.run(judge.judge("A vs B", "https://a.test", None, TEXT_A, False, ["c1"]))

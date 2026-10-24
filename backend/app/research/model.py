@@ -10,6 +10,7 @@ from typing import Protocol
 from openai import AsyncOpenAI
 
 from app.config import Settings
+from app.research.privileges import check_response, request
 from app.research.prompts import PLANNER_INSTRUCTIONS, RESEARCHER_INSTRUCTIONS, planner_input, researcher_input
 from app.research.schemas import Angle, Citation, GameInfo, Plan, ResearchOutput, TextSegment, Usage
 
@@ -94,7 +95,8 @@ class OpenAIResearchModel:
     async def plan(self, game: GameInfo, max_angles: int) -> tuple[Plan, Usage]:
         today = _today()
         try:
-            response = await self._client.responses.parse(
+            response = await self._client.responses.parse(**request(
+                "planner",
                 model=self._s.planner_model,
                 instructions=PLANNER_INSTRUCTIONS.format(max_angles=max_angles, today=today),
                 input=planner_input(game, today),
@@ -102,7 +104,8 @@ class OpenAIResearchModel:
                 reasoning={"effort": self._s.research_reasoning_effort},
                 max_output_tokens=self._s.researcher_max_output_tokens,
                 store=False,
-            )
+            ))
+            check_response("planner", response)
         except Exception as exc:
             log.warning("Planner call failed: %s: %s", type(exc).__name__, exc)  # the full text stays in the log
             raise ResearchModelError(f"Planner call failed: {error_kind(exc)}") from exc
@@ -113,7 +116,8 @@ class OpenAIResearchModel:
     async def research(self, game: GameInfo, angle: Angle) -> ResearchOutput:
         today = _today()
         try:
-            response = await self._client.responses.create(
+            response = await self._client.responses.create(**request(
+                "researcher",
                 model=self._s.researcher_model,
                 instructions=RESEARCHER_INSTRUCTIONS.format(today=today),
                 input=researcher_input(game, angle, today),
@@ -123,7 +127,8 @@ class OpenAIResearchModel:
                 reasoning={"effort": self._s.research_reasoning_effort},
                 max_output_tokens=self._s.researcher_max_output_tokens,
                 store=False,
-            )
+            ))
+            check_response("researcher", response)
         except Exception as exc:
             log.warning("Researcher call failed: %s: %s", type(exc).__name__, exc)
             raise ResearchModelError(f"Researcher call failed: {error_kind(exc)}") from exc

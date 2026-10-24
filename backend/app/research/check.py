@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.config import Settings
 from app.models import ClaimCheck, Run, SourcePage
 from app.research.model import ResearchModelError, _today, error_kind, openai_client, usage_from
+from app.research.privileges import check_response, request
 from app.research.prompts import CHECKER_INSTRUCTIONS, checker_input, remove_page_tags
 from app.research.schemas import Usage, is_market_angle
 from app.research.source_trust import best_tier
@@ -58,7 +59,8 @@ class OpenAIClaimJudge:
 
     async def judge(self, game_title, page_url, page_title, page_text, cut, claims):
         try:
-            response = await self._client.responses.parse(
+            response = await self._client.responses.parse(**request(
+                "judge",
                 model=self._s.checker_model,
                 instructions=CHECKER_INSTRUCTIONS.format(today=_today()),
                 input=checker_input(game_title, page_url, page_title, page_text, cut, claims),
@@ -66,7 +68,8 @@ class OpenAIClaimJudge:
                 reasoning={"effort": self._s.checker_reasoning_effort},
                 max_output_tokens=self._s.checker_max_output_tokens,
                 store=False,
-            )
+            ))
+            check_response("judge", response)
         except Exception as exc:
             raise ResearchModelError(f"Claim check call failed: {type(exc).__name__}: {exc}") from exc
         if response.output_parsed is None:
