@@ -1,6 +1,19 @@
+import { redirect } from "next/navigation";
+import { backendFetch } from "@/lib/backend";
 import { LoginForm } from "./login-form";
 
-export default function LoginPage() {
+/** True only when the backend accepts the session cookie. Anything else shows the form: a stale cookie is replaced when the person signs in. */
+async function signedIn(): Promise<boolean> {
+  try {
+    return (await backendFetch("/auth/me")).ok;
+  } catch (error) {
+    console.error("Could not check the session for the sign-in page:", error); // the form is shown; signing in then says the server is unreachable
+    return false;
+  }
+}
+
+export default async function LoginPage() {
+  if (await signedIn()) redirect("/games");
   return (
     <main className="flex flex-1 items-center justify-center px-(--gutter) py-12">
       <div className="w-full max-w-sm">

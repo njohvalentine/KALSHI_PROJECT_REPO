@@ -140,7 +140,7 @@ From top to bottom:
 
 ![The Ranking page](user-guide/g08-ranking.png)
 
-**Ranking** lists every market of every researched game that has not started, with our probability and the Kalshi price beside it. You can sort by "Most probable" or "Biggest gap". Outcomes priced at 90 cents or more are hidden by default, because the near-certain markets fill the top of the list and have no gap. A match result shows the outcome itself; any other market shows the side Our Agent thinks more likely. The **confidence** label (low, medium, high) says how much confirmed evidence there is and how closely the three forecasts agree. It is not a chance of being right: so far it separates accuracy only weakly. The market filter buttons show internal names (such as `h1_winner` for "first half winner"); I know about this and have logged it to fix.
+**Ranking** lists every market of every researched game that has not started, with our probability and the Kalshi price beside it. You can sort by "Most probable" or "Biggest gap". Outcomes priced at 90 cents or more are hidden by default, because the near-certain markets fill the top of the list and have no gap. A match result shows the outcome itself; any other market shows the side Our Agent thinks more likely. The **confidence** label (low, medium, high) says how much confirmed evidence there is and how closely the three forecasts agree. It is not a chance of being right: so far it separates accuracy only weakly.
 
 ### 5.5 Opportunities, Approval, Results
 
@@ -196,7 +196,6 @@ These are **off** until you switch them on in `.env`: the watcher (`MONITOR_ENAB
 | The Games page is empty or says Kalshi could not be reached | Check the Kalshi link in section 2. You may need a VPN. |
 | Pressing Research is refused | `OPENAI_API_KEY` is missing in `.env`, or the account has no credit. |
 | A message about the daily limit | The 24-hour limit is on purpose. It counts the last 24 hours. |
-| The browser says `too many redirects` on the sign-in page | The browser still holds an old session from before the database was reset or a password was changed. Delete the cookies for `127.0.0.1` (or open a private window) and sign in again. I have logged this as a bug to fix. |
 | You are locked out | Five wrong passwords lock an account for 15 minutes. `docker compose exec backend uv run --no-sync python -m app.cli set-password you@example.com` sets a new one. |
 | Everything is gone | You probably ran `docker compose down -v`, which deletes the database. |
 

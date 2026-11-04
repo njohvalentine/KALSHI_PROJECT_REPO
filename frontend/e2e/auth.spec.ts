@@ -21,3 +21,17 @@ test("signing in reaches the Games page and signing out returns to the sign-in p
   await page.goto("/approval");
   await expect(page).toHaveURL(/\/login/);
 });
+
+plain("a session cookie the backend does not accept ends on the sign-in form, not in a redirect loop", async ({ page, context }) => {
+  await context.addCookies([{ name: "session", value: "not-a-real-session", url: "http://127.0.0.1:3000" }]);
+  await page.goto("/games"); // the page gets a 401 from the backend and sends the person to the sign-in page
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await page.goto("/login"); // opening the sign-in page directly with the same stale cookie must also show the form
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+});
+
+test("a signed-in person who opens the sign-in page lands in the app", async ({ signedIn: page }) => {
+  await page.goto("/login");
+  await expect(page).toHaveURL(/\/games/);
+});
