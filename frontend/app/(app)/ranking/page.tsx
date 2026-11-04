@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { backendFetch } from "@/lib/backend";
 import { cents, gapCents, pct } from "@/lib/format";
-import { plainReason } from "@/lib/labels";
+import { KIND_HEADING, plainReason } from "@/lib/labels";
 import type { RankedOutcome, RankingResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -162,7 +162,7 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
             <span className="mr-1 text-sm text-muted-foreground">Market:</span>
             <Choice to={href(cur, { kind: undefined })} active={!search.kind}>All</Choice>
             {d.kinds.map((k) => (
-              <Choice key={k} to={href(cur, { kind: k })} active={search.kind === k}>{k}</Choice>
+              <Choice key={k} to={href(cur, { kind: k })} active={search.kind === k}>{KIND_HEADING[k] ?? k}</Choice>
             ))}
           </div>
         ) : null}
