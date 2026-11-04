@@ -78,6 +78,7 @@ The browser tests need extra steps (a test account and a browser download). They
 
 ## More
 
+- `docs/USER-GUIDE.md` (and `docs/USER-GUIDE.pdf`): what Our Agent is, how to use it and how to read what it shows.
 - `docs/RUNBOOK.md`: start, stop, settings, accounts, costs, alerts, scoring, backups, problems.
 - `docs/ARCHITECTURE.md`: how it works.
 - `docs/MILESTONES.md`: what is built and what is not.

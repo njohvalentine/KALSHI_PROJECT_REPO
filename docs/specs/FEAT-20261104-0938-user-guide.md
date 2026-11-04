@@ -1,6 +1,6 @@
 # Spec: user guide for the client (FEAT-20261104-0938)
 
-Branch `feature/security-hardening` (base `master`). Format chosen by the user (4 Nov): Markdown file plus a PDF.
+Branch `master` (merged and pushed on 4 Nov; the work was done on `feature/security-hardening`). Format chosen by the user (4 Nov): Markdown file plus a PDF.
 
 ## What is wanted, and the reasons behind it
 
@@ -11,7 +11,7 @@ Two reasons stack up. (1) He needs to **get it running**: nothing is hosted for 
 ## What I verified (read 4 Nov)
 
 - `README.md` has the set-up steps (Docker, `.env` from `.env.example`, five required values, `docker compose up -d --build`, health check, `create-user`, sign in at 127.0.0.1:3000). No Kalshi key is needed to run (Kalshi is only read). A VPN is needed only if Kalshi is not reachable from his country; I have not verified Texas and the guide says so as a check, not a fact.
-- His repository is `njohvalentine/KALSHI_PROJECT_REPO`. **`master` is the old state; the current work is on `feature/security-hardening`** (not merged, by your decision), so the guide must tell him to use that branch. The last 3 local commits (this spec, least privilege, screenshots) are **not pushed**: pushing needs your go-ahead.
+- His repository is `njohvalentine/KALSHI_PROJECT_REPO`. `master` now holds all the work (fast-forward merge of `feature/security-hardening`, 4 Nov, at `ad54d8f`, also on the remote). **The remote's default branch (`HEAD`) still points at the old commit `29ca4e6`, i.e. `feature/sports-games-list`**, so a plain `git clone` gives him the old code: the guide says `git clone -b master`, and the default branch should be changed to `master` on GitHub (the owner's setting).
 - Costs measured on real runs: a full research run about 0.43 USD (95 earlier runs average 0.43), a lineup update about 0.20, limits 5 games and 5 updates per 24 hours by default.
 - The README title still says "research assistant"; the client's name for it is "Our Agent". The guide says "Our Agent". Whether to rename the README is a separate small item for you.
 
@@ -20,7 +20,7 @@ Two reasons stack up. (1) He needs to **get it running**: nothing is hosted for 
 `docs/USER-GUIDE.md` (with images in `docs/user-guide/`) and `docs/USER-GUIDE.pdf`, written in plain English, "Our Agent", no contractions:
 1. What Our Agent is and is not: researches a game, gives a probability for each outcome, compares with the Kalshi price; a person approves; **paper trading only, nothing is ever ordered**; the honest status with the real numbers from `score-records` on the day of writing.
 2. What you need: Docker, an OpenAI key with credit (cost per run), optional Odds API key and Telegram, a VPN only if Kalshi is not reachable.
-3. Get the code: clone, switch to `feature/security-hardening`.
+3. Get the code: `git clone -b master ...`.
 4. Set up in six steps (from the README, tested): `.env` (what to put, what never to share), start, check, make the account, sign in, stop.
 5. A first walk (about 30 minutes, about 1 USD): Games, Research one game, the result page, Ranking, Update with lineups, Opportunities and the alerts, Approval (a simulated order), Results; each with a screenshot taken today from a fresh set-up.
 6. How to read the numbers: Brier score, the gap after fees, "Worth a look" is not a recommendation, the confidence label (and that it barely separates accuracy so far), source labels, "too few games".
@@ -32,7 +32,7 @@ The PDF is made from the Markdown with Chrome's print to PDF (installed on this 
 
 ## How the set-up steps are tested
 
-I clone the branch into a new empty folder, make a `.env` with throwaway values (not the real one: never read or copied), start it under a different Compose project name with its own volume, follow the guide's steps word for word, and take the screenshots from that copy. This needs the ports 3000 and 8000, so the running stack is stopped (not deleted) while I do it and started again afterwards. The OpenAI key is the one in the real `.env`, passed through the shell for the one real research run of the walk; it is never printed or written. **This run costs about 0.5 USD** (I will ask before starting it).
+I clone `master` from GitHub (the real instruction) into a new empty folder, make a `.env` with throwaway values (not the real one: never read or copied), start it under a different Compose project name with its own volume, follow the guide's steps word for word, and take the screenshots from that copy. This needs the ports 3000 and 8000, so the running stack is stopped (not deleted) while I do it and started again afterwards. The OpenAI key is the one in the real `.env`, passed through the shell for the one real research run of the walk; it is never printed or written. **This run costs about 0.5 USD** (I will ask before starting it).
 
 ## Not done
 
